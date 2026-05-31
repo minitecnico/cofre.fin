@@ -1487,7 +1487,7 @@ function LoanForm({ onSaved, onCancel }) {
             value={taxaMensal}
             onChange={(e) => setTaxaMensal(e.target.value)}
             placeholder="Ex.: 1,5"
-            className="input-field pr-10 font-mono text-right"
+            className="input-field pr-20 font-mono text-right"
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-500 font-mono pointer-events-none">% a.m.</span>
         </div>
