@@ -8,7 +8,6 @@ import {
   showNativeNotification,
   getNotificationsEnabled,
 } from '../services/alerts';
-import { useMonth } from '../context/MonthContext';
 
 /**
  * Hook que mantém a lista de alertas atualizada.
@@ -28,14 +27,14 @@ import { useMonth } from '../context/MonthContext';
  *   const { alerts, visibleAlerts, criticalCount, dismiss, refresh } = useAlerts();
  */
 export function useAlerts() {
-  const { month } = useMonth();
   const [allAlerts, setAllAlerts] = useState([]);
   const [dismissedSet, setDismissedSet] = useState(() => getDismissed());
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const list = await detectAllAlerts({ month });
+      // Alertas são GLOBAIS (independem do mês selecionado na UI).
+      const list = await detectAllAlerts();
       setAllAlerts(list);
 
       // Notificações nativas pra alertas NOVOS (não dispensados, não notificados)
@@ -58,7 +57,7 @@ export function useAlerts() {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, []);
 
   // Recálculo inicial e ao trocar de mês
   useEffect(() => {

@@ -193,7 +193,7 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
 
   return (
     <div
-      className={`relative rounded-2xl shadow-soft-md transition-all duration-300 cursor-pointer overflow-hidden ${
+      className={`relative w-full max-w-md rounded-2xl shadow-soft-md transition-all duration-300 cursor-pointer overflow-hidden ${
         selected
           ? 'ring-4 ring-accent ring-offset-2 ring-offset-ink-50 shadow-soft-lg scale-[1.01]'
           : 'hover:shadow-soft-lg hover:-translate-y-0.5'
@@ -211,14 +211,14 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
       <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Conteúdo */}
-      <div className="relative p-5 md:p-6 text-white">
+      <div className="relative p-4 md:p-5 text-white">
         {/* Header: bandeira + nome + ações no topo direito */}
-        <div className="flex items-start justify-between mb-4 md:mb-5 gap-3">
+        <div className="flex items-start justify-between mb-3 md:mb-4 gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] md:text-xs uppercase tracking-widest opacity-80 font-bold">
+            <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">
               {card.brand}
             </p>
-            <h3 className="font-display text-xl md:text-2xl font-bold mt-1 truncate tracking-tight">
+            <h3 className="font-display text-lg md:text-xl font-bold mt-0.5 truncate tracking-tight">
               {card.name}
             </h3>
           </div>
@@ -227,7 +227,7 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(card); }}
-              className="w-9 h-9 rounded-lg bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200"
+              className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200"
               title="Editar cartão"
               aria-label="Editar cartão"
             >
@@ -235,20 +235,20 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(summary); }}
-              className="w-9 h-9 rounded-lg bg-white/20 hover:bg-negative backdrop-blur-sm flex items-center justify-center transition-all duration-200"
+              className="w-8 h-8 rounded-lg bg-white/20 hover:bg-negative backdrop-blur-sm flex items-center justify-center transition-all duration-200"
               title="Excluir cartão"
               aria-label="Excluir cartão"
             >
               <Trash2 className="w-4 h-4" />
             </button>
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ml-1">
-              <CardIcon className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ml-1">
+              <CardIcon className="w-4 h-4" />
             </div>
           </div>
         </div>
 
         {/* Número estilizado */}
-        <p className="font-mono text-sm md:text-base tracking-[0.3em] opacity-80 mb-5 md:mb-6">
+        <p className="font-mono text-xs md:text-sm tracking-[0.25em] opacity-80 mb-4 md:mb-5">
           •••• •••• •••• {card.last_digits || '----'}
         </p>
 
@@ -256,7 +256,7 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1 font-bold">Fatura aberta</p>
-            <p className="font-display font-bold text-lg md:text-xl break-all">
+            <p className="font-display font-bold text-base md:text-lg break-all">
               {formatCurrency(openBill)}
             </p>
             {unpaidCount > 0 && (
@@ -267,7 +267,7 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1 font-bold">Disponível</p>
-            <p className="font-display font-bold text-lg md:text-xl break-all">
+            <p className="font-display font-bold text-base md:text-lg break-all">
               {formatCurrency(available)}
             </p>
             <p className="text-[10px] opacity-70 mt-0.5">
@@ -802,9 +802,9 @@ export default function CardsPage() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-72 bg-ink-100 rounded-2xl animate-pulse" />
+            <div key={i} className="h-60 bg-ink-100 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : cards.length === 0 ? (
@@ -820,7 +820,7 @@ export default function CardsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {cards.map((summary) => (
               <CardItem
                 key={summary.card.id}

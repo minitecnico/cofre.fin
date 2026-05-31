@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Bell, BellOff, X, AlertCircle, AlertTriangle, Clock,
-  CreditCard, TrendingDown, Calendar, CheckCircle2, BellRing,
+  CreditCard, TrendingDown, Calendar, CheckCircle2, BellRing, Check,
 } from 'lucide-react';
 import { useAlerts } from '../hooks/useAlerts';
+import { transactionService } from '../services';
 import {
   getNotificationPermission,
   requestNotificationPermission,
@@ -25,11 +27,33 @@ import { formatCurrency } from '../utils/format';
  *   <AlertCenter variant="..."/> // outras variantes
  */
 export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
-  const { alerts, counts, criticalCount, totalCount, loading, dismiss } = useAlerts();
+  const { alerts, counts, criticalCount, totalCount, loading, dismiss, refresh } = useAlerts();
   const [open, setOpen] = useState(false);
+  const [payingId, setPayingId] = useState(null);
   const panelRef = useRef(null);
   const buttonRef = useRef(null);
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
+
+  // Soma das despesas vencidas — destaque "inteligente" no topo do painel.
+  const overdueTotal = alerts
+    .filter((a) => a.kind === 'overdue')
+    .reduce((s, a) => s + (Number(a.amount) || 0), 0);
+
+  // Ação rápida: marcar a despesa do alerta como paga, direto do sino.
+  async function handleMarkPaid(alert) {
+    const txId = alert.meta?.txId;
+    if (!txId || payingId) return;
+    setPayingId(alert.id);
+    try {
+      await transactionService.togglePaid(txId, true);
+      await refresh();
+    } catch {
+      /* silencioso — sino é feature secundária */
+    } finally {
+      setPayingId(null);
+    }
+  }
 
   // Fecha painel ao clicar fora
   useEffect(() => {
@@ -164,6 +188,19 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
             {/* Banner de notificações nativas (só se ainda não autorizou) */}
             <NotificationOptIn />
 
+            {/* Destaque: total vencido em aberto */}
+            {overdueTotal > 0 && (
+              <div className="px-4 py-2.5 bg-red-50 border-b border-negative/20 flex items-center justify-between flex-shrink-0">
+                <span className="text-xs font-bold text-ink-700 inline-flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-negative" strokeWidth={2.5} />
+                  Vencido em aberto
+                </span>
+                <span className="font-mono font-bold text-sm text-negative">
+                  {formatCurrency(overdueTotal)}
+                </span>
+              </div>
+            )}
+
             {/* Lista de alertas (rolável) */}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
@@ -172,14 +209,26 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
                 <EmptyState />
               ) : (
                 <div className="divide-y divide-ink-100">
-                  {alerts.map((alert) => (
-                    <AlertItem
-                      key={alert.id}
-                      alert={alert}
-                      onClick={() => handleAlertClick(alert)}
-                      onDismiss={() => dismiss(alert.id)}
-                    />
-                  ))}
+                  <AnimatePresence initial={false}>
+                    {alerts.map((alert) => (
+                      <motion.div
+                        key={alert.id}
+                        layout={!reduce}
+                        initial={reduce ? false : { opacity: 0, height: 0 }}
+                        animate={reduce ? {} : { opacity: 1, height: 'auto' }}
+                        exit={reduce ? {} : { opacity: 0, height: 0 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                      >
+                        <AlertItem
+                          alert={alert}
+                          paying={payingId === alert.id}
+                          onClick={() => handleAlertClick(alert)}
+                          onDismiss={() => dismiss(alert.id)}
+                          onMarkPaid={() => handleMarkPaid(alert)}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
@@ -193,9 +242,12 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
 /**
  * Item individual de alerta.
  */
-function AlertItem({ alert, onClick, onDismiss }) {
+function AlertItem({ alert, onClick, onDismiss, onMarkPaid, paying }) {
   const config = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.info;
   const Icon = KIND_ICONS[alert.kind] || config.icon;
+  // Alertas ligados a uma despesa (vencida / hoje / em breve) podem ser
+  // resolvidos na hora: "marcar paga" direto do sino.
+  const payable = !!alert.meta?.txId && ['overdue', 'due_today', 'due_soon'].includes(alert.kind);
 
   return (
     <div className={`p-3 hover:bg-ink-50/60 transition-colors group relative ${config.bgClass}`}>
@@ -219,6 +271,18 @@ function AlertItem({ alert, onClick, onDismiss }) {
           <p className="text-xs text-ink-600 mt-0.5 line-clamp-2">{alert.message}</p>
         </div>
       </button>
+
+      {/* Ação rápida: marcar despesa como paga */}
+      {payable && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}
+          disabled={paying}
+          className="mt-2 ml-12 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink-950 text-white text-xs font-bold hover:bg-ink-800 transition-colors disabled:opacity-60"
+        >
+          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+          {paying ? 'Pagando…' : 'Marcar paga'}
+        </button>
+      )}
 
       {/* Botão dispensar */}
       <button

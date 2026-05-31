@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Repeat, Sparkles } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 
 const links = [
   { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
@@ -11,6 +12,8 @@ const links = [
 ];
 
 export default function BottomNav() {
+  const reduce = useReducedMotion();
+
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-gradient-dark text-ink-50 grid grid-cols-6 shadow-soft-xl"
@@ -29,8 +32,17 @@ export default function BottomNav() {
         >
           {({ isActive }) => (
             <>
+              {/* Indicador ativo: desliza suavemente entre abas via layoutId */}
               {isActive && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-accent rounded-full" />
+                <motion.span
+                  layoutId="bottomnav-indicator"
+                  className="absolute top-0 left-0 right-0 mx-auto w-8 h-0.5 bg-accent rounded-full"
+                  transition={
+                    reduce
+                      ? { duration: 0 }
+                      : { type: 'spring', damping: 30, stiffness: 400 }
+                  }
+                />
               )}
               <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
               <span className={`text-[10px] tracking-wide ${isActive ? 'font-bold' : 'font-medium'}`}>

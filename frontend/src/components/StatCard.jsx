@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { motion, useMotionValue, useTransform, animate } from 'motion/react';
+import { motion, useMotionValue, useTransform, animate, useReducedMotion } from 'motion/react';
 import { formatCurrency } from '../utils/format';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
@@ -37,6 +37,8 @@ export default function StatCard({ label, value, variant = 'balance', icon: Icon
       ? value < 0 ? 'text-negative' : 'text-ink-900'
       : value < 0 ? 'text-negative' : '';
 
+  const reduce = useReducedMotion();
+
   // Anima o número do valor anterior (ou 0 no primeiro mount) até o atual.
   // useMotionValue preserva o último valor entre renders, então mudar `value`
   // (ex: ao trocar de mês) faz tween do valor anterior pro novo — não do zero.
@@ -49,7 +51,13 @@ export default function StatCard({ label, value, variant = 'balance', icon: Icon
   }, [value, motionValue]);
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl shadow-soft p-5 md:p-6 transition-all duration-300 hover:shadow-soft-md hover:-translate-y-0.5 ${variantClasses[variant]}`}>
+    <motion.div
+      className={`relative overflow-hidden rounded-2xl shadow-soft p-5 md:p-6 transition-shadow duration-300 hover:shadow-soft-md ${variantClasses[variant]}`}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+      whileHover={reduce ? undefined : { y: -3 }}
+    >
       {/* Decorativo: círculo gradiente sutil no canto */}
       {variant === 'balance' && (
         <div className="absolute -top-12 -right-12 w-40 h-40 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
@@ -98,6 +106,6 @@ export default function StatCard({ label, value, variant = 'balance', icon: Icon
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

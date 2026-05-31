@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Tv, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks, Filter } from 'lucide-react';
+import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks, Filter } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { recurringService, categoryService, cardService, loanService, transactionService } from '../services';
 import { formatCurrency, parseAmount } from '../utils/format';
@@ -17,15 +17,18 @@ import { useDisclosure } from '../hooks/useDisclosure';
  *   - Excluir (transações já criadas viram avulsas)
  */
 
-function RecurringForm({ initial, kind = 'recurring', onSaved, onCancel }) {
+function RecurringForm({ initial, onSaved, onCancel }) {
   const isEdit = !!initial;
-  const isSubscription = (initial?.kind || kind) === 'subscription';
-  // Assinatura é sempre despesa
-  const [type, setType] = useState(initial?.type || (isSubscription ? 'expense' : 'expense'));
+  const [type, setType] = useState(initial?.type || 'expense');
   const [amount, setAmount] = useState(initial?.amount?.toString().replace('.', ',') || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [dayOfMonth, setDayOfMonth] = useState(
     initial?.day_of_month || new Date().getDate()
+  );
+  // Duração em meses. Vazio = sem fim (recorrência indefinida).
+  // Em edição, deriva da diferença entre start_month e end_month do modelo.
+  const [durationMonths, setDurationMonths] = useState(() =>
+    initial?.end_month ? String(monthsBetween(initial.start_month, initial.end_month)) : ''
   );
   const [categoryId, setCategoryId] = useState(initial?.category?.id || '');
   const [creditCardId, setCreditCardId] = useState(initial?.credit_card?.id || '');
@@ -76,7 +79,12 @@ function RecurringForm({ initial, kind = 'recurring', onSaved, onCancel }) {
         throw new Error('Dia do mês deve ser entre 1 e 31');
       }
 
+      // Duração: número de meses a gerar. Vazio/0 = indefinida (end_month null).
+      const dur = parseInt(durationMonths, 10);
+
       if (isEdit) {
+        // Mantém o mês de início original; recalcula o fim a partir dele.
+        payload.end_month = dur && dur > 0 ? addMonthsISO(initial.start_month, dur - 1) : null;
         await recurringService.update(initial.id, payload);
 
         // Opcional: propaga as mudanças à transação JÁ gerada no mês atual
@@ -106,7 +114,8 @@ function RecurringForm({ initial, kind = 'recurring', onSaved, onCancel }) {
       } else {
         const today = new Date();
         const startMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-        await recurringService.create({ ...payload, start_month: startMonth, kind });
+        payload.end_month = dur && dur > 0 ? addMonthsISO(startMonth, dur - 1) : null;
+        await recurringService.create({ ...payload, start_month: startMonth, kind: 'recurring' });
       }
       onSaved?.();
     } catch (err) {
@@ -116,9 +125,21 @@ function RecurringForm({ initial, kind = 'recurring', onSaved, onCancel }) {
     }
   }
 
+  // Pré-visualização do mês final, conforme a duração escolhida.
+  const durationEnd = (() => {
+    const n = parseInt(durationMonths, 10);
+    if (!n || n <= 0) return null;
+    const start = isEdit
+      ? initial.start_month
+      : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
+    const endISO = addMonthsISO(start, n - 1);
+    const [ey, em] = endISO.split('-').map(Number);
+    return new Date(ey, em - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+  })();
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
-      {!isEdit && !isSubscription && (
+      {!isEdit && (
         <div className="grid grid-cols-2 gap-1 p-1 bg-surface-soft rounded-full">
           <button
             type="button"
@@ -193,18 +214,70 @@ function RecurringForm({ initial, kind = 'recurring', onSaved, onCancel }) {
           </p>
         </div>
         <div>
-          <label className="label">Categoria</label>
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="input-field"
-          >
-            {categories.length === 0 && <option value="">— Carregando —</option>}
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+          <label className="label">Duração</label>
+          <div className="relative">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={600}
+              value={durationMonths}
+              onChange={(e) => setDurationMonths(e.target.value)}
+              placeholder="Sem fim"
+              className="input-field pr-16"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-500 pointer-events-none">
+              meses
+            </span>
+          </div>
+          {/* Presets rápidos de duração comuns */}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {[3, 6, 12, 24].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setDurationMonths(String(n))}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                  parseInt(durationMonths, 10) === n
+                    ? 'bg-ink-950 text-white'
+                    : 'bg-surface-soft text-ink-600 hover:bg-ink-200'
+                }`}
+              >
+                {n}m
+              </button>
             ))}
-          </select>
+            <button
+              type="button"
+              onClick={() => setDurationMonths('')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                !durationMonths
+                  ? 'bg-ink-950 text-white'
+                  : 'bg-surface-soft text-ink-600 hover:bg-ink-200'
+              }`}
+            >
+              Sem fim
+            </button>
+          </div>
+          <p className="text-[10px] text-ink-500 mt-1.5">
+            {durationEnd
+              ? `Repete por ${parseInt(durationMonths, 10)} ${parseInt(durationMonths, 10) === 1 ? 'mês' : 'meses'} — até ${durationEnd}.`
+              : 'Vazio = repete para sempre.'}
+          </p>
         </div>
+      </div>
+
+      <div>
+        <label className="label">Categoria</label>
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="input-field"
+        >
+          {categories.length === 0 && <option value="">— Carregando —</option>}
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
       </div>
 
       {type === 'expense' && (
@@ -294,12 +367,12 @@ export default function RecurringPage() {
   const [editing, setEditing] = useState(null);
   const { isOpen, open, close } = useDisclosure();
 
-  // Aba ativa: 'recurring' | 'subscription' | 'loan'
+  // Aba ativa: 'recurring' | 'loan'
   // Deep linking via ?tab=... — permite marcar URL, voltar pelo histórico
   // do navegador e compartilhar links direto pra uma aba específica.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const validTabs = ['recurring', 'subscription', 'loan'];
+  const validTabs = ['recurring', 'loan'];
   const activeTab = validTabs.includes(tabParam) ? tabParam : 'recurring';
   const setActiveTab = (id) => {
     const next = new URLSearchParams(searchParams);
@@ -471,12 +544,10 @@ export default function RecurringPage() {
 
   // Filtra itens conforme a aba ativa
   const itemsForTab = useMemo(() => {
-    if (activeTab === 'recurring') {
-      return items.filter((i) => (i.kind || 'recurring') === 'recurring');
-    }
-    if (activeTab === 'subscription') {
-      return items.filter((i) => i.kind === 'subscription');
-    }
+    // Todos os modelos vivem na aba "Recorrências" (a aba Assinaturas foi removida;
+    // modelos legados com kind 'subscription' aparecem aqui também). Empréstimos
+    // não vivem nesta tabela — têm aba própria alimentada por loanService.
+    if (activeTab === 'recurring') return items;
     return [];
   }, [items, activeTab]);
 
@@ -510,33 +581,25 @@ export default function RecurringPage() {
 
   // Contadores para badges das abas
   const counts = useMemo(() => ({
-    recurring: items.filter((i) => (i.kind || 'recurring') === 'recurring').length,
-    subscription: items.filter((i) => i.kind === 'subscription').length,
+    recurring: items.length,
     loan: loans.length,
   }), [items, loans]);
-
-  // Total de assinaturas mensais (pra cabeçalho da aba)
-  const subscriptionsTotal = useMemo(() => {
-    return items
-      .filter((i) => i.kind === 'subscription' && i.active)
-      .reduce((s, i) => s + Number(i.amount), 0);
-  }, [items]);
 
   // Totais mensais de receita e despesa para a aba "Recorrências"
   const recurringMonthlyIncome = useMemo(() => {
     return items
-      .filter((i) => (i.kind || 'recurring') === 'recurring' && i.active && i.type === 'income')
+      .filter((i) => i.active && i.type === 'income')
       .reduce((s, i) => s + Number(i.amount), 0);
   }, [items]);
 
   const recurringMonthlyExpense = useMemo(() => {
     return items
-      .filter((i) => (i.kind || 'recurring') === 'recurring' && i.active && i.type === 'expense')
+      .filter((i) => i.active && i.type === 'expense')
       .reduce((s, i) => s + Number(i.amount), 0);
   }, [items]);
 
-  // Total mensal automático = recorrências (despesa) + assinaturas — comprometimento real
-  const automaticMonthlyOutflow = recurringMonthlyExpense + subscriptionsTotal;
+  // Total mensal automático = despesas recorrentes ativas — comprometimento real
+  const automaticMonthlyOutflow = recurringMonthlyExpense;
   const automaticNetMonthly = recurringMonthlyIncome - automaticMonthlyOutflow;
 
   const tabConfig = TAB_CONFIG[activeTab];
@@ -563,7 +626,6 @@ export default function RecurringPage() {
       <nav className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-1 scrollbar-hide">
         {[
           { id: 'recurring', label: 'Recorrências', icon: Repeat, count: counts.recurring },
-          { id: 'subscription', label: 'Assinaturas', icon: Tv, count: counts.subscription },
           { id: 'loan', label: 'Empréstimos', icon: Landmark, count: counts.loan },
         ].map(({ id, label, icon: Icon, count }) => {
           const active = activeTab === id;
@@ -609,22 +671,6 @@ export default function RecurringPage() {
               <p className="text-sm md:text-base mt-2 opacity-80 leading-relaxed max-w-xl">
                 {tabConfig.description}
               </p>
-              {activeTab === 'subscription' && subscriptionsTotal > 0 && (
-                <div className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest opacity-60 font-bold">Mensal</p>
-                    <p className="font-display text-2xl md:text-3xl font-bold tabular-nums tracking-display">
-                      {formatCurrency(subscriptionsTotal)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest opacity-60 font-bold">Anual</p>
-                    <p className="font-display text-lg md:text-xl font-bold tabular-nums opacity-90">
-                      {formatCurrency(subscriptionsTotal * 12)}
-                    </p>
-                  </div>
-                </div>
-              )}
               {activeTab === 'recurring' && (recurringMonthlyIncome > 0 || automaticMonthlyOutflow > 0) && (
                 <div className="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2">
                   <div>
@@ -634,7 +680,7 @@ export default function RecurringPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-widest opacity-60 font-bold" title="Recorrências + Assinaturas">
+                    <p className="text-[10px] uppercase tracking-widest opacity-60 font-bold" title="Despesas recorrentes ativas">
                       Despesa autom.
                     </p>
                     <p className="font-display text-xl md:text-2xl font-bold tabular-nums opacity-90">
@@ -900,19 +946,14 @@ export default function RecurringPage() {
         />
       )}
 
-      {/* Modal: criar/editar recorrência ou assinatura */}
+      {/* Modal: criar/editar recorrência */}
       <Modal
         isOpen={isOpen}
         onClose={close}
-        title={
-          editing
-            ? `Editar ${(editing.kind || 'recurring') === 'subscription' ? 'assinatura' : 'recorrência'}`
-            : activeTab === 'subscription' ? 'Nova assinatura' : 'Nova recorrência'
-        }
+        title={editing ? 'Editar recorrência' : 'Nova recorrência'}
       >
         <RecurringForm
           initial={editing}
-          kind={editing ? (editing.kind || 'recurring') : activeTab === 'subscription' ? 'subscription' : 'recurring'}
           onSaved={() => { close(); load(); }}
           onCancel={close}
         />
@@ -1085,19 +1126,6 @@ const TAB_CONFIG = {
     emptyTitle: 'Nenhuma recorrência',
     emptyDescription: 'Crie modelos para receitas e despesas que se repetem — salário, aluguel, etc.',
   },
-  subscription: {
-    icon: Tv,
-    iconBg: 'bg-white/15 backdrop-blur',
-    iconColor: 'text-white',
-    bannerBg: 'bg-gradient-to-br from-ink-900 via-ink-800 to-ink-950',
-    bannerText: 'text-white',
-    title: 'Assinaturas',
-    description: 'Streamings, apps, clouds — pequenos gastos mensais que somam muito no fim do mês. Mantenha controle.',
-    cta: 'Nova assinatura',
-    buttonClass: 'bg-accent text-ink-950 hover:bg-accent-light',
-    emptyTitle: 'Nenhuma assinatura',
-    emptyDescription: 'Cadastre Netflix, Spotify, iCloud, ChatGPT, etc. Veja quanto você gasta com isso por mês.',
-  },
   loan: {
     icon: Landmark,
     iconBg: 'bg-white/15 backdrop-blur',
@@ -1218,7 +1246,7 @@ function LoanInfoPanel({ onCreate, compact = false }) {
     'Você cadastra uma despesa parcelada com a quantidade total de parcelas (36x, 48x, 60x, 72x, 84x, 96x, 120x, 180x ou 240x).',
     'O sistema cria todas as parcelas de uma vez, uma por mês, marcadas com badge 3/60.',
     'Cada mês você vê a parcela do mês como uma despesa normal. Marca como paga quando pagar — o limite do cartão volta automaticamente.',
-    'Diferente de recorrências e assinaturas, empréstimos têm fim definido — terminam quando a última parcela é paga.',
+    'Diferente das recorrências, empréstimos têm fim definido — terminam quando a última parcela é paga.',
   ];
 
   // Versão compacta quando já há empréstimos vigentes (não precisa do tutorial gigante)
@@ -1678,14 +1706,44 @@ function daysUntil(date) {
   return Math.round((date - today) / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Soma `n` meses a uma data ISO 'YYYY-MM-DD' (usamos o dia 01) e devolve
+ * o primeiro dia do mês resultante como 'YYYY-MM-01'. Base p/ end_month.
+ */
+function addMonthsISO(startISO, n) {
+  const [y, m] = startISO.slice(0, 7).split('-').map(Number);
+  const total = (y * 12 + (m - 1)) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}-01`;
+}
+
+/**
+ * Quantidade de meses (inclusive) entre dois meses ISO. Inverso de addMonthsISO:
+ * monthsBetween(start, addMonthsISO(start, n - 1)) === n.
+ */
+function monthsBetween(startISO, endISO) {
+  const [sy, sm] = startISO.slice(0, 7).split('-').map(Number);
+  const [ey, em] = endISO.slice(0, 7).split('-').map(Number);
+  return (ey * 12 + (em - 1)) - (sy * 12 + (sm - 1)) + 1;
+}
+
 function RecurringRow({
   item, onEdit, onToggleActive, onDelete,
   selectionMode, selected, onToggleSelection,
 }) {
   const isIncome = item.type === 'income';
-  const isSubscription = item.kind === 'subscription';
   const cat = item.category || {};
   const card = item.credit_card;
+
+  // Duração: se houver end_month, mostra quantos meses repete e até quando.
+  const durationLabel = (() => {
+    if (!item.end_month) return null;
+    const n = monthsBetween(item.start_month, item.end_month);
+    const [ey, em] = item.end_month.slice(0, 7).split('-').map(Number);
+    const endTxt = new Date(ey, em - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+    return { n, endTxt };
+  })();
 
   // Próxima ocorrência (só pra modelos ativos)
   const nextDate = item.active ? nextOccurrence(item.day_of_month) : null;
@@ -1736,9 +1794,7 @@ function RecurringRow({
           className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: `${cat.color || '#a1a1aa'}1f` }}
         >
-          {isSubscription ? (
-            <Tv className="w-5 h-5" style={{ color: cat.color || '#71717a' }} strokeWidth={2.25} />
-          ) : isIncome ? (
+          {isIncome ? (
             <ArrowUpCircle className="w-5 h-5 text-positive" strokeWidth={2.25} />
           ) : (
             <ArrowDownCircle className="w-5 h-5 text-ink-700" strokeWidth={2.25} />
@@ -1767,6 +1823,18 @@ function RecurringRow({
               <Calendar className="w-3 h-3" strokeWidth={2.25} />
               Todo dia {item.day_of_month}
             </span>
+            {durationLabel && (
+              <>
+                <span className="text-ink-300">·</span>
+                <span
+                  className="inline-flex items-center gap-1 font-semibold text-ink-600"
+                  title={`Repete por ${durationLabel.n} ${durationLabel.n === 1 ? 'mês' : 'meses'}`}
+                >
+                  <Repeat className="w-3 h-3" strokeWidth={2.25} />
+                  {durationLabel.n}× · até {durationLabel.endTxt}
+                </span>
+              </>
+            )}
             {nextLabel && (
               <>
                 <span className="text-ink-300">·</span>

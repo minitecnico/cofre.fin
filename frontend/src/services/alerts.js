@@ -50,8 +50,9 @@ function fmtMoney(n) {
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Despesas vencidas, vencendo hoje, ou em até 3 dias.
- * Aceita uma lista de transações já filtradas pelo mês relevante.
+ * Despesas vencidas (de QUALQUER mês), vencendo hoje, ou em até 5 dias.
+ * Recebe uma lista de despesas não-pagas global (não filtrada por mês) — é o
+ * que torna o sino realmente útil: conta esquecida de meses passados aparece.
  */
 function detectDueDateAlerts(transactions, t0) {
   const alerts = [];
@@ -85,10 +86,10 @@ function detectDueDateAlerts(transactions, t0) {
         link: '/expenses',
         meta: { txId: tx.id },
       });
-    } else if (diff <= 3) {
+    } else if (diff <= 5) {
       alerts.push({
         id: `tx-soon-${tx.id}`,
-        severity: 'info',
+        severity: diff <= 2 ? 'warning' : 'info',
         kind: 'due_soon',
         title: `Vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}`,
         message: `${tx.description}.`,
@@ -202,40 +203,50 @@ function detectBudgetAlerts(dashboardData) {
 // Função principal: agrupa tudo
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Soma `n` dias a uma Date e devolve 'YYYY-MM-DD' local. */
+function isoPlusDays(base, n) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /**
- * Calcula todos os alertas. Recebe contexto opcional pra evitar
- * fetches duplicados (ex: dashboard já carregou os dados).
+ * Calcula todos os alertas do sino.
  *
- * @param {Object} options
- * @param {string} options.month - 'YYYY-MM' (padrão: mês atual)
+ * IMPORTANTE: os alertas de vencimento são GLOBAIS — não dependem do mês
+ * selecionado na UI. Uma conta esquecida de meses atrás continua aparecendo
+ * até ser paga. Isso é o que torna o sino útil: ele vigia o estado real das
+ * suas contas, não só a tela que você está olhando.
+ *
+ * O parâmetro `month` é aceito por compatibilidade mas ignorado — o resumo
+ * de orçamento usa sempre o mês corrente (a realidade financeira de hoje).
+ *
  * @returns {Promise<Array>} lista de alertas ordenados por severidade
  */
-export async function detectAllAlerts({ month } = {}) {
+export async function detectAllAlerts() {
   const t0 = today();
 
-  // Determina o mês: padrão = atual
-  const ref = month || (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  })();
+  // Mês corrente real (para o resumo de orçamento/saldo)
+  const curRef = `${t0.getFullYear()}-${String(t0.getMonth() + 1).padStart(2, '0')}`;
 
-  const [year, mo] = ref.split('-').map(Number);
-  const startDate = `${ref}-01`;
-  const lastDay = new Date(year, mo, 0).getDate();
-  const endDate = `${ref}-${String(lastDay).padStart(2, '0')}`;
+  // Janela de busca: vencidas até 1 ano atrás (limita ruído antigo) e o que
+  // vence nos próximos 5 dias. Tudo NÃO pago.
+  const lowerDate = isoPlusDays(t0, -365);
+  const upperDate = isoPlusDays(t0, 5);
 
   // Busca em paralelo o que precisamos
   const [txRes, cardsRes, dashData] = await Promise.all([
     supabase
       .from('transactions')
       .select('id, type, amount, description, date, paid, credit_card_id')
-      .gte('date', startDate)
-      .lte('date', endDate)
+      .gte('date', lowerDate)
+      .lte('date', upperDate)
       .eq('type', 'expense')
       .eq('paid', false)
+      .order('date', { ascending: true })
       .limit(500),
     cardService.list().catch(() => []),
-    dashboardService.summary('month', ref).catch(() => null),
+    dashboardService.summary('month', curRef).catch(() => null),
   ]);
 
   const transactions = txRes.data || [];
@@ -351,8 +362,8 @@ export function showNativeNotification(alert) {
 
     const notif = new Notification(alert.title, {
       body: alert.message,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icons/icon.svg',
+      badge: '/icons/icon.svg',
       tag: alert.id, // substitui notificação anterior com mesmo id
       requireInteraction: alert.severity === 'critical',
     });

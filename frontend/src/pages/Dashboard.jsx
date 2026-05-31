@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, AlertCircle, Sparkles,
   Search, X, SlidersHorizontal, Clock, Check, CreditCard as CardIcon,
@@ -52,6 +53,14 @@ export default function Dashboard() {
   const { items: rawItems, refresh: refreshList, remove: removeTx, togglePaid: togglePaidTx } = useTransactions({ limit: 200 });
   const { label: monthLabel } = useMonth();
   const [forecast, setForecast] = useState(null);
+  const reduce = useReducedMotion();
+
+  // Entrada suave em cascata para as seções principais do dashboard.
+  // Cada filho aparece com leve fade + slide; respeita prefers-reduced-motion.
+  const sectionVariants = {
+    hidden: reduce ? { opacity: 0 } : { opacity: 0, y: 18 },
+    show:   { opacity: 1, y: 0, transition: { type: 'spring', damping: 26, stiffness: 240 } },
+  };
 
   // ─────────────────────────────────────────────────────────────────
   // Estados dos filtros
@@ -240,8 +249,8 @@ export default function Dashboard() {
       <MonthSelector />
       <InstallBanner />
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5 stagger">
+      {/* Stat cards (cada card faz sua própria entrada com spring) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
         <StatCard
           label="Saldo do mês"
           sublabel={monthLabel}
@@ -291,13 +300,24 @@ export default function Dashboard() {
       )}
 
       {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5"
+        variants={sectionVariants}
+        initial="hidden"
+        animate="show"
+      >
         <MonthlyChart data={data.monthlyHistory} />
         <CategoryChart data={data.byCategory} />
-      </div>
+      </motion.div>
 
       {/* Forecast */}
-      <div className="rounded-2xl shadow-soft-md bg-gradient-dark text-ink-50 p-5 md:p-6">
+      <motion.div
+        className="rounded-2xl shadow-soft-md bg-gradient-dark text-ink-50 p-5 md:p-6"
+        variants={sectionVariants}
+        initial="hidden"
+        animate="show"
+        transition={{ delay: 0.08 }}
+      >
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 md:mb-4 gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -336,7 +356,7 @@ export default function Dashboard() {
             })}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* ────────────────────────────────────────────────────── */}
       {/*                    LISTA + FILTROS                       */}

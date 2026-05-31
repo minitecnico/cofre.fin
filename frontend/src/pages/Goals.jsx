@@ -1,22 +1,19 @@
 import { useState } from 'react';
-import { Trophy, Target, StickyNote, Sparkles } from 'lucide-react';
-import WeeklyChallenge from '../components/WeeklyChallenge';
+import { Target, StickyNote, Sparkles } from 'lucide-react';
 import GoalsList from '../components/GoalsList';
 import NotesEditor from '../components/NotesEditor';
 
 /**
- * Página Objetivos — hub com 3 abas:
- *   - Desafio 52 Semanas (gamificação de poupança)
+ * Página Objetivos — hub com 2 abas:
  *   - Metas (objetivos com prazo e valor alvo)
  *   - Notas (bloco de notas estilo post-it)
  *
  * Cada componente é independente e gerencia seu próprio estado.
  */
 export default function GoalsPage() {
-  const [activeTab, setActiveTab] = useState('challenge');
+  const [activeTab, setActiveTab] = useState('goals');
 
   const tabs = [
-    { id: 'challenge', label: 'Desafio 52 Semanas', shortLabel: 'Desafio', icon: Trophy },
     { id: 'goals', label: 'Metas', shortLabel: 'Metas', icon: Target },
     { id: 'notes', label: 'Notas', shortLabel: 'Notas', icon: StickyNote },
   ];
@@ -61,7 +58,6 @@ export default function GoalsPage() {
 
       {/* Conteúdo */}
       <div className="animate-fade-in" key={activeTab}>
-        {activeTab === 'challenge' && <WeeklyChallenge />}
         {activeTab === 'goals' && <GoalsList />}
         {activeTab === 'notes' && <NotesEditor />}
       </div>
