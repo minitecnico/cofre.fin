@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Joyride, EVENTS, STATUS, ACTIONS } from 'react-joyride';
+import Joyride, { EVENTS, STATUS, ACTIONS } from 'react-joyride';
 
 /**
  * TourContext — tour guiado interativo (onboarding) do app inteiro.
