@@ -305,7 +305,7 @@ export default function Dashboard() {
 
       {/* Gráficos */}
       <motion.div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5"
+        className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 items-stretch"
         variants={sectionVariants}
         initial="hidden"
         animate="show"
