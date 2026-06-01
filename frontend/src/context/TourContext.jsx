@@ -35,7 +35,9 @@ const STEPS = [
     content: 'Saldo, receitas e despesas. As cores mudam: ficam vermelhas quando você gasta mais do que ganha.',
   },
   {
-    route: '/', target: '[data-tour="add-button"]', placement: 'left',
+    // FAB fica no canto inferior; balão vai ACIMA (top-end) pra não jogar os
+    // botões Voltar/Próximo pra fora da viewport — senão não dá pra avançar.
+    route: '/', target: '[data-tour="add-button"]', placement: 'top-end',
     title: 'Adicionar lançamento',
     content: 'O botão + cria receita ou despesa — com parcelamento, cartão de crédito e recorrência.',
   },
