@@ -61,6 +61,29 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  /**
+   * Dispara o email de recuperação de senha. O Supabase manda um link com
+   * token; ao clicar, o usuário cai em /reset-password com uma sessão de
+   * recuperação ativa (evento PASSWORD_RECOVERY) e então define a nova senha.
+   *
+   * O redirectTo precisa estar cadastrado em Auth → URL Configuration no painel.
+   */
+  async function requestPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  }
+
+  /**
+   * Define a nova senha do usuário logado (ou na sessão de recuperação).
+   * Usado tanto no fluxo "esqueci a senha" quanto no trocar-senha de Settings.
+   */
+  async function updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }
+
   // Wrapper para extrair nome amigável (vem do user_metadata)
   const userInfo = user
     ? {
@@ -71,7 +94,7 @@ export function AuthProvider({ children }) {
     : null;
 
   return (
-    <AuthContext.Provider value={{ user: userInfo, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user: userInfo, loading, login, register, logout, requestPasswordReset, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

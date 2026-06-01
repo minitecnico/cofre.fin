@@ -4,6 +4,7 @@ import { MonthProvider } from './context/MonthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import TransactionListPage from './pages/TransactionListPage';
 import Cards from './pages/Cards';
@@ -20,6 +21,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route
               element={

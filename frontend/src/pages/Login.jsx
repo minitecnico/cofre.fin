@@ -4,7 +4,7 @@ import { Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const { user, login, register } = useAuth();
+  const { user, login, register, requestPasswordReset } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -23,6 +23,12 @@ export default function Login() {
       if (mode === 'login') {
         await login(form.email, form.password);
         navigate('/');
+      } else if (mode === 'forgot') {
+        await requestPasswordReset(form.email);
+        // Mensagem genérica de propósito — não revela se o email existe.
+        setInfo('Se existir uma conta com esse email, enviamos um link para redefinir a senha. Confira a caixa de entrada (e o spam).');
+        setMode('login');
+        setForm({ ...form, password: '' });
       } else {
         await register(form);
         navigate('/');
@@ -61,12 +67,14 @@ export default function Login() {
 
         <div className="card-flat p-5 md:p-8">
           <h2 className="font-display text-2xl md:text-3xl font-bold mb-1 md:mb-2">
-            {mode === 'login' ? 'Bem-vindo de volta' : 'Criar conta'}
+            {mode === 'login' ? 'Bem-vindo de volta' : mode === 'forgot' ? 'Recuperar senha' : 'Criar conta'}
           </h2>
           <p className="text-xs md:text-sm text-ink-500 mb-5 md:mb-6">
             {mode === 'login'
               ? 'Entre para acessar seu painel'
-              : 'Comece a organizar suas finanças hoje'}
+              : mode === 'forgot'
+                ? 'Digite seu email e enviaremos um link para criar uma nova senha.'
+                : 'Comece a organizar suas finanças hoje'}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -99,18 +107,31 @@ export default function Login() {
               />
             </div>
 
-            <div>
-              <label className="label">Senha</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="input-field"
-                required
-                minLength={6}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              />
-            </div>
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex items-baseline justify-between">
+                  <label className="label">Senha</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode('forgot'); setError(null); setInfo(null); }}
+                      className="text-xs font-semibold text-ink-500 hover:text-accent-dark"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="input-field"
+                  required
+                  minLength={6}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+              </div>
+            )}
 
             {info && (
               <div className="px-4 py-3 bg-yellow-50 border-2 border-warn text-yellow-900 text-sm">
@@ -125,12 +146,22 @@ export default function Login() {
             )}
 
             <button type="submit" disabled={loading} className="btn-accent w-full disabled:opacity-60">
-              {loading ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
+              {loading ? 'Aguarde…' : mode === 'login' ? 'Entrar' : mode === 'forgot' ? 'Enviar link' : 'Criar conta'}
             </button>
           </form>
 
           <div className="mt-5 md:mt-6 pt-5 md:pt-6 border-t border-ink-200 text-center text-sm">
-            {mode === 'login' ? (
+            {mode === 'forgot' ? (
+              <>
+                Lembrou da senha?{' '}
+                <button
+                  onClick={() => { setMode('login'); setError(null); setInfo(null); }}
+                  className="font-semibold underline decoration-2 decoration-accent underline-offset-4 hover:text-accent-dark"
+                >
+                  Voltar ao login
+                </button>
+              </>
+            ) : mode === 'login' ? (
               <>
                 Não tem conta?{' '}
                 <button
