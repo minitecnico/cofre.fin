@@ -155,9 +155,9 @@ export default function TransactionListPage({ type = 'income' }) {
 
         <button
           onClick={open}
-          className={`px-4 md:px-5 py-2.5 md:py-3 min-h-[44px] font-semibold border-2 border-ink-900 shadow-flat-sm hover:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all ${bgAccent} self-start sm:self-end flex-shrink-0`}
+          className={`w-full sm:w-auto px-4 md:px-5 py-2.5 md:py-3 min-h-[44px] font-semibold border-2 border-ink-900 shadow-flat-sm hover:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all ${bgAccent} self-stretch sm:self-end flex-shrink-0`}
         >
-          <span className="flex items-center gap-2 text-sm md:text-base">
+          <span className="flex items-center justify-center gap-2 text-sm md:text-base">
             <Plus className="w-5 h-5" />
             <span className="whitespace-nowrap">Nova {isIncome ? 'receita' : 'despesa'}</span>
           </span>

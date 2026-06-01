@@ -739,7 +739,7 @@ export default function RecurringPage() {
                 open();
               }
             }}
-            className={`flex-shrink-0 self-start sm:self-end inline-flex items-center justify-center gap-2 px-6 py-3 min-h-[48px] rounded-full font-bold text-sm transition-all duration-200 active:scale-[0.98] ${tabConfig.buttonClass}`}
+            className={`w-full sm:w-auto flex-shrink-0 self-stretch sm:self-end inline-flex items-center justify-center gap-2 px-6 py-3 min-h-[48px] rounded-full font-bold text-sm transition-all duration-200 active:scale-[0.98] ${tabConfig.buttonClass}`}
           >
             <Plus className="w-4 h-4" strokeWidth={2.75} />
             <span>{tabConfig.cta}</span>
