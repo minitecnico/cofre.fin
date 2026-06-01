@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, CircleAlert, Database, MessageCircle, RefreshCw, Send, Sparkles, Trash2, User, WandSparkles } from 'lucide-react';
-import MonthSelector from '../components/MonthSelector';
-import AiTools from '../components/AiTools';
+import { Bot, CircleAlert, Mic, MicOff, RefreshCw, Send, Sparkles, Trash2, User } from 'lucide-react';
 import { cardService, dashboardService, loanService, transactionService } from '../services';
 import { sendAiMessage } from '../services/ai';
 import { useMonth } from '../context/MonthContext';
-
-const STARTERS = [
-  'Analise minha saúde financeira neste mês.',
-  'Onde posso economizar sem comprometer o essencial?',
-  'Me ajude a organizar minhas prioridades da semana.',
-];
 
 function summarizeTransactions(transactions) {
   return transactions.map((transaction) => ({
@@ -145,9 +137,11 @@ export default function AiAssistant() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [activeMode, setActiveMode] = useState('chat');
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
   const bottomRef = useRef(null);
   const contextRequestRef = useRef(0);
+  const recognitionRef = useRef(null);
 
   async function loadContext() {
     const requestId = contextRequestRef.current + 1;
@@ -198,6 +192,8 @@ export default function AiAssistant() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
+  useEffect(() => () => recognitionRef.current?.abort(), []);
+
   const canSend = useMemo(
     () => input.trim() && context && !loadingContext && !sending,
     [input, context, loadingContext, sending]
@@ -233,98 +229,100 @@ export default function AiAssistant() {
     submit();
   }
 
-  return (
-    <div className="space-y-4 md:space-y-6 max-w-5xl">
-      <MonthSelector />
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
 
-      <section className="feature-card-dark overflow-hidden">
-        <div className="p-5 md:p-7 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-accent text-ink-950 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-6 h-6" />
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceError('O reconhecimento de voz não está disponível neste navegador.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setVoiceError('');
+      setListening(true);
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (transcript) setInput(transcript);
+    };
+    recognition.onerror = (event) => {
+      setListening(false);
+      setVoiceError(event.error === 'not-allowed'
+        ? 'Permita o acesso ao microfone para usar comandos de voz.'
+        : 'Não consegui entender o áudio. Tente novamente ou digite sua mensagem.');
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setListening(false);
+      setVoiceError('Não foi possível iniciar o microfone. Tente novamente.');
+    }
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <section className="feature-card overflow-hidden min-h-[calc(100dvh-10.5rem)] md:min-h-[calc(100vh-4rem)] flex flex-col">
+        <header className="border-b border-hairline-light px-4 py-3 md:px-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-accent text-ink-950 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-4.5 h-4.5" />
             </div>
-            <div>
-              <span className="badge-accent mb-2">Cofre IA</span>
-              <h1 className="text-xl md:text-2xl">Seu assistente pessoal</h1>
-              <p className="text-sm text-ink-300 mt-1">
-                Converse livremente ou use automações com contexto financeiro de {label.toLowerCase()}.
+            <div className="min-w-0">
+              <h1 className="text-base text-ink-950">Cofre IA</h1>
+              <p className="text-[11px] text-ink-500 truncate">
+                Assistente pessoal com contexto financeiro de {label.toLowerCase()}
               </p>
             </div>
           </div>
-          <button type="button" onClick={loadContext} className="btn-soft flex-shrink-0" disabled={loadingContext}>
-            <RefreshCw className={`w-4 h-4 ${loadingContext ? 'animate-spin' : ''}`} />
-            Atualizar dados
-          </button>
-        </div>
-      </section>
-
-      <div className="feature-card p-1.5 grid grid-cols-2 gap-1.5">
-        {[
-          { id: 'chat', label: 'Conversa', description: 'Pergunte qualquer coisa', icon: MessageCircle },
-          { id: 'tools', label: 'Ferramentas', description: 'Automatize tarefas', icon: WandSparkles },
-        ].map(({ id, label: modeLabel, description, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setActiveMode(id)}
-            className={`rounded-xl px-3 py-3 text-left transition-all ${
-              activeMode === id ? 'bg-ink-950 text-white shadow-soft' : 'text-ink-600 hover:bg-surface-soft'
-            }`}
-          >
-            <span className="flex items-center gap-2 text-sm font-bold"><Icon className="w-4 h-4" /> {modeLabel}</span>
-            <span className={`text-[11px] mt-0.5 block ${activeMode === id ? 'text-ink-300' : 'text-ink-500'}`}>{description}</span>
-          </button>
-        ))}
-      </div>
-
-      {contextError && (
-        <div className="rounded-xl border border-warn/30 bg-yellow-50 px-3 py-2.5 flex items-start gap-2 text-xs text-yellow-900">
-          <CircleAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>{contextError}</span>
-        </div>
-      )}
-
-      {!loadingContext && context && (
-        <p className="text-[11px] text-ink-500 flex items-center gap-1.5">
-          <Database className="w-3.5 h-3.5" />
-          Contexto atualizado: {context.lancamentosDoMes.length} lançamentos do mês disponíveis para análise.
-        </p>
-      )}
-
-      <div className={activeMode === 'tools' ? '' : 'hidden'}>
-        <AiTools financialContext={context} onDataChanged={loadContext} />
-      </div>
-
-      <section className={`feature-card overflow-hidden ${activeMode === 'chat' ? '' : 'hidden'}`}>
-        {!!messages.length && (
-          <div className="border-b border-hairline-light px-4 py-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-ink-500">Conversa com o Cofre IA</p>
-            <button type="button" onClick={() => setMessages([])} className="text-xs text-ink-500 hover:text-negative flex items-center gap-1 transition-colors">
-              <Trash2 className="w-3.5 h-3.5" /> Limpar
+          <div className="flex items-center gap-1">
+            {!!messages.length && (
+              <button type="button" onClick={() => setMessages([])} className="w-9 h-9 rounded-full text-ink-500 hover:text-negative hover:bg-red-50 flex items-center justify-center transition-colors" aria-label="Limpar conversa">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <button type="button" onClick={loadContext} className="w-9 h-9 rounded-full text-ink-500 hover:text-ink-950 hover:bg-surface-soft flex items-center justify-center transition-colors" disabled={loadingContext} aria-label="Atualizar contexto financeiro">
+              <RefreshCw className={`w-4 h-4 ${loadingContext ? 'animate-spin' : ''}`} />
             </button>
           </div>
+        </header>
+
+        {contextError && (
+          <div className="border-b border-warn/30 bg-yellow-50 px-4 py-2.5 flex items-start gap-2 text-xs text-yellow-900">
+            <CircleAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>{contextError}</span>
+          </div>
         )}
-        <div className="min-h-[360px] max-h-[58vh] overflow-y-auto p-4 md:p-6 space-y-4">
+
+        {!!messages.length && (
+          <p className="sr-only">Conversa com o Cofre IA</p>
+        )}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
           {!messages.length && (
-            <div className="max-w-2xl mx-auto py-8 text-center">
-              <Sparkles className="w-8 h-8 text-accent-dark mx-auto mb-3" />
-              <h2 className="text-lg text-ink-900">Por onde começamos?</h2>
-              <p className="text-sm text-ink-500 mt-1 mb-5">
-                Pergunte livremente ou escolha uma análise rápida.
+            <div className="max-w-md mx-auto h-full min-h-[300px] flex flex-col justify-center text-center">
+              <Sparkles className="w-7 h-7 text-accent-dark mx-auto mb-3" />
+              <h2 className="text-lg text-ink-900">Como posso ajudar?</h2>
+              <p className="text-sm text-ink-500 mt-1">
+                Pergunte qualquer coisa ou dê um comando. Quando fizer sentido, uso seus dados financeiros para responder melhor.
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {STARTERS.map((starter) => (
-                  <button
-                    key={starter}
-                    type="button"
-                    className="btn-pill-sm text-left"
-                    onClick={() => submit(starter)}
-                    disabled={!context || loadingContext || sending}
-                  >
-                    {starter}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
 
@@ -365,8 +363,8 @@ export default function AiAssistant() {
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={handleSubmit} className="border-t border-hairline-light p-3 md:p-4">
-          <div className="flex items-end gap-2">
+        <form onSubmit={handleSubmit} className="border-t border-hairline-light p-3 md:p-4 bg-white">
+          <div className="flex items-end gap-1.5 md:gap-2">
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -376,18 +374,30 @@ export default function AiAssistant() {
                   if (canSend) submit();
                 }
               }}
-              rows="2"
-              className="input-field resize-none"
-              placeholder={loadingContext ? 'Preparando seu assistente...' : 'Pergunte qualquer coisa...'}
+              rows="1"
+              className="input-field resize-none min-h-[48px] max-h-32"
+              placeholder={listening ? 'Ouvindo...' : loadingContext ? 'Preparando seu assistente...' : 'Digite ou fale um comando...'}
               disabled={loadingContext || !context}
             />
-            <button type="submit" className="btn-accent px-4" disabled={!canSend} aria-label="Enviar mensagem">
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={`w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${
+                listening ? 'bg-negative text-white animate-pulse' : 'bg-surface-soft text-ink-900 hover:bg-ink-200'
+              }`}
+              aria-label={listening ? 'Parar comando de voz' : 'Usar comando de voz'}
+            >
+              {listening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+            <button type="submit" className="btn-accent w-12 h-12 min-h-0 p-0 flex-shrink-0" disabled={!canSend} aria-label="Enviar mensagem">
               <Send className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-[11px] text-ink-400 mt-2">
-            A IA pode cometer erros. Confirme decisões financeiras importantes antes de agir.
-          </p>
+          {(voiceError || listening) && (
+            <p className={`text-[11px] mt-2 ${voiceError ? 'text-negative' : 'text-ink-500'}`}>
+              {voiceError || 'Ouvindo seu comando...'}
+            </p>
+          )}
         </form>
       </section>
     </div>

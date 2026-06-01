@@ -11,8 +11,19 @@
  *    pela rede — nunca cacheamos chamadas de API nem respostas de terceiros.
  */
 
-const CACHE_VERSION = 'cofre-v1';
+const CACHE_VERSION = 'cofre-v2';
 const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icons/icon.svg'];
+
+function isValidAssetResponse(request, response) {
+  if (!response || !response.ok || response.type !== 'basic') return false;
+
+  const contentType = response.headers.get('content-type') || '';
+  if (request.destination === 'script') return contentType.includes('javascript');
+  if (request.destination === 'style') return contentType.includes('text/css');
+  if (request.destination === 'image') return contentType.startsWith('image/');
+  if (request.destination === 'manifest') return contentType.includes('json');
+  return !contentType.includes('text/html');
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -48,8 +59,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put('/index.html', copy));
+          if (response.ok && (response.headers.get('content-type') || '').includes('text/html')) {
+            const copy = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put('/index.html', copy));
+          }
           return response;
         })
         .catch(() => caches.match('/index.html').then((r) => r || caches.match('/')))
@@ -62,7 +75,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       const network = fetch(request)
         .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
+          if (isValidAssetResponse(request, response)) {
             const copy = response.clone();
             caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
           }
