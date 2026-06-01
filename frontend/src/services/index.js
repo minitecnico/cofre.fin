@@ -312,12 +312,32 @@ export const cardService = {
   },
 
   async remove(id) {
-    // Soft delete — preserva histórico de transações
+    // Política de exclusão inteligente:
+    //   - Cartão SEM nenhuma transação vinculada → apaga de verdade do banco
+    //     (não acumula cartão morto / inativo sem serventia).
+    //   - Cartão COM histórico → soft delete (active=false) pra não perder os
+    //     lançamentos já feitos. Aí o "lixo" tem motivo de existir.
+    // Retorna { hardDeleted } pra UI poder dar a mensagem certa.
+    const [txRes, recRes] = await Promise.all([
+      supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('credit_card_id', id),
+      supabase.from('recurring_transactions').select('id', { count: 'exact', head: true }).eq('credit_card_id', id),
+    ]);
+    if (txRes.error) throw txRes.error;
+    if (recRes.error) throw recRes.error;
+    const refCount = (txRes.count ?? 0) + (recRes.count ?? 0);
+
+    if (refCount === 0) {
+      const { error } = await supabase.from('credit_cards').delete().eq('id', id);
+      if (error) throw error;
+      return { hardDeleted: true };
+    }
+
     const { error } = await supabase
       .from('credit_cards')
       .update({ active: false })
       .eq('id', id);
     if (error) throw error;
+    return { hardDeleted: false };
   },
 
   async history(cardId) {
@@ -439,7 +459,39 @@ export const recurringService = {
   },
 
   async remove(id) {
+    // Exclui APENAS o modelo. As transações já geradas ficam (recurring_id vira
+    // null pela FK on delete set null) — histórico preservado, para de gerar.
     const { error } = await supabase.from('recurring_transactions').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  /**
+   * Conta quantas transações este modelo já gerou (qualquer mês).
+   * Usado pra UI mostrar "isto vai apagar N lançamentos".
+   */
+  async countGenerated(id) {
+    const { count, error } = await supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('recurring_id', id);
+    if (error) throw error;
+    return count ?? 0;
+  },
+
+  /**
+   * Exclusão TOTAL: apaga de verdade o modelo E todas as transações que ele
+   * gerou (em qualquer mês). Sem deixar resíduo no banco.
+   */
+  async removeWithTransactions(id) {
+    const { error: txErr } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('recurring_id', id);
+    if (txErr) throw txErr;
+    const { error } = await supabase
+      .from('recurring_transactions')
+      .delete()
+      .eq('id', id);
     if (error) throw error;
   },
 
@@ -449,6 +501,25 @@ export const recurringService = {
    */
   async removeMany(ids) {
     if (!ids || ids.length === 0) return 0;
+    const { error, count } = await supabase
+      .from('recurring_transactions')
+      .delete({ count: 'exact' })
+      .in('id', ids);
+    if (error) throw error;
+    return count ?? ids.length;
+  },
+
+  /**
+   * Exclusão TOTAL em lote: apaga os modelos E todas as transações geradas
+   * por eles. Retorna a quantidade de modelos excluídos.
+   */
+  async removeManyWithTransactions(ids) {
+    if (!ids || ids.length === 0) return 0;
+    const { error: txErr } = await supabase
+      .from('transactions')
+      .delete()
+      .in('recurring_id', ids);
+    if (txErr) throw txErr;
     const { error, count } = await supabase
       .from('recurring_transactions')
       .delete({ count: 'exact' })

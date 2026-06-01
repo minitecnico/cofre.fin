@@ -398,6 +398,8 @@ export default function RecurringPage() {
 
   // Modal de confirmação de exclusão individual (substitui confirm() nativo)
   const [deletingItem, setDeletingItem] = useState(null);
+  // Quantos lançamentos o modelo em exclusão já gerou (null = carregando/sem dado)
+  const [deletingCount, setDeletingCount] = useState(null);
 
   // Empréstimos vigentes (carregados sob demanda quando a aba é aberta)
   const [loans, setLoans] = useState([]);
@@ -443,20 +445,39 @@ export default function RecurringPage() {
     load();
   }
 
-  async function confirmDelete() {
+  // scope: 'model' = só a recorrência | 'all' = recorrência + lançamentos gerados
+  async function confirmDelete(scope) {
     if (!deletingItem) return;
     const item = deletingItem;
     setDeletingItem(null);
+    setDeletingCount(null);
     try {
-      await recurringService.remove(item.id);
-      setBulkFeedback({
-        type: 'success',
-        text: `✓ "${item.description}" excluída.`,
-      });
+      if (scope === 'all') {
+        await recurringService.removeWithTransactions(item.id);
+        setBulkFeedback({
+          type: 'success',
+          text: `✓ "${item.description}" e todos os lançamentos foram excluídos.`,
+        });
+      } else {
+        await recurringService.remove(item.id);
+        setBulkFeedback({
+          type: 'success',
+          text: `✓ "${item.description}" excluída (lançamentos mantidos).`,
+        });
+      }
     } catch {
       setBulkFeedback({ type: 'error', text: 'Erro ao excluir. Tente novamente.' });
     }
     load();
+  }
+
+  // Abre o modal de exclusão e busca quantos lançamentos o modelo já gerou.
+  function openDelete(item) {
+    setDeletingItem(item);
+    setDeletingCount(null);
+    recurringService.countGenerated(item.id)
+      .then(setDeletingCount)
+      .catch(() => setDeletingCount(null));
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -498,15 +519,20 @@ export default function RecurringPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  async function handleBulkDelete() {
+  // scope: 'model' = só os modelos | 'all' = modelos + lançamentos gerados
+  async function handleBulkDelete(scope) {
     setConfirmingBulkDelete(false);
     setBulkProcessing(true);
     const ids = [...selectedIds];
     try {
-      const count = await recurringService.removeMany(ids);
+      const count = scope === 'all'
+        ? await recurringService.removeManyWithTransactions(ids)
+        : await recurringService.removeMany(ids);
       setBulkFeedback({
         type: 'success',
-        text: `✓ ${count} ${count === 1 ? 'excluída' : 'excluídas'} com sucesso.`,
+        text: scope === 'all'
+          ? `✓ ${count} ${count === 1 ? 'recorrência' : 'recorrências'} e seus lançamentos excluídos.`
+          : `✓ ${count} ${count === 1 ? 'excluída' : 'excluídas'} (lançamentos mantidos).`,
       });
     } catch (err) {
       setBulkFeedback({
@@ -864,7 +890,7 @@ export default function RecurringPage() {
                         item={item}
                         onEdit={(it) => { setEditing(it); open(); }}
                         onToggleActive={handleToggleActive}
-                        onDelete={(it) => setDeletingItem(it)}
+                        onDelete={(it) => openDelete(it)}
                         selectionMode={selectionMode}
                         selected={selectedIds.has(item.id)}
                         onToggleSelection={() => toggleSelection(item.id)}
@@ -889,7 +915,7 @@ export default function RecurringPage() {
                         item={item}
                         onEdit={(it) => { setEditing(it); open(); }}
                         onToggleActive={handleToggleActive}
-                        onDelete={(it) => setDeletingItem(it)}
+                        onDelete={(it) => openDelete(it)}
                         selectionMode={selectionMode}
                         selected={selectedIds.has(item.id)}
                         onToggleSelection={() => toggleSelection(item.id)}
@@ -986,59 +1012,85 @@ export default function RecurringPage() {
         onClose={() => setConfirmingBulkDelete(false)}
         title={`Excluir ${selectedIds.size} ${selectedIds.size === 1 ? 'item' : 'itens'}`}
       >
-        <div className="space-y-5">
-          <div className="px-4 py-4 bg-red-50 border border-negative/20 rounded-2xl space-y-2">
-            <p className="text-sm text-ink-900">
-              Tem certeza que deseja excluir <strong>{selectedIds.size}</strong>
-              {' '}{selectedIds.size === 1 ? 'recorrência' : 'recorrências'}?
-            </p>
-            <p className="text-xs text-ink-700">
-              ✓ <strong>Histórico preservado:</strong> as transações já criadas em meses anteriores continuam existindo (só perdem o vínculo com o modelo).
-            </p>
-            <p className="text-xs text-ink-700">
-              ⚠ <strong>Não há como desfazer.</strong> Nenhuma transação nova será gerada nos próximos meses para esses itens.
-            </p>
-          </div>
+        <div className="space-y-4">
+          <p className="text-sm text-ink-900">
+            Como excluir as <strong>{selectedIds.size}</strong>{' '}
+            {selectedIds.size === 1 ? 'recorrência selecionada' : 'recorrências selecionadas'}?
+          </p>
 
-          <div className="flex flex-col-reverse sm:flex-row gap-3">
-            <button onClick={() => setConfirmingBulkDelete(false)} className="btn-ghost">
-              Cancelar
-            </button>
-            <button onClick={handleBulkDelete} className="btn-danger-solid flex-1">
-              Sim, excluir {selectedIds.size} {selectedIds.size === 1 ? 'item' : 'itens'}
-            </button>
-          </div>
+          {/* Opção 1: só os modelos */}
+          <button
+            onClick={() => handleBulkDelete('model')}
+            className="w-full text-left px-4 py-3.5 rounded-2xl border border-hairline-light hover:border-ink-300 hover:bg-surface-soft transition-colors"
+          >
+            <p className="font-bold text-sm text-ink-900">Só as recorrências</p>
+            <p className="text-xs text-ink-600 mt-0.5">
+              Param de gerar. Os lançamentos já feitos continuam no histórico.
+            </p>
+          </button>
+
+          {/* Opção 2: modelos + lançamentos */}
+          <button
+            onClick={() => handleBulkDelete('all')}
+            className="w-full text-left px-4 py-3.5 rounded-2xl border border-negative/30 bg-red-50 hover:bg-red-100 transition-colors"
+          >
+            <p className="font-bold text-sm text-negative">Recorrências + lançamentos</p>
+            <p className="text-xs text-ink-700 mt-0.5">
+              Apaga de vez os modelos e todos os lançamentos gerados por eles. Não dá pra desfazer.
+            </p>
+          </button>
+
+          <button onClick={() => setConfirmingBulkDelete(false)} className="btn-ghost w-full">
+            Cancelar
+          </button>
         </div>
       </Modal>
 
-      {/* Modal: confirmar exclusão individual */}
+      {/* Modal: confirmar exclusão individual — escolha do escopo */}
       <Modal
         isOpen={!!deletingItem}
-        onClose={() => setDeletingItem(null)}
+        onClose={() => { setDeletingItem(null); setDeletingCount(null); }}
         title="Excluir recorrência"
       >
-        <div className="space-y-5">
-          <div className="px-4 py-4 bg-red-50 border border-negative/20 rounded-2xl space-y-2">
-            <p className="text-sm text-ink-900">
-              Excluir <strong>"{deletingItem?.description}"</strong>?
+        <div className="space-y-4">
+          <p className="text-sm text-ink-900">
+            Como excluir <strong>"{deletingItem?.description}"</strong>?
+          </p>
+          {deletingCount != null && (
+            <p className="text-xs text-ink-500">
+              Este modelo já gerou <strong>{deletingCount}</strong>{' '}
+              {deletingCount === 1 ? 'lançamento' : 'lançamentos'} no histórico.
             </p>
-            <p className="text-xs text-ink-700">
-              ✓ As transações já criadas em meses anteriores serão preservadas
-              (perdem o vínculo com o modelo, mas continuam existindo).
-            </p>
-            <p className="text-xs text-ink-700">
-              ⚠ Nenhuma transação nova será gerada nos próximos meses.
-            </p>
-          </div>
+          )}
 
-          <div className="flex flex-col-reverse sm:flex-row gap-3">
-            <button onClick={() => setDeletingItem(null)} className="btn-ghost">
-              Cancelar
-            </button>
-            <button onClick={confirmDelete} className="btn-danger-solid flex-1">
-              Sim, excluir
-            </button>
-          </div>
+          {/* Opção 1: só o modelo — preserva lançamentos */}
+          <button
+            onClick={() => confirmDelete('model')}
+            className="w-full text-left px-4 py-3.5 rounded-2xl border border-hairline-light hover:border-ink-300 hover:bg-surface-soft transition-colors"
+          >
+            <p className="font-bold text-sm text-ink-900">Só a recorrência</p>
+            <p className="text-xs text-ink-600 mt-0.5">
+              Para de gerar nos próximos meses. Os lançamentos já feitos continuam no histórico.
+            </p>
+          </button>
+
+          {/* Opção 2: tudo — apaga de verdade do banco */}
+          <button
+            onClick={() => confirmDelete('all')}
+            className="w-full text-left px-4 py-3.5 rounded-2xl border border-negative/30 bg-red-50 hover:bg-red-100 transition-colors"
+          >
+            <p className="font-bold text-sm text-negative">Recorrência + lançamentos</p>
+            <p className="text-xs text-ink-700 mt-0.5">
+              Apaga de vez o modelo {deletingCount ? `e os ${deletingCount} lançamentos` : 'e todos os lançamentos gerados'}. Não dá pra desfazer.
+            </p>
+          </button>
+
+          <button
+            onClick={() => { setDeletingItem(null); setDeletingCount(null); }}
+            className="btn-ghost w-full"
+          >
+            Cancelar
+          </button>
         </div>
       </Modal>
     </div>

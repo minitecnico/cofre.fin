@@ -709,9 +709,14 @@ export default function CardsPage() {
     const id = confirmingDelete.card.id;
     setConfirmingDelete(null);
     try {
-      await cardService.remove(id);
+      const res = await cardService.remove(id);
       if (selectedId === id) setSelectedId(null);
-      setFeedback({ type: 'success', text: 'Cartão removido. Histórico preservado.' });
+      setFeedback({
+        type: 'success',
+        text: res?.hardDeleted
+          ? 'Cartão excluído de vez (não tinha lançamentos).'
+          : 'Cartão arquivado. Histórico de lançamentos preservado.',
+      });
       load();
     } catch (err) {
       setFeedback({ type: 'error', text: 'Erro ao remover: ' + err.message });
