@@ -104,14 +104,20 @@ Na tela "Configure Project":
 - **Build Command** e **Output Directory:** deixe os defaults
 
 ### 3.4. Variáveis de ambiente
-Expanda **"Environment Variables"** e adicione **duas**:
+Expanda **"Environment Variables"** e adicione:
 
 | Nome                       | Valor                                          |
 |----------------------------|------------------------------------------------|
 | `VITE_SUPABASE_URL`        | a Project URL do Supabase                      |
 | `VITE_SUPABASE_ANON_KEY`   | a anon public key do Supabase                  |
+| `NINEROUTER_API_KEY`       | a chave privada gerada no painel do 9Router    |
+| `NINEROUTER_BASE_URL`      | `https://9router.com/v1`                       |
+| `NINEROUTER_MODEL`         | nome do combo configurado, ex.: `free-combo`   |
 
 ⚠️ **Não adicione `/` no final da URL.**
+
+As variáveis `NINEROUTER_*` ficam somente no servidor da Vercel. Nunca use o
+prefixo `VITE_` para a chave privada do 9Router.
 
 ### 3.5. Deploy
 Clique no botão **"Deploy"** e aguarde ~1-2 minutos.

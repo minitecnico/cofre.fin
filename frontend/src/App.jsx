@@ -13,6 +13,7 @@ import Recurring from './pages/Recurring';
 import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import ImportExport from './pages/ImportExport';
+import AiAssistant from './pages/AiAssistant';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="goals" element={<Goals />} />
               <Route path="import-export" element={<ImportExport />} />
+              <Route path="ai" element={<AiAssistant />} />
             </Route>
           </Routes>
         </BrowserRouter>

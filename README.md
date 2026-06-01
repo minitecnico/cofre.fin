@@ -1,6 +1,7 @@
 # 💰 Cofre — Personal Finance Dashboard
 
-Sistema completo de controle de finanças pessoais. **Frontend puro** conversando direto com Supabase.
+Sistema completo de controle de finanças pessoais. O frontend conversa direto
+com Supabase e usa uma função serverless privada para o assistente financeiro.
 
 ```
 finance-dashboard/
@@ -38,6 +39,7 @@ finance-dashboard/
 - ✅ Exportação CSV
 - ✅ Login/registro com Supabase Auth (email/senha)
 - ✅ Cada usuário só vê seus dados (Row Level Security do Postgres)
+- ✅ Assistente IA para conversar sobre os dados financeiros do mês
 
 ---
 
@@ -54,7 +56,7 @@ finance-dashboard/
 └──────────────────┘         └──────────────────────┘
 ```
 
-**Sem servidor Node intermediário.** O frontend usa o SDK oficial do Supabase, que cuida de:
+O frontend usa o SDK oficial do Supabase, que cuida de:
 - **Auth**: signup, login, logout, refresh de token, persistência de sessão
 - **REST automática** a partir das tabelas (com RLS aplicado)
 - **RPC** para chamar funções SQL (saldo, fatura, agregações)

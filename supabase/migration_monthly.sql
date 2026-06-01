@@ -18,6 +18,8 @@
 -- Saldo do mês selecionado: receitas do mês − despesas do mês
 -- p_month: 'YYYY-MM' (ex: '2026-04'). Se NULL, usa mês atual.
 -- ─────────────────────────────────────────────────────────────────────────
+drop function if exists public.get_balance();
+
 create or replace function public.get_balance(p_month text default null)
 returns table (balance numeric, total_income numeric, total_expense numeric)
 language plpgsql
