@@ -16,6 +16,7 @@ export default function TransactionList({
 }) {
   const [editing, setEditing] = useState(null);
   const [deletingGroup, setDeletingGroup] = useState(null); // {id, description, groupId, total}
+  const [deletingSingle, setDeletingSingle] = useState(null); // {id, description}
 
   if (loading) {
     return (
@@ -48,8 +49,13 @@ export default function TransactionList({
         total: t.installment_total,
       });
     } else {
-      if (confirm(`Excluir "${t.description}"?`)) onDelete(t.id);
+      setDeletingSingle({ id: t.id, description: t.description });
     }
+  }
+
+  function handleDeleteSingle() {
+    onDelete(deletingSingle.id);
+    setDeletingSingle(null);
   }
 
   async function handleDeleteOnlyThis() {
@@ -241,7 +247,7 @@ export default function TransactionList({
         )}
       </Modal>
 
-      {/* Modal de exclusão de compra parcelada */}
+      {/* Modal de exclusão de compra parcelada — escolha do escopo */}
       <Modal
         isOpen={!!deletingGroup}
         onClose={() => setDeletingGroup(null)}
@@ -249,19 +255,16 @@ export default function TransactionList({
       >
         {deletingGroup && (
           <div className="space-y-4">
-            <div className="px-4 py-3 bg-yellow-50 border-2 border-warn">
-              <p className="text-sm">
-                <strong className="font-semibold">"{deletingGroup.description}"</strong> faz parte de uma compra
-                parcelada em <strong>{deletingGroup.total}x</strong>.
-              </p>
-              <p className="text-xs text-ink-700 mt-1">O que você quer fazer?</p>
-            </div>
+            <p className="text-sm text-ink-900">
+              <strong>"{deletingGroup.description}"</strong> faz parte de uma compra
+              parcelada em <strong>{deletingGroup.total}x</strong>. O que fazer?
+            </p>
 
             <button
               onClick={handleDeleteOnlyThis}
-              className="w-full text-left px-4 py-3 border-2 border-ink-900 hover:bg-accent/30 transition-colors"
+              className="w-full text-left px-4 py-3.5 rounded-2xl border border-hairline-light hover:border-ink-300 hover:bg-surface-soft transition-colors"
             >
-              <p className="font-semibold text-sm">Excluir só esta parcela</p>
+              <p className="font-bold text-sm text-ink-900">Excluir só esta parcela</p>
               <p className="text-xs text-ink-600 mt-0.5">
                 As outras parcelas continuam normais.
               </p>
@@ -269,22 +272,42 @@ export default function TransactionList({
 
             <button
               onClick={handleDeleteAll}
-              className="w-full text-left px-4 py-3 border-2 border-negative text-negative hover:bg-red-50 transition-colors"
+              className="w-full text-left px-4 py-3.5 rounded-2xl border border-negative/30 bg-red-50 hover:bg-red-100 transition-colors"
             >
-              <p className="font-semibold text-sm">
-                Excluir TODAS as {deletingGroup.total} parcelas
+              <p className="font-bold text-sm text-negative">
+                Excluir todas as {deletingGroup.total} parcelas
               </p>
-              <p className="text-xs text-negative/80 mt-0.5">
-                Cancela a compra inteira em todos os meses.
+              <p className="text-xs text-ink-700 mt-0.5">
+                Cancela a compra inteira em todos os meses. Não dá pra desfazer.
               </p>
             </button>
 
-            <button
-              onClick={() => setDeletingGroup(null)}
-              className="btn-ghost w-full"
-            >
+            <button onClick={() => setDeletingGroup(null)} className="btn-ghost w-full">
               Cancelar
             </button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de exclusão de transação simples (substitui o confirm nativo) */}
+      <Modal
+        isOpen={!!deletingSingle}
+        onClose={() => setDeletingSingle(null)}
+        title="Excluir transação"
+      >
+        {deletingSingle && (
+          <div className="space-y-4">
+            <p className="text-sm text-ink-900">
+              Excluir <strong>"{deletingSingle.description}"</strong>? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex flex-col-reverse sm:flex-row gap-3">
+              <button onClick={() => setDeletingSingle(null)} className="btn-ghost sm:flex-1">
+                Cancelar
+              </button>
+              <button onClick={handleDeleteSingle} className="btn-danger-solid sm:flex-1">
+                Sim, excluir
+              </button>
+            </div>
           </div>
         )}
       </Modal>
