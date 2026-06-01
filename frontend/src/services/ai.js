@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
-export async function sendAiMessage(messages, context) {
-  const data = await aiRequest({ messages, context });
+export async function sendAiMessage(messages, context, documents = []) {
+  const data = await aiRequest({ messages, context, documents });
   return data.message;
 }
 

@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, CircleAlert, Mic, MicOff, RefreshCw, Send, Sparkles, Trash2, User } from 'lucide-react';
+import {
+  Bot, CircleAlert, Download, FileText, Loader2, Mic, MicOff, Paperclip,
+  RefreshCw, Send, Sparkles, Trash2, User, X,
+} from 'lucide-react';
 import { cardService, dashboardService, loanService, transactionService } from '../services';
 import { sendAiMessage } from '../services/ai';
+import { downloadOriginal, downloadText, extractDocument, formatFileSize } from '../services/aiDocuments';
 import { useMonth } from '../context/MonthContext';
+
+const MAX_ATTACHMENTS = 4;
+
+function safeFilename(value) {
+  return String(value || 'resposta')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+    .slice(0, 60) || 'resposta';
+}
 
 function summarizeTransactions(transactions) {
   return transactions.map((transaction) => ({
@@ -139,8 +155,10 @@ export default function AiAssistant() {
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [attachments, setAttachments] = useState([]);
   const bottomRef = useRef(null);
   const contextRequestRef = useRef(0);
+  const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
 
   async function loadContext() {
@@ -194,26 +212,48 @@ export default function AiAssistant() {
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
 
-  const canSend = useMemo(
-    () => input.trim() && context && !loadingContext && !sending,
-    [input, context, loadingContext, sending]
+  const readyAttachments = useMemo(
+    () => attachments.filter((attachment) => attachment.status === 'ready'),
+    [attachments]
+  );
+  const canSend = Boolean(
+    (input.trim() || readyAttachments.length) &&
+    context &&
+    !loadingContext &&
+    !sending &&
+    !attachments.some((attachment) => attachment.status === 'reading')
   );
 
   async function submit(text = input) {
-    const content = text.trim();
-    if (!content || !context || sending) return;
+    const content = text.trim() || 'Analise os documentos anexados e apresente os principais pontos de forma organizada.';
+    if (
+      !content ||
+      !context ||
+      sending ||
+      attachments.some((attachment) => attachment.status === 'reading') ||
+      (!text.trim() && !readyAttachments.length)
+    ) return;
 
+    const documents = readyAttachments.map(({ name, type, text: documentText }) => ({
+      name,
+      type,
+      text: documentText,
+    }));
+    const attachmentSummary = documents.length
+      ? `\n\nAnexos: ${documents.map((document) => document.name).join(', ')}`
+      : '';
     const nextMessages = [
       ...messages.filter((message) => message.kind !== 'error'),
-      { role: 'user', content },
+      { role: 'user', content: `${content}${attachmentSummary}` },
     ];
     setMessages(nextMessages);
     setInput('');
     setSending(true);
 
     try {
-      const answer = await sendAiMessage(nextMessages, context);
+      const answer = await sendAiMessage(nextMessages, context, documents);
       setMessages((current) => [...current, { role: 'assistant', content: answer, kind: 'answer' }]);
+      setAttachments([]);
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -227,6 +267,48 @@ export default function AiAssistant() {
   function handleSubmit(event) {
     event.preventDefault();
     submit();
+  }
+
+  async function handleFiles(files) {
+    const availableSlots = MAX_ATTACHMENTS - attachments.length;
+    if (availableSlots <= 0) return;
+
+    const selected = Array.from(files || []).slice(0, availableSlots);
+
+    for (const file of selected) {
+      const id = `${file.name}-${file.size}-${file.lastModified}-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+      setAttachments((current) => [...current, {
+        id,
+        file,
+        name: file.name,
+        size: file.size,
+        status: 'reading',
+      }]);
+
+      try {
+        const extracted = await extractDocument(file);
+        setAttachments((current) => current.map((attachment) => (
+          attachment.id === id ? { ...attachment, ...extracted, status: 'ready' } : attachment
+        )));
+      } catch (error) {
+        setAttachments((current) => current.map((attachment) => (
+          attachment.id === id
+            ? { ...attachment, status: 'error', error: error.message || 'Não foi possível ler o arquivo.' }
+            : attachment
+        )));
+      }
+    }
+  }
+
+  function removeAttachment(id) {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  }
+
+  function downloadConversation() {
+    const content = messages
+      .map((message) => `## ${message.role === 'user' ? 'Você' : 'Cofre IA'}\n\n${message.content}`)
+      .join('\n\n---\n\n');
+    downloadText(`# Conversa com o Cofre IA\n\n${content}\n`, 'cofre-ia-conversa.md');
   }
 
   function toggleListening() {
@@ -295,6 +377,11 @@ export default function AiAssistant() {
           </div>
           <div className="flex items-center gap-1">
             {!!messages.length && (
+              <button type="button" onClick={downloadConversation} className="w-9 h-9 rounded-full text-ink-500 hover:text-ink-950 hover:bg-surface-soft flex items-center justify-center transition-colors" aria-label="Baixar conversa">
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            {!!messages.length && (
               <button type="button" onClick={() => setMessages([])} className="w-9 h-9 rounded-full text-ink-500 hover:text-negative hover:bg-red-50 flex items-center justify-center transition-colors" aria-label="Limpar conversa">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -343,6 +430,15 @@ export default function AiAssistant() {
                 {message.role === 'assistant'
                   ? <MessageContent content={message.content} />
                   : message.content}
+                {message.role === 'assistant' && message.kind !== 'error' && (
+                  <button
+                    type="button"
+                    onClick={() => downloadText(message.content, `${safeFilename(message.content.slice(0, 40))}.md`)}
+                    className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-ink-500 hover:text-ink-950 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Baixar resposta
+                  </button>
+                )}
               </div>
               {message.role === 'user' && (
                 <div className="w-8 h-8 rounded-full bg-ink-200 text-ink-700 flex items-center justify-center flex-shrink-0">
@@ -363,7 +459,47 @@ export default function AiAssistant() {
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={handleSubmit} className="border-t border-hairline-light p-3 md:p-4 bg-white">
+        <form
+          onSubmit={handleSubmit}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            handleFiles(event.dataTransfer.files);
+          }}
+          className="border-t border-hairline-light p-3 md:p-4 bg-white"
+        >
+          {!!attachments.length && (
+            <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {attachments.map((attachment) => (
+                <div key={attachment.id} className={`rounded-xl border px-3 py-2 flex items-center gap-2 min-w-0 ${
+                  attachment.status === 'error' ? 'border-negative/30 bg-red-50' : 'border-hairline-light bg-surface-soft'
+                }`}>
+                  {attachment.status === 'reading'
+                    ? <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-ink-500" />
+                    : <FileText className={`w-4 h-4 flex-shrink-0 ${attachment.status === 'error' ? 'text-negative' : 'text-accent-dark'}`} />}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-ink-800 truncate">{attachment.name}</p>
+                    <p className={`text-[10px] truncate ${attachment.status === 'error' ? 'text-negative' : 'text-ink-500'}`}>
+                      {attachment.status === 'reading'
+                        ? 'Lendo arquivo...'
+                        : attachment.status === 'error'
+                          ? attachment.error
+                          : `${attachment.detail} · ${formatFileSize(attachment.size)}${attachment.truncated ? ' · leitura resumida' : ''}`}
+                    </p>
+                  </div>
+                  {attachment.status === 'ready' && (
+                    <button type="button" onClick={() => downloadOriginal(attachment.file)} className="w-7 h-7 rounded-full flex items-center justify-center text-ink-500 hover:bg-white hover:text-ink-950" aria-label={`Baixar ${attachment.name}`}>
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button type="button" onClick={() => removeAttachment(attachment.id)} className="w-7 h-7 rounded-full flex items-center justify-center text-ink-500 hover:bg-white hover:text-negative" aria-label={`Remover ${attachment.name}`}>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-end gap-1.5 md:gap-2">
             <textarea
               value={input}
@@ -374,30 +510,51 @@ export default function AiAssistant() {
                   if (canSend) submit();
                 }
               }}
-              rows="1"
-              className="input-field resize-none min-h-[48px] max-h-32"
+              rows="2"
+              className="input-field resize-none min-h-[56px] max-h-32"
               placeholder={listening ? 'Ouvindo...' : loadingContext ? 'Preparando seu assistente...' : 'Digite ou fale um comando...'}
               disabled={loadingContext || !context}
             />
-            <button
-              type="button"
-              onClick={toggleListening}
-              className={`w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${
-                listening ? 'bg-negative text-white animate-pulse' : 'bg-surface-soft text-ink-900 hover:bg-ink-200'
-              }`}
-              aria-label={listening ? 'Parar comando de voz' : 'Usar comando de voz'}
-            >
-              {listening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
-            <button type="submit" className="btn-accent w-12 h-12 min-h-0 p-0 flex-shrink-0" disabled={!canSend} aria-label="Enviar mensagem">
-              <Send className="w-5 h-5" />
-            </button>
+            <div className="flex flex-col gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={toggleListening}
+                className={`w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-colors ${
+                  listening ? 'bg-negative text-white animate-pulse' : 'bg-surface-soft text-ink-900 hover:bg-ink-200'
+                }`}
+                aria-label={listening ? 'Parar comando de voz' : 'Usar comando de voz'}
+              >
+                {listening ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5" />}
+              </button>
+              <button type="submit" className="btn-accent w-10 h-10 md:w-11 md:h-11 min-h-0 p-0" disabled={!canSend} aria-label="Enviar mensagem">
+                <Send className="w-4.5 h-4.5" />
+              </button>
+            </div>
           </div>
-          {(voiceError || listening) && (
-            <p className={`text-[11px] mt-2 ${voiceError ? 'text-negative' : 'text-ink-500'}`}>
-              {voiceError || 'Ouvindo seu comando...'}
-            </p>
-          )}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  handleFiles(event.target.files);
+                  event.target.value = '';
+                }}
+              />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={attachments.length >= MAX_ATTACHMENTS} className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-950 disabled:opacity-40 transition-colors">
+                <Paperclip className="w-3.5 h-3.5" /> Anexar documento
+              </button>
+              <span className="hidden sm:inline text-[10px] text-ink-400">PDF, Word, Excel, CSV ou TXT · até 8 MB</span>
+            </div>
+            {(voiceError || listening) && (
+              <p className={`text-[11px] ${voiceError ? 'text-negative' : 'text-ink-500'}`}>
+                {voiceError || 'Ouvindo seu comando...'}
+              </p>
+            )}
+          </div>
         </form>
       </section>
     </div>
