@@ -21,7 +21,7 @@ export default function GoalsPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div>
+      <div data-tour="page-header">
         <p className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">
           Crescimento
         </p>

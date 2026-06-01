@@ -31,6 +31,7 @@ export default function FloatingAddButton({ onAdded }) {
         onClick={handleOpen}
         className="fab group"
         aria-label="Adicionar transação"
+        data-tour="add-button"
       >
         <Plus
           className="w-6 h-6 md:w-7 md:h-7 text-ink-900 group-hover:rotate-90 transition-transform duration-300"

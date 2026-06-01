@@ -742,7 +742,7 @@ export default function CardsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div data-tour="cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {cards.map((summary) => (
               <CardItem
                 key={summary.card.id}

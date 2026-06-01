@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon, LogOut, Mail, User as UserIcon,
-  FileSpreadsheet, Key, CheckCircle2, X,
+  FileSpreadsheet, Key, CheckCircle2, X, Compass,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTour } from '../context/TourContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import GoogleIcon from '../components/GoogleIcon';
 
@@ -14,6 +15,7 @@ import GoogleIcon from '../components/GoogleIcon';
  */
 export default function Settings() {
   const { user, logout, listIdentities, linkGoogle, unlinkIdentity } = useAuth();
+  const { start: startTour } = useTour();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [toast, setToast] = useState(null); // { text } | null
   const [identities, setIdentities] = useState(null); // null = carregando
@@ -116,7 +118,7 @@ export default function Settings() {
       </div>
 
       {/* Contas vinculadas */}
-      <div className="card-flat p-5 md:p-6">
+      <div data-tour="link-accounts" className="card-flat p-5 md:p-6">
         <h3 className="font-display text-lg md:text-xl font-bold mb-1 tracking-tight">Contas vinculadas</h3>
         <p className="text-xs md:text-sm text-ink-500 mb-4">
           Conecte o Google para entrar com um toque, sem digitar senha.
@@ -206,6 +208,29 @@ export default function Settings() {
           <span className="text-ink-400 text-xl flex-shrink-0">→</span>
         </div>
       </Link>
+
+      {/* Rever tour guiado */}
+      <button
+        onClick={startTour}
+        className="w-full card-flat p-5 md:p-6 text-left transition-all duration-200 hover:border-ink-900/40 group"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-ink-100 group-hover:bg-ink-900 group-hover:text-white flex items-center justify-center text-ink-700 transition-all duration-200 flex-shrink-0">
+              <Compass className="w-5 h-5" strokeWidth={2.25} />
+            </div>
+            <div className="min-w-0">
+              <p className="font-display font-bold text-base md:text-lg text-ink-900">
+                Rever tour guiado
+              </p>
+              <p className="text-xs md:text-sm text-ink-500 truncate">
+                Refaça a apresentação interativa do app
+              </p>
+            </div>
+          </div>
+          <span className="text-ink-400 text-xl flex-shrink-0">→</span>
+        </div>
+      </button>
 
       {/* Sair */}
       <button

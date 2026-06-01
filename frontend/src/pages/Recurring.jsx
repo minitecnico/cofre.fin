@@ -634,7 +634,7 @@ export default function RecurringPage() {
   return (
     <div className="space-y-5 md:space-y-7">
       {/* Header editorial: kicker pequeno + headline display tight */}
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 md:gap-4">
+      <header data-tour="page-header" className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 md:gap-4">
         <div>
           <p className="text-[10px] md:text-xs uppercase tracking-[0.18em] text-ink-500 font-bold">
             Automação

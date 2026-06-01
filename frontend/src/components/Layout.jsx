@@ -7,6 +7,7 @@ import BottomNav from './BottomNav';
 import FloatingAddButton from './FloatingAddButton';
 import Toast from './Toast';
 import { useAutoRecurring } from '../hooks/useAutoRecurring';
+import { TourProvider } from '../context/TourContext';
 
 export default function Layout() {
   const [tick, setTick] = useState(0);
@@ -27,6 +28,7 @@ export default function Layout() {
   }, [created, ack]);
 
   return (
+    <TourProvider>
     <div className="min-h-screen md:flex">
       <Sidebar />
 
@@ -58,5 +60,6 @@ export default function Layout() {
 
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
     </div>
+    </TourProvider>
   );
 }

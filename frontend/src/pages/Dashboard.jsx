@@ -254,11 +254,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <MonthSelector />
+      <div data-tour="month">
+        <MonthSelector />
+      </div>
       <InstallBanner />
 
       {/* Stat cards (cada card faz sua própria entrada com spring) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
+      <div data-tour="stats" className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
         <StatCard
           label="Saldo do mês"
           sublabel={monthLabel}
