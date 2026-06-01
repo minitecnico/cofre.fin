@@ -14,7 +14,6 @@ import { useTransactions } from '../hooks/useTransactions';
 import { formatCurrency, parseAmount } from '../utils/format';
 import InstallBanner from '../components/InstallBanner';
 import MonthSelector from '../components/MonthSelector';
-import DashboardWidgets from '../components/DashboardWidgets';
 import { useMonth } from '../context/MonthContext';
 
 const PERIOD_OPTIONS = [
@@ -278,9 +277,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Widgets externos interativos — câmbio, clima, notícias */}
-      <DashboardWidgets />
-
       {/* Alertas — chips discretos */}
       {hasAlerts && (
         <div className="flex flex-wrap items-center gap-2">
@@ -316,44 +312,41 @@ export default function Dashboard() {
 
       {/* Forecast */}
       <motion.div
-        className="rounded-2xl shadow-soft-md bg-gradient-dark text-ink-50 p-5 md:p-6"
+        className="rounded-2xl shadow-soft-md bg-gradient-dark text-ink-50 p-4 md:p-5"
         variants={sectionVariants}
         initial="hidden"
         animate="show"
         transition={{ delay: 0.08 }}
       >
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 md:mb-4 gap-3">
+        <div className="flex flex-row items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="w-4 h-4 text-accent" />
-              <p className="text-[10px] md:text-xs uppercase tracking-widest text-accent font-bold">
-                Simulação
-              </p>
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+              <h3 className="font-display text-base md:text-lg font-bold tracking-tight">Saldo projetado</h3>
             </div>
-            <h3 className="font-display text-xl md:text-2xl font-bold tracking-tight">Saldo projetado</h3>
-            <p className="text-xs md:text-sm text-ink-300 mt-1">
-              Baseado na média dos últimos 3 meses
+            <p className="text-[11px] md:text-xs text-ink-300 mt-0.5">
+              Média dos últimos 3 meses
             </p>
           </div>
           {!forecast && (
-            <button onClick={loadForecast} className="btn-accent self-start flex-shrink-0">
-              Calcular projeção
+            <button onClick={loadForecast} className="btn-accent !min-h-[40px] !py-2 !px-4 text-sm self-center flex-shrink-0 whitespace-nowrap">
+              Calcular
             </button>
           )}
         </div>
 
         {forecast && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mt-4">
+          <div className="grid grid-cols-3 gap-2 md:gap-3 mt-3">
             {forecast.forecast.map((f) => {
               const [, m] = f.month.split('-');
               const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
               return (
-                <div key={f.month} className="rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-3 md:p-4">
-                  <p className="text-[10px] md:text-xs uppercase tracking-widest text-accent font-bold">
+                <div key={f.month} className="rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-2.5 md:p-3">
+                  <p className="text-[10px] uppercase tracking-widest text-accent font-bold">
                     {months[parseInt(m, 10) - 1]}
                   </p>
-                  <p className={`font-display font-bold text-xl md:text-2xl mt-2 break-all ${f.projected < 0 ? 'text-negative' : 'text-ink-50'}`}>
-                    {formatCurrency(f.projected)}
+                  <p className={`font-display font-bold text-sm md:text-lg mt-1 break-all tabular-nums ${f.projected < 0 ? 'text-negative' : 'text-ink-50'}`}>
+                    {formatCurrency(f.projected, { compact: true })}
                   </p>
                 </div>
               );
