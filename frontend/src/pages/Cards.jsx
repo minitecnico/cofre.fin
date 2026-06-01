@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cardService } from '../services';
 import { formatCurrency, formatPercent, formatDate } from '../utils/format';
@@ -175,30 +175,32 @@ function CardForm({ initial, onSaved, onCancel }) {
   );
 }
 
-function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, payingId }) {
+/**
+ * CardItem — face minimalista do cartão.
+ *
+ * Mostra só o essencial: nome, número, fatura aberta em destaque, disponível
+ * discreto e uma barra de uso fininha. O card inteiro é clicável e abre o
+ * detalhe (faturas + compras + pagamento) num modal — sem rolar a página.
+ * Editar/excluir ficam discretos no topo; param a propagação do clique.
+ */
+function CardItem({ summary, onEdit, onDelete, onOpen }) {
   const {
     card,
     available,
     openBill,
-    paidInCycle,
     cardLimit,
     utilizationPercent,
-    cycleEnd,
     unpaidCount,
     purchaseCount,
   } = summary;
   const isHighUsage = utilizationPercent > 80;
   const hasOpenBill = openBill > 0;
-  const isPaying = payingId === card.id;
 
   return (
-    <div
-      className={`relative w-full max-w-md rounded-2xl shadow-soft-md transition-all duration-300 cursor-pointer overflow-hidden ${
-        selected
-          ? 'ring-4 ring-accent ring-offset-2 ring-offset-ink-50 shadow-soft-lg scale-[1.01]'
-          : 'hover:shadow-soft-lg hover:-translate-y-0.5'
-      }`}
-      onClick={() => onSelect(card.id)}
+    <button
+      type="button"
+      onClick={() => onOpen(card.id)}
+      className="group relative w-full text-left rounded-2xl shadow-soft-md transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-soft-lg hover:-translate-y-0.5 focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/60"
     >
       {/* Fundo gradiente baseado na cor do cartão */}
       <div
@@ -212,8 +214,8 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
 
       {/* Conteúdo */}
       <div className="relative p-4 md:p-5 text-white">
-        {/* Header: bandeira + nome + ações no topo direito */}
-        <div className="flex items-start justify-between mb-3 md:mb-4 gap-3">
+        {/* Header: bandeira + nome + número | ações discretas */}
+        <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">
               {card.brand}
@@ -221,130 +223,89 @@ function CardItem({ summary, onEdit, onDelete, onPayBill, onSelect, selected, pa
             <h3 className="font-display text-lg md:text-xl font-bold mt-0.5 truncate tracking-tight">
               {card.name}
             </h3>
+            <p className="font-mono text-[11px] tracking-[0.2em] opacity-70 mt-1">
+              •••• {card.last_digits || '----'}
+            </p>
           </div>
 
-          {/* Ações: editar + excluir + ícone do cartão (todos juntos, organizados) */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => { e.stopPropagation(); onEdit(card); }}
-              className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(card); } }}
+              className="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer"
               title="Editar cartão"
               aria-label="Editar cartão"
             >
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button
+              <Pencil className="w-3.5 h-3.5" />
+            </span>
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => { e.stopPropagation(); onDelete(summary); }}
-              className="w-8 h-8 rounded-lg bg-white/20 hover:bg-negative backdrop-blur-sm flex items-center justify-center transition-all duration-200"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onDelete(summary); } }}
+              className="w-8 h-8 rounded-lg bg-white/15 hover:bg-negative backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer"
               title="Excluir cartão"
               aria-label="Excluir cartão"
             >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ml-1">
-              <CardIcon className="w-4 h-4" />
-            </div>
+              <Trash2 className="w-3.5 h-3.5" />
+            </span>
           </div>
         </div>
 
-        {/* Número estilizado */}
-        <p className="font-mono text-xs md:text-sm tracking-[0.25em] opacity-80 mb-4 md:mb-5">
-          •••• •••• •••• {card.last_digits || '----'}
-        </p>
-
-        {/* Métricas principais */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1 font-bold">Fatura aberta</p>
-            <p className="font-display font-bold text-base md:text-lg break-all">
-              {formatCurrency(openBill)}
+        {/* Fatura aberta em destaque + disponível discreto */}
+        <div className="flex items-end justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold mb-0.5">
+              {hasOpenBill ? 'Fatura aberta' : 'Fatura'}
             </p>
-            {unpaidCount > 0 && (
-              <p className="text-[10px] opacity-70 mt-0.5">
-                {unpaidCount} {unpaidCount === 1 ? 'compra' : 'compras'}
+            {hasOpenBill ? (
+              <p className="font-display font-bold text-2xl md:text-3xl break-all leading-none">
+                {formatCurrency(openBill)}
+              </p>
+            ) : (
+              <p className="font-display font-bold text-xl md:text-2xl leading-none inline-flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 flex-shrink-0" />
+                {purchaseCount > 0 ? 'Zerada' : 'Sem compras'}
+              </p>
+            )}
+            {hasOpenBill && unpaidCount > 0 && (
+              <p className="text-[10px] opacity-70 mt-1">
+                {unpaidCount} {unpaidCount === 1 ? 'compra pendente' : 'compras pendentes'}
               </p>
             )}
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1 font-bold">Disponível</p>
-            <p className="font-display font-bold text-base md:text-lg break-all">
+          <div className="text-right flex-shrink-0">
+            <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold mb-0.5">Disponível</p>
+            <p className="font-display font-bold text-sm md:text-base break-all">
               {formatCurrency(available)}
             </p>
-            <p className="text-[10px] opacity-70 mt-0.5">
-              de {formatCurrency(cardLimit)}
-            </p>
+            <p className="text-[10px] opacity-60 mt-0.5">de {formatCurrency(cardLimit)}</p>
           </div>
         </div>
 
-        {/* Barra de uso */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs opacity-80 mb-1.5">
-            <span className="font-medium">Uso do limite</span>
-            <span className="font-mono font-bold">{formatPercent(utilizationPercent)}</span>
-          </div>
-          <div className="h-2 bg-black/30 rounded-full overflow-hidden">
+        {/* Barra de uso fininha + % + alerta discreto */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 rounded-full ${
-                isHighUsage ? 'bg-warn' : 'bg-accent'
-              }`}
+              className={`h-full transition-all duration-500 rounded-full ${isHighUsage ? 'bg-warn' : 'bg-accent'}`}
               style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
             />
           </div>
+          <span className="font-mono text-[11px] font-bold opacity-80">{formatPercent(utilizationPercent)}</span>
+          {isHighUsage && (
+            <AlertTriangle className="w-3.5 h-3.5 text-warn flex-shrink-0" aria-label="Limite quase no topo" />
+          )}
         </div>
 
-        {/* Indicador de fatura paga */}
-        {paidInCycle > 0 && (
-          <div className="flex items-center gap-2 text-[10px] md:text-xs opacity-80 mb-2">
-            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>{formatCurrency(paidInCycle)} já pagos neste ciclo</span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 text-[10px] md:text-xs opacity-80">
-          <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="truncate">Fecha {formatDate(cycleEnd, 'long')}</span>
+        {/* Affordance: clique abre as faturas */}
+        <div className="mt-3 flex items-center justify-end gap-1 text-[11px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">
+          <span>Ver faturas e compras</span>
+          <ChevronRight className="w-3.5 h-3.5" />
         </div>
-
-        {isHighUsage && (
-          <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-warn text-ink-900 text-xs font-bold rounded-xl">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>Limite quase no topo</span>
-          </div>
-        )}
-
-        {/* Botão "Pagar fatura" — destaque quando há fatura aberta */}
-        {hasOpenBill && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onPayBill(summary);
-            }}
-            disabled={isPaying}
-            className="mt-4 w-full px-4 py-2.5 min-h-[44px] bg-white text-ink-900 font-bold rounded-xl
-                       shadow-soft hover:shadow-soft-md active:scale-[0.98]
-                       transition-all duration-200 text-sm
-                       flex items-center justify-center gap-2
-                       disabled:opacity-60"
-          >
-            {isPaying ? (
-              <>Pagando…</>
-            ) : (
-              <>
-                <Wallet className="w-4 h-4" />
-                Pagar fatura ({formatCurrency(openBill)})
-              </>
-            )}
-          </button>
-        )}
-
-        {!hasOpenBill && purchaseCount > 0 && (
-          <div className="mt-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-white/15 backdrop-blur-sm rounded-xl text-sm font-bold">
-            <Sparkles className="w-4 h-4" />
-            Fatura zerada
-          </div>
-        )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -649,37 +610,20 @@ export default function CardsPage() {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
-  const [payingId, setPayingId] = useState(null);
+  const [detailCardId, setDetailCardId] = useState(null); // cartão aberto no modal de faturas
+  const [payingBillKey, setPayingBillKey] = useState(null); // `${cardId}::${billMonth}` em pagamento
+  const [billsTick, setBillsTick] = useState(0); // força refetch das faturas no modal após pagar
   const [confirmingDelete, setConfirmingDelete] = useState(null); // { card, openBill }
-  const [confirmingPay, setConfirmingPay] = useState(null); // { card, openBill, unpaidCount }
   const [feedback, setFeedback] = useState(null); // { type, text }
   const { isOpen, open, close } = useDisclosure();
 
-  // Ref para fazer scroll suave até o histórico quando seleciona um cartão
-  const historyRef = useRef(null);
-  const [shouldScroll, setShouldScroll] = useState(false);
-
-  function handleSelectCard(cardId) {
-    const isAlreadySelected = selectedId === cardId;
-    setSelectedId(cardId);
-    // Só aciona scroll se for uma seleção nova (não na carga inicial)
-    if (!isAlreadySelected) setShouldScroll(true);
-  }
-
-  useEffect(() => {
-    if (shouldScroll && historyRef.current) {
-      historyRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setShouldScroll(false);
-    }
-  }, [shouldScroll, selectedId]);
+  const detailCard = detailCardId ? cards.find((c) => c.card.id === detailCardId) : null;
 
   async function load() {
     setLoading(true);
     try {
       const data = await cardService.list();
       setCards(data);
-      if (data.length > 0 && !selectedId) setSelectedId(data[0].card.id);
     } finally {
       setLoading(false);
     }
@@ -710,7 +654,7 @@ export default function CardsPage() {
     setConfirmingDelete(null);
     try {
       const res = await cardService.remove(id);
-      if (selectedId === id) setSelectedId(null);
+      if (detailCardId === id) setDetailCardId(null);
       setFeedback({
         type: 'success',
         text: res?.hardDeleted
@@ -723,39 +667,11 @@ export default function CardsPage() {
     }
   }
 
-  function requestPayBill(cardSummary) {
-    setConfirmingPay({
-      card: cardSummary.card,
-      openBill: cardSummary.currentBillAmount || cardSummary.openBill,
-      unpaidCount: cardSummary.unpaidCount,
-      billMonth: cardSummary.currentBillMonth || null,
-    });
-  }
-
-  async function confirmPayBill() {
-    const cardId = confirmingPay.card.id;
-    const cardName = confirmingPay.card.name;
-    const billMonth = confirmingPay.billMonth;
-    setConfirmingPay(null);
-    setPayingId(cardId);
-    try {
-      const count = await cardService.payBill(cardId, billMonth);
-      setFeedback({
-        type: 'success',
-        text: `✓ Fatura do ${cardName} paga. ${count} ${count === 1 ? 'compra marcada' : 'compras marcadas'} como paga${count === 1 ? '' : 's'}.`,
-      });
-      load();
-    } catch (err) {
-      setFeedback({ type: 'error', text: 'Erro ao pagar fatura: ' + err.message });
-    } finally {
-      setPayingId(null);
-    }
-  }
-
-  // Pagar uma fatura ESPECÍFICA a partir do carrossel (CardBillsView)
-  // Esse handler é mais direto: já sabe qual mês foi escolhido
+  // Pagar uma fatura ESPECÍFICA a partir do modal de detalhe (CardBillsView).
+  // Atualiza a lista de cartões (limite/fatura) e força o refetch das faturas
+  // dentro do modal via billsTick, pra refletir o pagamento sem fechar.
   async function payBillFromView(cardId, cardName, bill) {
-    setPayingId(cardId);
+    setPayingBillKey(`${cardId}::${bill.billMonth}`);
     try {
       const count = await cardService.payBill(cardId, bill.billMonth);
       setFeedback({
@@ -763,10 +679,11 @@ export default function CardsPage() {
         text: `✓ Fatura ${formatBillMonthShort(bill.billMonth)} do ${cardName} paga. ${count} ${count === 1 ? 'compra' : 'compras'} marcada${count === 1 ? '' : 's'}.`,
       });
       load();
+      setBillsTick((t) => t + 1);
     } catch (err) {
       setFeedback({ type: 'error', text: 'Erro ao pagar fatura: ' + err.message });
     } finally {
-      setPayingId(null);
+      setPayingBillKey(null);
     }
   }
 
@@ -832,46 +749,49 @@ export default function CardsPage() {
                 summary={summary}
                 onEdit={(c) => { setEditing(c); open(); }}
                 onDelete={requestDelete}
-                onPayBill={requestPayBill}
-                onSelect={handleSelectCard}
-                selected={selectedId === summary.card.id}
-                payingId={payingId}
+                onOpen={setDetailCardId}
               />
             ))}
           </div>
-
-          {selectedId && (
-            <div ref={historyRef} className="scroll-mt-4">
-              {(() => {
-                const sel = cards.find((c) => c.card.id === selectedId);
-                return (
-                  <div className="flex items-center justify-between mb-3 md:mb-4 gap-3 flex-wrap">
-                    <h3 className="font-display text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
-                      <span>Faturas</span>
-                      {sel && (
-                        <span
-                          className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs md:text-sm font-bold text-white"
-                          style={{ backgroundColor: sel.card.color }}
-                        >
-                          {sel.card.name}
-                        </span>
-                      )}
-                    </h3>
-                  </div>
-                );
-              })()}
-              <CardBillsView
-                cardId={selectedId}
-                payingBillKey={payingId ? `${payingId}::pending` : null}
-                onPayBill={(bill) => {
-                  const sel = cards.find((c) => c.card.id === selectedId);
-                  if (sel) payBillFromView(selectedId, sel.card.name, bill);
-                }}
-              />
-            </div>
-          )}
         </>
       )}
+
+      {/* Modal: detalhe do cartão (faturas + compras + pagamento) */}
+      <Modal
+        isOpen={!!detailCardId}
+        onClose={() => setDetailCardId(null)}
+        title={detailCard?.card.name || 'Faturas'}
+        size="lg"
+      >
+        {detailCard && (
+          <div className="space-y-4">
+            {/* Mini-resumo do cartão no topo do modal */}
+            <div
+              className="rounded-2xl p-4 text-white relative overflow-hidden"
+              style={{ background: `linear-gradient(135deg, ${detailCard.card.color} 0%, ${detailCard.card.color}cc 100%)` }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">{detailCard.card.brand}</p>
+                  <p className="font-mono text-xs tracking-[0.2em] opacity-80 mt-0.5">•••• {detailCard.card.last_digits || '----'}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold">Disponível</p>
+                  <p className="font-display font-bold text-lg">{formatCurrency(detailCard.available)}</p>
+                  <p className="text-[10px] opacity-70">de {formatCurrency(detailCard.cardLimit)}</p>
+                </div>
+              </div>
+            </div>
+
+            <CardBillsView
+              key={`${detailCardId}-${billsTick}`}
+              cardId={detailCardId}
+              payingBillKey={payingBillKey}
+              onPayBill={(bill) => payBillFromView(detailCardId, detailCard.card.name, bill)}
+            />
+          </div>
+        )}
+      </Modal>
 
       {/* Modal: novo / editar cartão */}
       <Modal isOpen={isOpen} onClose={close} title={editing ? 'Editar cartão' : 'Novo cartão'}>
@@ -917,49 +837,6 @@ export default function CardsPage() {
                 className="flex-1 px-5 py-3 min-h-[44px] bg-negative text-white font-bold rounded-xl shadow-soft-md hover:shadow-soft-lg active:scale-[0.98] transition-all duration-200"
               >
                 Excluir cartão
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal: confirmar pagamento da fatura */}
-      <Modal
-        isOpen={!!confirmingPay}
-        onClose={() => setConfirmingPay(null)}
-        title="Pagar fatura"
-      >
-        {confirmingPay && (
-          <div className="space-y-4">
-            <div className="px-4 py-4 bg-accent/20 border border-accent rounded-xl">
-              <p className="text-sm">
-                Pagar a fatura aberta de <strong className="font-bold">{confirmingPay.card.name}</strong>?
-              </p>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-ink-600">Valor</span>
-                <span className="font-display font-bold text-2xl text-ink-900">
-                  {formatCurrency(confirmingPay.openBill)}
-                </span>
-              </div>
-              <p className="text-xs text-ink-700 mt-3">
-                Isso vai marcar as <strong>{confirmingPay.unpaidCount} {confirmingPay.unpaidCount === 1 ? 'compra' : 'compras'}</strong> do ciclo atual como pagas.
-                O limite disponível volta a crescer no cartão.
-              </p>
-            </div>
-
-            <div className="flex flex-col-reverse sm:flex-row gap-3">
-              <button
-                onClick={() => setConfirmingPay(null)}
-                className="btn-ghost"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmPayBill}
-                className="btn-accent flex-1"
-              >
-                <Wallet className="w-4 h-4" />
-                Confirmar pagamento
               </button>
             </div>
           </div>
