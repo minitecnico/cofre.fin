@@ -8,7 +8,7 @@ import { useMonth } from '../context/MonthContext';
 const STARTERS = [
   'Analise minha saúde financeira neste mês.',
   'Onde posso economizar sem comprometer o essencial?',
-  'Quais despesas merecem minha atenção primeiro?',
+  'Me ajude a organizar minhas prioridades da semana.',
 ];
 
 function summarizeTransactions(transactions) {
@@ -122,9 +122,9 @@ export default function AiAssistant() {
             </div>
             <div>
               <span className="badge-accent mb-2">Assistente IA</span>
-              <h1 className="text-xl md:text-2xl">Converse sobre suas finanças</h1>
+              <h1 className="text-xl md:text-2xl">Converse sobre qualquer tema</h1>
               <p className="text-sm text-ink-300 mt-1">
-                A IA analisa os dados de {label.toLowerCase()} e ajuda a encontrar próximos passos.
+                Assistente pessoal com especialidade financeira e contexto de {label.toLowerCase()}.
               </p>
             </div>
           </div>
@@ -205,7 +205,7 @@ export default function AiAssistant() {
               }}
               rows="2"
               className="input-field resize-none"
-              placeholder={loadingContext ? 'Carregando seus dados...' : 'Pergunte algo sobre suas finanças...'}
+              placeholder={loadingContext ? 'Preparando seu assistente...' : 'Pergunte qualquer coisa...'}
               disabled={loadingContext || !context}
             />
             <button type="submit" className="btn-accent px-4" disabled={!canSend} aria-label="Enviar mensagem">
