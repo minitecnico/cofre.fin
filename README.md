@@ -40,6 +40,8 @@ finance-dashboard/
 - ✅ Login/registro com Supabase Auth (email/senha)
 - ✅ Cada usuário só vê seus dados (Row Level Security do Postgres)
 - ✅ Assistente IA para conversar sobre os dados financeiros do mês
+- ✅ Central de IA com diagnóstico mensal, lançamento por texto, busca natural e criação de metas
+- ✅ Sugestão de categorias com IA durante a importação de planilhas
 
 ---
 

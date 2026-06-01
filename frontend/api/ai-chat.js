@@ -63,6 +63,87 @@ function cleanMessages(messages) {
     .filter((message) => message.content);
 }
 
+const TASK_PROMPTS = {
+  transaction_parse: `Extraia um lançamento financeiro do texto do usuário.
+Retorne somente JSON válido com: type ("income" ou "expense"), amount (número),
+description (texto curto), date ("YYYY-MM-DD"), categoryName (uma das categorias disponíveis
+ou null), cardName (um dos cartões disponíveis ou null), installments (inteiro >= 1) e paid
+(boolean). Use a data atual informada no contexto quando o texto não indicar outra data.`,
+  search_filters: `Converta a busca do usuário em filtros para localizar lançamentos.
+Retorne somente JSON válido com: terms (array de palavras relevantes), type ("income",
+"expense" ou null), paid (boolean ou null), categoryName (texto ou null), cardName (texto ou
+null), minAmount (número ou null), maxAmount (número ou null), startDate ("YYYY-MM-DD" ou null)
+e endDate ("YYYY-MM-DD" ou null). Não invente filtros que não estejam implícitos no pedido.`,
+  monthly_insights: `Analise o contexto financeiro e retorne somente JSON válido com:
+summary (texto curto), highlights (array de até 4 textos), warnings (array de até 4 textos),
+opportunities (array de até 4 textos) e nextSteps (array de até 4 textos). Não invente valores.`,
+  goal_parse: `Extraia uma meta financeira do texto do usuário. Retorne somente JSON válido com:
+title (texto curto), description (texto ou null), target_amount (número positivo), current_amount
+(número >= 0, use 0 se ausente) e deadline ("YYYY-MM-DD" ou null).`,
+  import_categories: `Classifique cada item usando exclusivamente uma categoria disponível
+compatível com o tipo. Retorne somente JSON válido com suggestions: array de objetos contendo
+index (o mesmo índice recebido), categoryName (nome exato de uma categoria disponível) e reason
+(texto curto). Ignore itens quando não houver categoria adequada.`,
+};
+
+function cleanTask(task) {
+  if (!task || !TASK_PROMPTS[task.type]) return null;
+
+  return {
+    type: task.type,
+    input: String(task.input || '').trim().slice(0, 12000),
+    context: task.context || {},
+  };
+}
+
+function taskMessage(task) {
+  return `${TASK_PROMPTS[task.type]}
+
+DADOS DISPONÍVEIS:
+${JSON.stringify(task.context).slice(0, 50000)}
+
+PEDIDO DO USUÁRIO:
+${task.input || 'Use os dados disponíveis.'}`;
+}
+
+function parseJsonContent(content) {
+  const cleaned = String(content || '').trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+  const start = Math.min(
+    ...[cleaned.indexOf('{'), cleaned.indexOf('[')].filter((index) => index >= 0)
+  );
+  if (!Number.isFinite(start)) return JSON.parse(cleaned);
+
+  const opening = cleaned[start];
+  const closing = opening === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < cleaned.length; index += 1) {
+    const char = cleaned[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === opening) depth += 1;
+    if (char === closing) depth -= 1;
+    if (depth === 0) return JSON.parse(cleaned.slice(start, index + 1));
+  }
+
+  return JSON.parse(cleaned.slice(start));
+}
+
 async function readStream(response) {
   if (!response.body) return '';
 
@@ -171,7 +252,10 @@ export default async function handler(req, res) {
       return send(res, 500, { error: 'A chave da IA ainda não foi configurada no servidor.' });
     }
 
-    const messages = cleanMessages(req.body?.messages);
+    const task = cleanTask(req.body?.task);
+    const messages = task
+      ? [{ role: 'user', content: taskMessage(task) }]
+      : cleanMessages(req.body?.messages);
     if (!messages.length || messages.at(-1).role !== 'user') {
       return send(res, 400, { error: 'Envie uma mensagem para conversar com a IA.' });
     }
@@ -206,6 +290,14 @@ export default async function handler(req, res) {
       : await response.json().then((data) => data?.choices?.[0]?.message?.content || '').catch(() => '');
     if (!content) {
       return send(res, 502, { error: 'A IA retornou uma resposta vazia. Tente novamente.' });
+    }
+
+    if (task) {
+      try {
+        return send(res, 200, { data: parseJsonContent(content) });
+      } catch {
+        return send(res, 502, { error: 'A IA não conseguiu estruturar a resposta. Tente reformular o pedido.' });
+      }
     }
 
     return send(res, 200, { message: String(content) });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, RefreshCw, Send, Sparkles, User } from 'lucide-react';
 import MonthSelector from '../components/MonthSelector';
+import AiTools from '../components/AiTools';
 import { cardService, dashboardService, loanService, transactionService } from '../services';
 import { sendAiMessage } from '../services/ai';
 import { useMonth } from '../context/MonthContext';
@@ -134,6 +135,8 @@ export default function AiAssistant() {
           </button>
         </div>
       </section>
+
+      <AiTools financialContext={context} onDataChanged={loadContext} />
 
       <section className="feature-card overflow-hidden">
         <div className="min-h-[360px] max-h-[58vh] overflow-y-auto p-4 md:p-6 space-y-4">

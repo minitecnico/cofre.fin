@@ -12,6 +12,7 @@ import {
   loadImportContext,
   downloadBlob,
 } from '../services/importExport';
+import { requestAiTask } from '../services/ai';
 import { useMonth } from '../context/MonthContext';
 import { formatCurrency } from '../utils/format';
 
@@ -33,6 +34,8 @@ export default function ImportExport() {
 
   const [importStep, setImportStep] = useState('idle'); // idle | parsing | preview | importing | done
   const [preview, setPreview] = useState(null);
+  const [importContext, setImportContext] = useState(null);
+  const [classifying, setClassifying] = useState(false);
   const [error, setError] = useState(null);
   const [importResult, setImportResult] = useState(null);
 
@@ -96,6 +99,7 @@ export default function ImportExport() {
     try {
       const ctx = await loadImportContext();
       const result = await parseImportSpreadsheet(file, ctx);
+      setImportContext(ctx);
       setPreview(result);
       setImportStep('preview');
     } catch (err) {
@@ -125,6 +129,36 @@ export default function ImportExport() {
     setPreview(null);
     setImportResult(null);
     setError(null);
+    setImportContext(null);
+  }
+
+  async function handleAiClassify() {
+    if (!preview || !importContext) return;
+    const candidates = preview.rows.filter((row) =>
+      row.parsed.description && row.parsed.type && !row.parsed.category_id
+    );
+    if (!candidates.length) {
+      setError({ kind: 'info', text: 'Não há categorias pendentes para a IA sugerir.' });
+      return;
+    }
+
+    setClassifying(true);
+    setError(null);
+    try {
+      const result = await requestAiTask('import_categories', '', {
+        itens: candidates.map((row) => ({
+          index: row.lineNumber,
+          tipo: row.parsed.type,
+          descricao: row.parsed.description,
+        })),
+        categoriasDisponiveis: importContext.categories.map(({ id, name, type }) => ({ id, name, type })),
+      });
+      setPreview(applyAiCategorySuggestions(preview, result.suggestions, importContext.categories));
+    } catch (err) {
+      setError({ kind: 'error', text: 'A IA não conseguiu sugerir categorias: ' + err.message });
+    } finally {
+      setClassifying(false);
+    }
   }
 
   return (
@@ -263,6 +297,8 @@ export default function ImportExport() {
           preview={preview}
           onCancel={resetImport}
           onConfirm={handleConfirmImport}
+          onAiClassify={handleAiClassify}
+          classifying={classifying}
         />
       )}
 
@@ -319,7 +355,7 @@ function ActionCard({ title, description, icon: Icon, buttonLabel, onClick, disa
   );
 }
 
-function ImportPreview({ preview, onCancel, onConfirm }) {
+function ImportPreview({ preview, onCancel, onConfirm, onAiClassify, classifying }) {
   const { rows, summary } = preview;
   const importableCount = summary.ok + summary.warn;
   const [filter, setFilter] = useState('all'); // all | ok | warn | error | duplicate
@@ -374,7 +410,7 @@ function ImportPreview({ preview, onCancel, onConfirm }) {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {[
           { id: 'all', label: `Todas (${summary.total})` },
           { id: 'ok', label: `Prontas (${summary.ok})`, hide: summary.ok === 0 },
@@ -394,6 +430,17 @@ function ImportPreview({ preview, onCancel, onConfirm }) {
             {f.label}
           </button>
         ))}
+        {summary.error > 0 && (
+          <button
+            type="button"
+            onClick={onAiClassify}
+            disabled={classifying}
+            className="btn-pill-sm !bg-accent disabled:opacity-60"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${classifying ? 'animate-pulse' : ''}`} />
+            {classifying ? 'Analisando...' : 'Sugerir categorias com IA'}
+          </button>
+        )}
       </div>
 
       {/* Linhas */}
@@ -420,6 +467,47 @@ function ImportPreview({ preview, onCancel, onConfirm }) {
       </div>
     </div>
   );
+}
+
+function normalizeCategoryName(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function applyAiCategorySuggestions(preview, suggestions = [], categories = []) {
+  const suggestionMap = new Map((suggestions || []).map((suggestion) => [Number(suggestion.index), suggestion]));
+  const rows = preview.rows.map((row) => {
+    const suggestion = suggestionMap.get(Number(row.lineNumber));
+    if (!suggestion || row.parsed.category_id) return row;
+
+    const category = categories.find((item) =>
+      item.type === row.parsed.type &&
+      normalizeCategoryName(item.name) === normalizeCategoryName(suggestion.categoryName)
+    );
+    if (!category) return row;
+
+    const messages = row.messages
+      .filter((message) => !message.text.startsWith('Categoria '))
+      .concat({ level: 'warn', text: `IA sugeriu a categoria "${category.name}": ${suggestion.reason || 'categoria compatível com a descrição'}.` });
+    const hasError = messages.some((message) => message.level === 'error');
+
+    return {
+      ...row,
+      status: hasError ? 'error' : 'warn',
+      parsed: { ...row.parsed, category_id: category.id, categoryName: category.name },
+      messages,
+    };
+  });
+
+  return {
+    rows,
+    summary: {
+      total: rows.length,
+      ok: rows.filter((row) => row.status === 'ok').length,
+      warn: rows.filter((row) => row.status === 'warn').length,
+      error: rows.filter((row) => row.status === 'error').length,
+      duplicate: rows.filter((row) => row.status === 'duplicate').length,
+    },
+  };
 }
 
 function SummaryStat({ label, value, colorClass }) {
