@@ -40,6 +40,41 @@ function cleanMessages(messages) {
     .filter((message) => message.content);
 }
 
+async function readStream(response) {
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split('\n');
+    buffer = done ? '' : lines.pop() || '';
+
+    for (const line of lines) {
+      const payload = line.trim();
+      if (!payload.startsWith('data:')) continue;
+
+      const data = payload.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+
+      try {
+        const chunk = JSON.parse(data);
+        content += chunk?.choices?.[0]?.delta?.content || chunk?.choices?.[0]?.message?.content || '';
+      } catch {
+        // Eventos SSE auxiliares podem não carregar JSON de completion.
+      }
+    }
+
+    if (done) break;
+  }
+
+  return content;
+}
+
 function assistantPrompt(context) {
   const serialized = JSON.stringify(context || {}).slice(0, 50000);
 
@@ -95,17 +130,17 @@ export default async function handler(req, res) {
           { role: 'system', content: assistantPrompt(req.body?.context) },
           ...messages,
         ],
-        stream: false,
+        stream: true,
       }),
     });
 
-    const data = await response.json().catch(() => null);
     if (!response.ok) {
-      console.error('9Router request failed', response.status, data?.error?.message || data?.error);
+      const details = await response.text().catch(() => '');
+      console.error('9Router request failed', response.status, details.slice(0, 500));
       return send(res, 502, { error: 'A IA não conseguiu responder agora. Tente novamente em instantes.' });
     }
 
-    const content = data?.choices?.[0]?.message?.content;
+    const content = await readStream(response);
     if (!content) {
       return send(res, 502, { error: 'A IA retornou uma resposta vazia. Tente novamente.' });
     }
