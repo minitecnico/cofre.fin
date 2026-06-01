@@ -2,7 +2,6 @@ import { supabase } from './supabase';
 
 /**
  * Service unificado para a página Objetivos:
- *   - Desafio 52 Semanas (weeklyChallengeService)
  *   - Metas / Goals (goalService)
  *   - Notas / Notes (noteService)
  *
@@ -14,107 +13,6 @@ async function currentUserId() {
   if (!data.user) throw new Error('Não autenticado');
   return data.user.id;
 }
-
-// ═════════════════════════════════════════════════════════════════════════
-// DESAFIO 52 SEMANAS
-// ═════════════════════════════════════════════════════════════════════════
-
-export const weeklyChallengeService = {
-  /** Pega o desafio ativo do usuário (ou null se não tem). */
-  async getActive() {
-    const { data, error } = await supabase
-      .from('weekly_challenges')
-      .select('*')
-      .eq('active', true)
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
-  },
-
-  /** Cria um novo desafio (desativa o anterior se houver). */
-  async create({ title, multiplier }) {
-    const userId = await currentUserId();
-
-    // Desativa qualquer desafio anterior (para evitar dois ativos)
-    await supabase
-      .from('weekly_challenges')
-      .update({ active: false })
-      .eq('user_id', userId)
-      .eq('active', true);
-
-    const { data, error } = await supabase
-      .from('weekly_challenges')
-      .insert({
-        user_id: userId,
-        title: title || 'Desafio 52 Semanas',
-        multiplier: Number(multiplier) || 1,
-        weeks_status: new Array(52).fill(false),
-      })
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /** Atualiza o status (paga / não paga) de UMA semana específica. */
-  async toggleWeek(challengeId, weekIndex /* 0..51 */) {
-    // Buscamos o array atual, alteramos só o índice e salvamos
-    const { data: current, error: fetchErr } = await supabase
-      .from('weekly_challenges')
-      .select('weeks_status')
-      .eq('id', challengeId)
-      .single();
-    if (fetchErr) throw fetchErr;
-
-    const arr = [...(current.weeks_status || [])];
-    while (arr.length < 52) arr.push(false);
-    arr[weekIndex] = !arr[weekIndex];
-
-    const { data, error } = await supabase
-      .from('weekly_challenges')
-      .update({ weeks_status: arr })
-      .eq('id', challengeId)
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /** Atualiza configurações do desafio (título, multiplier). */
-  async update(challengeId, payload) {
-    const { data, error } = await supabase
-      .from('weekly_challenges')
-      .update(payload)
-      .eq('id', challengeId)
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /** Reseta o desafio (zera todas as semanas). */
-  async reset(challengeId) {
-    const { data, error } = await supabase
-      .from('weekly_challenges')
-      .update({ weeks_status: new Array(52).fill(false) })
-      .eq('id', challengeId)
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /** Remove o desafio de vez. */
-  async remove(challengeId) {
-    const { error } = await supabase
-      .from('weekly_challenges')
-      .delete()
-      .eq('id', challengeId);
-    if (error) throw error;
-  },
-};
 
 // ═════════════════════════════════════════════════════════════════════════
 // METAS / GOALS
