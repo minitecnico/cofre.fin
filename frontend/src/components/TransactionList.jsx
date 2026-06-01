@@ -212,7 +212,7 @@ export default function TransactionList({
                   <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => setEditing(t)}
-                      className="w-9 h-9 flex items-center justify-center hover:bg-ink-200 transition-colors"
+                      className="w-9 h-9 flex items-center justify-center -translate-y-1 md:translate-y-0 hover:bg-ink-200 transition-colors"
                       aria-label="Editar"
                     >
                       <Pencil className="w-4 h-4" />
