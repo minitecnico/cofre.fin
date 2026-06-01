@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Check, Lightbulb, Loader2, Search, Sparkles, Target,
+  AlertTriangle, Check, Lightbulb, Loader2, Mic, MicOff, Search, Sparkles, Target,
   TrendingUp, WalletCards, WandSparkles,
 } from 'lucide-react';
 import { cardService, categoryService, transactionService } from '../services';
@@ -152,6 +152,12 @@ function TransactionTool({ context, categories, cards, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const speechSupported = typeof window !== 'undefined'
+    && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  useEffect(() => () => recognitionRef.current?.abort(), []);
 
   const category = preview ? findNamed(categories, preview.categoryName) : null;
   const card = preview ? findNamed(cards, preview.cardName) : null;
@@ -204,10 +210,67 @@ function TransactionTool({ context, categories, cards, onSaved }) {
     }
   }
 
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('Seu navegador não oferece reconhecimento de voz. Digite o lançamento normalmente.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setError('');
+      setListening(true);
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (transcript) setInput(transcript);
+    };
+    recognition.onerror = (event) => {
+      setListening(false);
+      setError(event.error === 'not-allowed'
+        ? 'Permita o acesso ao microfone para lançar por voz.'
+        : 'Não consegui entender o áudio. Tente novamente ou digite o lançamento.');
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink-600">Ex.: “gastei 89 reais no mercado hoje” ou “recebi 2500 de freela ontem”.</p>
-      <textarea className="input-field resize-none" rows="2" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Descreva o lançamento..." />
+      <p className="text-sm text-ink-600">Ex.: “gastei 89 reais no mercado hoje” ou “recebi 2500 de freela ontem”. Digite ou use o microfone.</p>
+      <div className="flex items-end gap-2">
+        <textarea className="input-field resize-none" rows="2" value={input} onChange={(event) => setInput(event.target.value)} placeholder={listening ? 'Ouvindo...' : 'Descreva o lançamento...'} />
+        <button
+          type="button"
+          onClick={toggleListening}
+          className={`w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-all ${
+            listening ? 'bg-negative text-white animate-pulse' : 'bg-surface-soft text-ink-900 hover:bg-ink-200'
+          }`}
+          aria-label={listening ? 'Parar reconhecimento de voz' : 'Lançar por voz'}
+          title={speechSupported ? 'Lançar por voz' : 'Reconhecimento de voz indisponível neste navegador'}
+        >
+          {listening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+      </div>
+      {listening && <p className="text-xs text-negative font-semibold">Ouvindo... fale o lançamento e aguarde a transcrição.</p>}
       <ToolButton busy={busy} onClick={interpret}>Interpretar lançamento</ToolButton>
       <ToolError message={error} />
       {preview && (
