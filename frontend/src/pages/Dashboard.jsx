@@ -244,6 +244,14 @@ export default function Dashboard() {
 
   const hasAlerts = data.alerts.length > 0;
 
+  // Cores inteligentes: o mês está "no vermelho" quando se gasta mais do que
+  // se ganha. Saldo e Despesas reagem — atenção (vermelho) vs tranquilidade (verde).
+  const income = data.periodSummary.income;
+  const expense = data.periodSummary.expense;
+  const overspending = expense > income;
+  const balanceStatus = data.balance.balance < 0 ? 'danger' : 'safe';
+  const expenseStatus = overspending ? 'danger' : 'safe';
+
   return (
     <div className="space-y-4 md:space-y-6">
       <MonthSelector />
@@ -256,13 +264,14 @@ export default function Dashboard() {
           sublabel={monthLabel}
           value={data.balance.balance}
           variant="balance"
+          status={balanceStatus}
           icon={Wallet}
           trend={data.comparison?.balanceChange}
         />
         <StatCard
           label="Receitas"
           sublabel={monthLabel}
-          value={data.periodSummary.income}
+          value={income}
           variant="income"
           icon={TrendingUp}
           trend={data.comparison?.incomeChange}
@@ -270,8 +279,9 @@ export default function Dashboard() {
         <StatCard
           label="Despesas"
           sublabel={monthLabel}
-          value={data.periodSummary.expense}
+          value={expense}
           variant="expense"
+          status={expenseStatus}
           icon={TrendingDown}
           trend={data.comparison?.expenseChange}
         />

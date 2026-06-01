@@ -6,36 +6,41 @@ import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 /**
  * Card de estatística com gradientes modernos.
  * variant: 'balance' (escuro) | 'income' (verde) | 'expense' (branco)
+ *
+ * status (opcional): cor "inteligente" sobreposta ao visual base.
+ *  - 'danger' → tons de atenção (vermelho): ex. saldo negativo ou despesas > receitas
+ *  - 'safe'   → tons de tranquilidade (verde): ex. saldo positivo / despesas sob controle
+ *  - undefined → usa o visual neutro do variant.
+ * O motivo: o card deve "gritar" quando o usuário está gastando mais do que ganha.
  */
-export default function StatCard({ label, value, variant = 'balance', icon: Icon, trend, sublabel }) {
-  const variantClasses = {
-    balance: 'bg-gradient-balance text-ink-50',
-    income:  'bg-gradient-accent text-ink-900',
-    expense: 'bg-gradient-card text-ink-900 border border-ink-200/80',
+export default function StatCard({ label, value, variant = 'balance', icon: Icon, trend, sublabel, status }) {
+  // Cada variant tem um estilo base (sem status) e overrides por status.
+  // Quando há status, ele vence — é o sinal mais importante para o usuário.
+  const STYLES = {
+    balance: {
+      base:   { card: 'bg-gradient-balance text-ink-50',  label: 'text-ink-300',   sub: 'text-ink-400',    icon: 'bg-white/10 text-accent', num: '' },
+      safe:   { card: 'bg-gradient-balance text-ink-50',  label: 'text-ink-300',   sub: 'text-ink-400',    icon: 'bg-positive/20 text-positive', num: 'text-positive' },
+      danger: { card: 'bg-gradient-negative text-white',  label: 'text-white/80',  sub: 'text-white/70',   icon: 'bg-white/15 text-white', num: 'text-white' },
+    },
+    income: {
+      base:   { card: 'bg-gradient-accent text-ink-900',  label: 'text-ink-800',   sub: 'text-ink-700/80', icon: 'bg-ink-900/10 text-ink-900', num: '' },
+    },
+    expense: {
+      base:   { card: 'bg-gradient-card text-ink-900 border border-ink-200/80', label: 'text-ink-500', sub: 'text-ink-500', icon: 'bg-ink-100 text-ink-700', num: 'text-ink-900' },
+      safe:   { card: 'bg-gradient-card text-ink-900 border border-positive/40', label: 'text-ink-500', sub: 'text-ink-500', icon: 'bg-positive/15 text-positive', num: 'text-ink-900' },
+      danger: { card: 'bg-gradient-negative text-white', label: 'text-white/80', sub: 'text-white/70', icon: 'bg-white/15 text-white', num: 'text-white' },
+    },
   };
 
-  const labelColor = {
-    balance: 'text-ink-300',
-    income:  'text-ink-800',
-    expense: 'text-ink-500',
-  };
+  const s = STYLES[variant]?.[status] || STYLES[variant].base;
 
-  const sublabelColor = {
-    balance: 'text-ink-400',
-    income:  'text-ink-700/80',
-    expense: 'text-ink-500',
-  };
+  // Card vermelho (danger): texto já é branco; não pintar de vermelho por cima.
+  const numColor = status === 'danger' ? s.num : (value < 0 ? 'text-negative' : s.num);
 
-  const iconBg = {
-    balance: 'bg-white/10 text-accent',
-    income:  'bg-ink-900/10 text-ink-900',
-    expense: 'bg-ink-100 text-ink-700',
-  };
-
-  const numColor =
-    variant === 'expense'
-      ? value < 0 ? 'text-negative' : 'text-ink-900'
-      : value < 0 ? 'text-negative' : '';
+  const variantClasses = { [variant]: s.card };
+  const labelColor = { [variant]: s.label };
+  const sublabelColor = { [variant]: s.sub };
+  const iconBg = { [variant]: s.icon };
 
   const reduce = useReducedMotion();
 
@@ -87,20 +92,29 @@ export default function StatCard({ label, value, variant = 'balance', icon: Icon
 
       {trend !== undefined && trend !== null && (
         <div className="relative mt-3 md:mt-4 flex items-center gap-1.5 text-xs md:text-sm">
-          {trend > 0 ? (
-            <ArrowUpRight className={`w-4 h-4 ${variant === 'expense' ? 'text-negative' : 'text-positive'} flex-shrink-0`} />
-          ) : trend < 0 ? (
-            <ArrowDownRight className={`w-4 h-4 ${variant === 'expense' ? 'text-positive' : 'text-negative'} flex-shrink-0`} />
-          ) : null}
-          <span
-            className={`font-bold ${
-              variant === 'expense'
-                ? trend > 0 ? 'text-negative' : 'text-positive'
-                : trend > 0 ? 'text-positive' : 'text-negative'
-            }`}
-          >
-            {trend > 0 ? '+' : ''}{Math.abs(trend).toFixed(1)}%
-          </span>
+          {(() => {
+            // Em despesa, subir é ruim (invertido). No card vermelho (danger) o
+            // texto é branco para manter contraste sobre o fundo.
+            const isExpense = variant === 'expense';
+            const good = isExpense ? trend < 0 : trend > 0;
+            const arrowColor = status === 'danger' ? 'text-white' : good ? 'text-positive' : 'text-negative';
+            const textColor = status === 'danger' ? 'text-white' : good ? 'text-positive' : 'text-negative';
+            return (
+              <>
+                {trend > 0 ? (
+                  <ArrowUpRight className={`w-4 h-4 ${arrowColor} flex-shrink-0`} />
+                ) : trend < 0 ? (
+                  <ArrowDownRight className={`w-4 h-4 ${arrowColor} flex-shrink-0`} />
+                ) : null}
+                <span className={`font-bold ${textColor}`}>
+                  {/* Cap em 999+% — variações enormes (base minúscula) viram ruído */}
+                  {Math.abs(trend) > 999
+                    ? '999+%'
+                    : `${trend > 0 ? '+' : ''}${Math.abs(trend).toFixed(1)}%`}
+                </span>
+              </>
+            );
+          })()}
           <span className={`truncate font-medium ${sublabelColor[variant]}`}>
             vs mês anterior
           </span>

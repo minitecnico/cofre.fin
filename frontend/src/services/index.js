@@ -675,7 +675,9 @@ export const dashboardService = {
     const prevBalanceVal = Number(previousBalance.balance) || 0;
 
     function pctChange(current, previous) {
-      if (previous === 0) return null; // não tem como comparar com zero
+      // Base praticamente zero (< 1 centavo) não dá comparação útil — geraria
+      // porcentagens absurdas tipo "+20000000%". Trata como "sem base".
+      if (Math.abs(previous) < 0.005) return null;
       return ((current - previous) / Math.abs(previous)) * 100;
     }
 
