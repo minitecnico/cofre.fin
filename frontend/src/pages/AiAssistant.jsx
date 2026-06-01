@@ -37,28 +37,37 @@ export default function AiAssistant() {
     setLoadingContext(true);
     setContextError('');
 
-    try {
-      const [summary, transactions, cards, forecast, loans] = await Promise.all([
-        dashboardService.summary('month', month),
-        transactionService.list({ startDate, endDate, limit: 300 }),
-        cardService.list(),
-        dashboardService.forecast(3),
-        loanService.list(),
-      ]);
+    const results = await Promise.allSettled([
+      dashboardService.summary('month', month),
+      transactionService.list({ startDate, endDate, limit: 300 }),
+      cardService.list(),
+      dashboardService.forecast(3, month),
+      loanService.list(),
+    ]);
+    const [summary, transactions, cards, forecast, loans] = results;
+    const unavailable = results
+      .map((result, index) => result.status === 'rejected' ? ['resumo', 'lançamentos', 'cartões', 'projeção', 'empréstimos'][index] : null)
+      .filter(Boolean);
 
-      setContext({
-        mesAnalisado: label,
-        resumo: summary,
-        lancamentosDoMes: summarizeTransactions(transactions.transactions),
-        cartoes: cards.map(({ card, ...details }) => ({ nome: card.name, ...details })),
-        projecao: forecast,
-        emprestimosVigentes: loans.map(({ parcels, ...loan }) => loan),
-      });
-    } catch (error) {
-      setContextError(error.message || 'Não foi possível carregar seus dados financeiros.');
-    } finally {
-      setLoadingContext(false);
-    }
+    setContext({
+      mesAnalisado: label,
+      resumo: summary.status === 'fulfilled' ? summary.value : null,
+      lancamentosDoMes: transactions.status === 'fulfilled'
+        ? summarizeTransactions(transactions.value.transactions)
+        : [],
+      cartoes: cards.status === 'fulfilled'
+        ? cards.value.map(({ card, ...details }) => ({ nome: card.name, ...details }))
+        : [],
+      projecao: forecast.status === 'fulfilled' ? forecast.value : null,
+      emprestimosVigentes: loans.status === 'fulfilled'
+        ? loans.value.map(({ parcels, ...loan }) => loan)
+        : [],
+      fontesIndisponiveis: unavailable,
+    });
+    setContextError(unavailable.length
+      ? `Alguns dados não puderam ser carregados (${unavailable.join(', ')}). Você ainda pode conversar normalmente.`
+      : '');
+    setLoadingContext(false);
   }
 
   useEffect(() => {

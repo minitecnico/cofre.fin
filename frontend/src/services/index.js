@@ -727,10 +727,10 @@ export const dashboardService = {
     };
   },
 
-  async forecast(months = 3) {
+  async forecast(months = 3, referenceMonth = null) {
     const { data, error } = await supabase.rpc('get_balance_forecast', { p_months: months });
     if (error) throw error;
-    const balance = await supabase.rpc('get_balance').then((r) => r.data?.[0]);
+    const balance = await supabase.rpc('get_balance', { p_month: referenceMonth }).then((r) => r.data?.[0]);
     return {
       current: Number(balance?.balance) || 0,
       forecast: (data || []).map((f) => ({
