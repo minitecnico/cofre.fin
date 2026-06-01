@@ -190,12 +190,16 @@
            active:scale-95
            transition-all duration-200
            right-4 md:right-6;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+    top: var(--fab-mobile-top, auto);
+    bottom: var(--fab-mobile-bottom, calc(env(safe-area-inset-bottom, 0px) + 80px));
+    touch-action: none;
   }
 
   @media (min-width: 768px) {
     .fab {
+      top: auto;
       bottom: 24px;
+      touch-action: auto;
     }
   }
 
