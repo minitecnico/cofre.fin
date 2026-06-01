@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pencil, Trash2, CreditCard as CardIcon, Check, Repeat, Layers, Percent } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency, formatDate, parseAmortization } from '../utils/format';
@@ -75,6 +75,9 @@ export default function TransactionList({
 
   return (
     <>
+      <p className="md:hidden mb-2 text-[11px] text-ink-500">
+        Dica: arraste um lançamento para a esquerda para excluir.
+      </p>
       <div className="bg-white border-2 border-ink-900 shadow-flat-sm md:shadow-flat divide-y-2 divide-ink-100">
         <AnimatePresence initial={false}>
         {items.map((t, index) => {
@@ -87,16 +90,12 @@ export default function TransactionList({
           const amortization = parseAmortization(t.notes);
 
           return (
-            <motion.div
+            <SwipeableTransactionRow
               key={t.id}
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -100 }}
-              transition={{ delay: index * 0.04 }}
-              className={`group flex items-stretch transition-all hover:bg-ink-50 ${
-                isExpense && isPaid ? 'opacity-60' : ''
-              }`}
+              itemId={t.id}
+              index={index}
+              faded={isExpense && isPaid}
+              onDelete={() => handleDeleteClick(t)}
             >
               {/* Indicador de cor categoria */}
               <div
@@ -220,7 +219,7 @@ export default function TransactionList({
                     </button>
                     <button
                       onClick={() => handleDeleteClick(t)}
-                      className="w-9 h-9 flex items-center justify-center text-negative hover:bg-red-50 transition-colors"
+                      className="hidden md:flex w-9 h-9 items-center justify-center text-negative hover:bg-red-50 transition-colors"
                       aria-label="Excluir"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -228,7 +227,7 @@ export default function TransactionList({
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </SwipeableTransactionRow>
           );
         })}
         </AnimatePresence>
@@ -312,5 +311,89 @@ export default function TransactionList({
         )}
       </Modal>
     </>
+  );
+}
+
+function SwipeableTransactionRow({ itemId, index, faded, onDelete, children }) {
+  const ACTION_WIDTH = 92;
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const offsetRef = useRef(0);
+  const dragRef = useRef(null);
+
+  function updateOffset(nextOffset) {
+    offsetRef.current = nextOffset;
+    setOffset(nextOffset);
+  }
+
+  function handlePointerDown(event) {
+    if (event.pointerType === 'mouse') return;
+    setDragging(true);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      initialOffset: offset,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handlePointerMove(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    updateOffset(Math.max(-ACTION_WIDTH, Math.min(0, drag.initialOffset + deltaX)));
+  }
+
+  function handlePointerUp(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+    updateOffset(offsetRef.current <= -ACTION_WIDTH / 2 ? -ACTION_WIDTH : 0);
+  }
+
+  function handleDelete() {
+    updateOffset(0);
+    onDelete();
+  }
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -100 }}
+      transition={{ delay: index * 0.04 }}
+      className={`group relative overflow-hidden ${faded ? 'opacity-60' : ''}`}
+      data-transaction-id={itemId}
+    >
+      <button
+        type="button"
+        onClick={handleDelete}
+        className="md:hidden absolute inset-y-0 right-0 w-[92px] bg-negative text-white flex flex-col items-center justify-center gap-1 font-bold text-xs"
+        aria-label="Excluir transação"
+      >
+        <Trash2 className="w-5 h-5" />
+        Excluir
+      </button>
+
+      <div
+        className={`relative z-[1] flex items-stretch bg-white hover:bg-ink-50 ${
+          dragging ? '' : 'transition-transform duration-200'
+        }`}
+        style={{ transform: `translateX(${offset}px)`, touchAction: 'pan-y' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        {children}
+      </div>
+    </motion.div>
   );
 }
