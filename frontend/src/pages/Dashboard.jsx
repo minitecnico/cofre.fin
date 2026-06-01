@@ -14,6 +14,7 @@ import { useTransactions } from '../hooks/useTransactions';
 import { formatCurrency, parseAmount } from '../utils/format';
 import InstallBanner from '../components/InstallBanner';
 import MonthSelector from '../components/MonthSelector';
+import DashboardWidgets from '../components/DashboardWidgets';
 import { useMonth } from '../context/MonthContext';
 
 const PERIOD_OPTIONS = [
@@ -276,6 +277,9 @@ export default function Dashboard() {
           trend={data.comparison?.expenseChange}
         />
       </div>
+
+      {/* Widgets externos interativos — câmbio, clima, notícias */}
+      <DashboardWidgets />
 
       {/* Alertas — chips discretos */}
       {hasAlerts && (
