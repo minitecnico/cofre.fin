@@ -9,6 +9,29 @@ function send(res, status, payload) {
   return res.status(status).json(payload);
 }
 
+function providerErrorMessage(status, details) {
+  let message = '';
+
+  try {
+    const parsed = JSON.parse(details);
+    message = parsed?.error?.message || parsed?.error || parsed?.message || '';
+  } catch {
+    message = details;
+  }
+
+  const normalized = String(message || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (status === 401 || status === 403) {
+    return 'O 9Router recusou a chave de API. Confira NINEROUTER_API_KEY na Vercel.';
+  }
+  if (status === 404 || /model|combo|alias/i.test(normalized)) {
+    return `O combo ou modelo configurado no 9Router não foi encontrado. Confira NINEROUTER_MODEL na Vercel.${normalized ? ` Detalhe: ${normalized}` : ''}`;
+  }
+
+  return normalized
+    ? `O 9Router não conseguiu concluir a resposta. Detalhe: ${normalized}`
+    : `O 9Router retornou HTTP ${status}. Confira a configuração do combo e dos provedores.`;
+}
+
 async function authenticate(req) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -174,10 +197,13 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const details = await response.text().catch(() => '');
       console.error('9Router request failed', response.status, details.slice(0, 500));
-      return send(res, 502, { error: 'A IA não conseguiu responder agora. Tente novamente em instantes.' });
+      return send(res, 502, { error: providerErrorMessage(response.status, details) });
     }
 
-    const content = await readStream(response);
+    const contentType = response.headers.get('content-type') || '';
+    const content = contentType.includes('text/event-stream')
+      ? await readStream(response)
+      : await response.json().then((data) => data?.choices?.[0]?.message?.content || '').catch(() => '');
     if (!content) {
       return send(res, 502, { error: 'A IA retornou uma resposta vazia. Tente novamente.' });
     }
