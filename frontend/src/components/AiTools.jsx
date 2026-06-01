@@ -9,10 +9,10 @@ import { requestAiTask } from '../services/ai';
 import { formatCurrency } from '../utils/format';
 
 const TOOL_TABS = [
-  { id: 'insights', label: 'Diagnóstico', icon: Sparkles },
-  { id: 'transaction', label: 'Lançar', icon: WalletCards },
-  { id: 'search', label: 'Buscar', icon: Search },
-  { id: 'goal', label: 'Criar meta', icon: Target },
+  { id: 'insights', label: 'Diagnóstico', description: 'Entenda seu mês', icon: Sparkles },
+  { id: 'transaction', label: 'Novo lançamento', description: 'Digite ou fale uma movimentação', icon: WalletCards },
+  { id: 'search', label: 'Busca inteligente', description: 'Encontre movimentações', icon: Search },
+  { id: 'goal', label: 'Criar meta', description: 'Planeje um objetivo', icon: Target },
 ];
 
 function normalize(value) {
@@ -42,17 +42,23 @@ export default function AiTools({ financialContext, onDataChanged }) {
   const [active, setActive] = useState('insights');
   const [categories, setCategories] = useState([]);
   const [cards, setCards] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
 
   useEffect(() => {
+    setCatalogLoading(true);
     Promise.all([categoryService.list(), cardService.list()])
       .then(([categoryItems, cardItems]) => {
         setCategories(categoryItems);
         setCards(cardItems.map(({ card }) => card));
+        setCatalogError('');
       })
       .catch(() => {
         setCategories([]);
         setCards([]);
-      });
+        setCatalogError('Não foi possível carregar categorias e cartões. Atualize a página antes de criar lançamentos.');
+      })
+      .finally(() => setCatalogLoading(false));
   }, []);
 
   const taskContext = useMemo(() => ({
@@ -72,23 +78,29 @@ export default function AiTools({ financialContext, onDataChanged }) {
             <p className="text-xs text-ink-500">A IA prepara; você revisa antes de salvar.</p>
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-          {TOOL_TABS.map(({ id, label, icon: Icon }) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {TOOL_TABS.map(({ id, label, description, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setActive(id)}
-              className={`btn-pill-sm whitespace-nowrap ${active === id ? '!bg-ink-950 !text-white' : ''}`}
+              className={`rounded-xl px-3 py-3 text-left border transition-all ${
+                active === id
+                  ? 'bg-ink-950 border-ink-950 text-white shadow-soft'
+                  : 'bg-white border-hairline-light text-ink-700 hover:bg-surface-soft'
+              }`}
             >
-              <Icon className="w-4 h-4" /> {label}
+              <span className="flex items-center gap-2 text-sm font-bold"><Icon className="w-4 h-4" /> {label}</span>
+              <span className={`text-[11px] mt-0.5 block ${active === id ? 'text-ink-300' : 'text-ink-500'}`}>{description}</span>
             </button>
           ))}
         </div>
       </div>
       <div className="p-4 md:p-5">
+        {active === 'transaction' && catalogError && <ToolError message={catalogError} />}
         {active === 'insights' && <InsightsTool context={taskContext} />}
         {active === 'transaction' && (
-          <TransactionTool context={taskContext} categories={categories} cards={cards} onSaved={onDataChanged} />
+          <TransactionTool context={taskContext} categories={categories} cards={cards} catalogLoading={catalogLoading} onSaved={onDataChanged} />
         )}
         {active === 'search' && <SearchTool context={taskContext} />}
         {active === 'goal' && <GoalTool context={taskContext} />}
@@ -146,7 +158,7 @@ function InsightList({ title, items = [], icon: Icon }) {
   );
 }
 
-function TransactionTool({ context, categories, cards, onSaved }) {
+function TransactionTool({ context, categories, cards, catalogLoading, onSaved }) {
   const [input, setInput] = useState('');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -271,7 +283,9 @@ function TransactionTool({ context, categories, cards, onSaved }) {
         </button>
       </div>
       {listening && <p className="text-xs text-negative font-semibold">Ouvindo... fale o lançamento e aguarde a transcrição.</p>}
-      <ToolButton busy={busy} onClick={interpret}>Interpretar lançamento</ToolButton>
+      <ToolButton busy={busy || catalogLoading} onClick={interpret}>
+        {catalogLoading ? 'Carregando categorias...' : 'Interpretar lançamento'}
+      </ToolButton>
       <ToolError message={error} />
       {preview && (
         <div className="rounded-xl border border-hairline-light bg-surface-soft p-4 space-y-2 text-sm">
