@@ -62,6 +62,56 @@ export function AuthProvider({ children }) {
   }
 
   /**
+   * Login/cadastro via Google (OAuth).
+   * --------------------------------------------------------------
+   * Redireciona para o Google; ao voltar, o Supabase detecta a sessão na
+   * URL (detectSessionInUrl) e dispara onAuthStateChange — o usuário já cai
+   * logado. Se o email do Google bater com uma conta existente e o auto-link
+   * por email estiver ligado no painel, reaproveita o mesmo user_id.
+   *
+   * O redirectTo precisa estar cadastrado em Auth → URL Configuration.
+   */
+  async function loginWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw error;
+  }
+
+  /**
+   * Vincula uma conta Google ao usuário JÁ LOGADO (email/senha).
+   * Exige "Manual linking" habilitado em Auth → Settings no painel.
+   * Mantém o mesmo user_id — dados e RLS intactos.
+   */
+  async function linkGoogle() {
+    const { error } = await supabase.auth.linkIdentity({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/settings` },
+    });
+    if (error) throw error;
+  }
+
+  /**
+   * Lista as identidades (email/senha, google, ...) do usuário logado.
+   * Usado em Settings para mostrar o que está vinculado.
+   */
+  async function listIdentities() {
+    const { data, error } = await supabase.auth.getUserIdentities();
+    if (error) throw error;
+    return data?.identities ?? [];
+  }
+
+  /**
+   * Desvincula uma identidade. O Supabase recusa se sobrar só uma — o
+   * usuário precisa manter ao menos um meio de login.
+   */
+  async function unlinkIdentity(identity) {
+    const { error } = await supabase.auth.unlinkIdentity(identity);
+    if (error) throw error;
+  }
+
+  /**
    * Dispara o email de recuperação de senha. O Supabase manda um link com
    * token; ao clicar, o usuário cai em /reset-password com uma sessão de
    * recuperação ativa (evento PASSWORD_RECOVERY) e então define a nova senha.
@@ -94,7 +144,7 @@ export function AuthProvider({ children }) {
     : null;
 
   return (
-    <AuthContext.Provider value={{ user: userInfo, loading, login, register, logout, requestPasswordReset, updatePassword }}>
+    <AuthContext.Provider value={{ user: userInfo, loading, login, register, logout, requestPasswordReset, updatePassword, loginWithGoogle, linkGoogle, listIdentities, unlinkIdentity }}>
       {children}
     </AuthContext.Provider>
   );

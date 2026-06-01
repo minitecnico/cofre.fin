@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import GoogleIcon from '../components/GoogleIcon';
 
 export default function Login() {
-  const { user, login, register, requestPasswordReset } = useAuth();
+  const { user, login, register, requestPasswordReset, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -13,6 +14,19 @@ export default function Login() {
   const [info, setInfo] = useState(null);
 
   if (user) return <Navigate to="/" replace />;
+
+  async function handleGoogle() {
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      await loginWithGoogle();
+      // Redireciona para o Google; o retorno é tratado pelo onAuthStateChange.
+    } catch (err) {
+      setError(err.message || 'Erro ao entrar com Google');
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -149,6 +163,26 @@ export default function Login() {
               {loading ? 'Aguarde…' : mode === 'login' ? 'Entrar' : mode === 'forgot' ? 'Enviar link' : 'Criar conta'}
             </button>
           </form>
+
+          {mode !== 'forgot' && (
+            <>
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-ink-200" />
+                <span className="text-[10px] uppercase tracking-widest text-ink-400 font-semibold">ou</span>
+                <div className="flex-1 h-px bg-ink-200" />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoogle}
+                disabled={loading}
+                className="btn-ghost w-full flex items-center justify-center gap-3 disabled:opacity-60"
+              >
+                <GoogleIcon className="w-5 h-5" />
+                <span>Continuar com Google</span>
+              </button>
+            </>
+          )}
 
           <div className="mt-5 md:mt-6 pt-5 md:pt-6 border-t border-ink-200 text-center text-sm">
             {mode === 'forgot' ? (

@@ -6,15 +6,18 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import GoogleIcon from '../components/GoogleIcon';
 
 /**
  * Página de Ajustes — versão minimalista.
  * Conta + Importar/Exportar + Alterar senha + Sair.
  */
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, listIdentities, linkGoogle, unlinkIdentity } = useAuth();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [toast, setToast] = useState(null); // { text } | null
+  const [identities, setIdentities] = useState(null); // null = carregando
+  const [linkBusy, setLinkBusy] = useState(false);
 
   // Auto-dismiss do toast em 4 segundos
   useEffect(() => {
@@ -22,6 +25,46 @@ export default function Settings() {
     const id = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(id);
   }, [toast]);
+
+  // Carrega as identidades vinculadas (email/senha, google, ...)
+  useEffect(() => {
+    let alive = true;
+    listIdentities()
+      .then((list) => { if (alive) setIdentities(list); })
+      .catch(() => { if (alive) setIdentities([]); });
+    return () => { alive = false; };
+  }, [listIdentities]);
+
+  const googleIdentity = identities?.find((i) => i.provider === 'google') ?? null;
+
+  async function handleLinkGoogle() {
+    setLinkBusy(true);
+    try {
+      await linkGoogle(); // redireciona para o Google; volta para /settings
+    } catch (err) {
+      setToast({ text: err.message || 'Não foi possível vincular o Google' });
+      setLinkBusy(false);
+    }
+  }
+
+  async function handleUnlinkGoogle() {
+    if (!googleIdentity) return;
+    // Trava: não deixa remover o último meio de login.
+    if ((identities?.length ?? 0) <= 1) {
+      setToast({ text: 'Defina uma senha antes de desvincular o Google.' });
+      return;
+    }
+    setLinkBusy(true);
+    try {
+      await unlinkIdentity(googleIdentity);
+      setIdentities((prev) => prev.filter((i) => i.provider !== 'google'));
+      setToast({ text: 'Conta Google desvinculada.' });
+    } catch (err) {
+      setToast({ text: err.message || 'Não foi possível desvincular' });
+    } finally {
+      setLinkBusy(false);
+    }
+  }
 
   function handlePasswordChangeSuccess() {
     setChangePasswordOpen(false);
@@ -69,6 +112,52 @@ export default function Settings() {
             </span>
             <span className="text-sm font-semibold text-ink-900 truncate">{user?.email}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Contas vinculadas */}
+      <div className="card-flat p-5 md:p-6">
+        <h3 className="font-display text-lg md:text-xl font-bold mb-1 tracking-tight">Contas vinculadas</h3>
+        <p className="text-xs md:text-sm text-ink-500 mb-4">
+          Conecte o Google para entrar com um toque, sem digitar senha.
+        </p>
+
+        <div className="flex items-center justify-between gap-4 px-3 py-3 rounded-xl bg-ink-50">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-white shadow-soft flex items-center justify-center flex-shrink-0">
+              <GoogleIcon className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-ink-900">Google</p>
+              <p className="text-xs text-ink-500 truncate">
+                {identities === null
+                  ? 'Verificando…'
+                  : googleIdentity
+                    ? (googleIdentity.identity_data?.email || 'Vinculado')
+                    : 'Não vinculado'}
+              </p>
+            </div>
+          </div>
+
+          {identities !== null && (
+            googleIdentity ? (
+              <button
+                onClick={handleUnlinkGoogle}
+                disabled={linkBusy}
+                className="text-xs font-semibold text-negative hover:underline disabled:opacity-50 flex-shrink-0"
+              >
+                Desvincular
+              </button>
+            ) : (
+              <button
+                onClick={handleLinkGoogle}
+                disabled={linkBusy}
+                className="text-xs font-semibold text-accent-dark hover:underline disabled:opacity-50 flex-shrink-0"
+              >
+                {linkBusy ? 'Aguarde…' : 'Vincular'}
+              </button>
+            )
+          )}
         </div>
       </div>
 
