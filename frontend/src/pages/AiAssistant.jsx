@@ -25,25 +25,116 @@ function summarizeTransactions(transactions) {
 }
 
 function inlineContent(text) {
-  return String(text).split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index}>{part.slice(2, -2)}</strong>
-      : part
+  return String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={index} className="px-1 py-0.5 rounded bg-ink-200/70 font-mono text-[0.92em]">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
+function tableCells(line) {
+  return line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
+}
+
+function isTableDivider(line) {
+  const cells = tableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isNumericCell(value) {
+  const cleaned = String(value).replace(/[*_`]/g, '').trim();
+  return /^(?:R\$\s*)?[-+−]?\s*\d[\d.,]*(?:\s*%|\s*x)?$/.test(cleaned);
+}
+
+function renderTable(lines, key) {
+  const headers = tableCells(lines[0]);
+  const rows = lines.slice(2).map(tableCells);
+
+  return (
+    <div key={key} className="my-3 overflow-x-auto rounded-xl border border-hairline-light bg-white">
+      <table className="min-w-full border-collapse text-xs md:text-sm">
+        <thead className="bg-ink-950 text-white">
+          <tr>
+            {headers.map((header, index) => (
+              <th key={index} className="px-3 py-2.5 text-left font-bold whitespace-nowrap">
+                {inlineContent(header)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-hairline-light">
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="even:bg-surface-soft/70">
+              {headers.map((_, cellIndex) => {
+                const cell = row[cellIndex] || '';
+                return (
+                  <td
+                    key={cellIndex}
+                    className={`px-3 py-2 align-top ${isNumericCell(cell) ? 'text-right font-mono tabular-nums whitespace-nowrap' : ''}`}
+                  >
+                    {inlineContent(cell)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function MessageContent({ content }) {
-  return String(content).split('\n').map((line, index) => {
+  const lines = String(content).split('\n');
+  const blocks = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim().startsWith('```')) {
+      const language = line.trim().slice(3).trim();
+      const code = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        code.push(lines[index]);
+        index += 1;
+      }
+      blocks.push(
+        <div key={`code-${index}`} className="my-3 overflow-x-auto rounded-xl bg-ink-950 p-3 text-ink-100">
+          {language && <p className="mb-2 text-[10px] uppercase tracking-widest text-ink-400">{language}</p>}
+          <pre className="font-mono text-xs leading-relaxed"><code>{code.join('\n')}</code></pre>
+        </div>
+      );
+      continue;
+    }
+
+    if (line.includes('|') && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+      const table = [line, lines[index + 1]];
+      index += 2;
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+        table.push(lines[index]);
+        index += 1;
+      }
+      blocks.push(renderTable(table, `table-${index}`));
+      index -= 1;
+      continue;
+    }
+
     const heading = line.match(/^#{1,3}\s+(.+)/);
     const bullet = line.match(/^[-*•]\s+(.+)/);
     const numbered = line.match(/^(\d+)[.)]\s+(.+)/);
 
-    if (!line.trim()) return <span key={index} className="block h-2" />;
-    if (heading) return <strong key={index} className="block mt-2 mb-1 text-ink-900">{inlineContent(heading[1])}</strong>;
-    if (bullet) return <span key={index} className="block pl-3 before:content-['•'] before:-ml-3 before:mr-1.5">{inlineContent(bullet[1])}</span>;
-    if (numbered) return <span key={index} className="block pl-5 -indent-5">{numbered[1]}. {inlineContent(numbered[2])}</span>;
-    return <span key={index} className="block">{inlineContent(line)}</span>;
-  });
+    if (!line.trim()) blocks.push(<span key={index} className="block h-2" />);
+    else if (heading) blocks.push(<strong key={index} className="block mt-3 mb-1 text-ink-900">{inlineContent(heading[1])}</strong>);
+    else if (bullet) blocks.push(<span key={index} className="block pl-3 before:content-['•'] before:-ml-3 before:mr-1.5">{inlineContent(bullet[1])}</span>);
+    else if (numbered) blocks.push(<span key={index} className="block pl-5 -indent-5">{numbered[1]}. {inlineContent(numbered[2])}</span>);
+    else blocks.push(<span key={index} className="block">{inlineContent(line)}</span>);
+  }
+
+  return blocks;
 }
 
 export default function AiAssistant() {
@@ -244,7 +335,7 @@ export default function AiAssistant() {
                   <Bot className="w-4 h-4" />
                 </div>
               )}
-              <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+              <div className={`max-w-[92%] md:max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 message.role === 'user'
                   ? 'bg-ink-950 text-white'
                   : message.kind === 'error'
