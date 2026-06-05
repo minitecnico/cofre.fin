@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText, Download,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
   AlertTriangle, Wallet, Share2, CreditCard, Pencil, Star, Link2, X,
+  Bell, BellRing, Clock, Send,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
@@ -39,6 +40,59 @@ export default function Cobrancas() {
   const [sel, setSel] = useState({ debtorId: null, ids: EMPTY_SET }); // seleção (1 devedor por vez)
 
   const pixReady = c.pix?.pixKey && c.pix?.pixName && c.pix?.pixCity;
+
+  // ── Painel de alertas: quem precisa ser cobrado (vencido / vencendo) ──
+  // Ordena por urgência e prioriza os "stale" (sem lembrete recente).
+  const attention = useMemo(() => {
+    return c.summary
+      .map((d) => ({ ...d, ...debtorStatus(d) }))
+      .filter((d) => d.urgency === 'overdue' || d.urgency === 'due-soon')
+      .sort((a, b) => {
+        const rank = { overdue: 0, 'due-soon': 1 };
+        return (rank[a.urgency] - rank[b.urgency])
+          || (Number(b.stale) - Number(a.stale))
+          || (b.overdueAmount - a.overdueAmount);
+      });
+  }, [c.summary]);
+
+  // ── Notificações do navegador (opt-in) ──────────────────────────────
+  const [notifyPerm, setNotifyPerm] = useState(
+    () => (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
+  );
+
+  const fireDebtorNotification = useCallback((list) => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !list.length) return;
+    const total = list.reduce((s, d) => s + (d.overdueAmount || d.openAmount), 0);
+    const n = list.length;
+    try {
+      new Notification('Cobranças pendentes', {
+        body: `${n} ${n === 1 ? 'pessoa' : 'pessoas'} pra cobrar · ${formatCurrency(total)} em aberto`,
+        icon: '/icons/icon-192.png',
+        tag: 'cofre-cobrancas',
+      });
+    } catch { /* ignora */ }
+  }, []);
+
+  async function enableNotifications() {
+    if (typeof Notification === 'undefined') return;
+    const p = await Notification.requestPermission();
+    setNotifyPerm(p);
+    if (p === 'granted') fireDebtorNotification(attention.filter((d) => d.stale));
+  }
+
+  // Lembrete automático uma vez por dia, se já autorizado e há vencidas "stale".
+  useEffect(() => {
+    if (notifyPerm !== 'granted') return;
+    const stale = attention.filter((d) => d.stale && d.urgency === 'overdue');
+    if (!stale.length) return;
+    const key = 'cofre_cobr_notif';
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      if (localStorage.getItem(key) === today) return;
+      localStorage.setItem(key, today);
+    } catch { return; }
+    fireDebtorNotification(stale);
+  }, [notifyPerm, attention, fireDebtorNotification]);
 
   // ── Seleção (uma pessoa por vez; barra flutuante age sobre ela) ──
   function toggleSelect(debtorId, id) {
@@ -112,10 +166,11 @@ export default function Cobrancas() {
     }
   }, [c.summary, c.chargesByDebtor, c.totals, c.pix, pixReady]);
 
-  // Cobrar um devedor via WhatsApp
+  // Cobrar um devedor via WhatsApp → e marca as dívidas abertas como cobradas.
   function handleCharge(debtor) {
     const charges = c.chargesByDebtor.get(debtor.debtorId) || [];
     const open = charges.filter((x) => !x.paid);
+    if (open.length === 0) return;
     const pixPayload = pixReady
       ? buildPixPayload({
           key: c.pix.pixKey, keyType: c.pix.pixKeyType, name: c.pix.pixName, city: c.pix.pixCity,
@@ -124,12 +179,17 @@ export default function Cobrancas() {
       : undefined;
     const text = buildReminderText(debtor.name, open, { pixPayload, ownerName: c.pix?.pixName });
     window.open(waLink(debtor.phone, text), '_blank', 'noopener');
+    c.markCharged(open.map((x) => x.id)); // sinaliza "cobrado" (evita cobrar 2-3x)
   }
 
-  // Gera PIX (QR + link) só das parcelas/cobranças selecionadas → abre o modal
+  // Gera PIX (QR + link) só das parcelas/cobranças selecionadas → abre o modal.
+  // Leva os ids junto pra marcar como cobrado quando o link for enviado.
   function handleGenPixForCharges(debtor, selectedCharges) {
     const sum = selectedCharges.reduce((s, x) => s + Number(x.amount), 0);
-    setQrTarget({ name: debtor.name, phone: debtor.phone, openAmount: sum });
+    setQrTarget({
+      name: debtor.name, phone: debtor.phone, openAmount: sum,
+      chargeIds: selectedCharges.filter((x) => !x.paid).map((x) => x.id),
+    });
   }
 
   // Relatório PDF só das cobranças selecionadas de um devedor
@@ -200,6 +260,16 @@ export default function Cobrancas() {
         </button>
       </div>
 
+      {/* Painel de alertas: quem cobrar hoje */}
+      {attention.length > 0 && (
+        <AttentionPanel
+          debtors={attention}
+          onCharge={handleCharge}
+          notifyPerm={notifyPerm}
+          onEnableNotify={enableNotifications}
+        />
+      )}
+
       {c.error && <p className="text-sm text-negative font-medium">{c.error}</p>}
 
       {/* Lista de devedores */}
@@ -216,7 +286,10 @@ export default function Cobrancas() {
               charges={c.chargesByDebtor.get(d.debtorId) || []}
               onAddCharge={() => setChargeTarget(d)}
               onCharge={() => handleCharge(d)}
-              onShowQr={() => setQrTarget(d)}
+              onShowQr={() => setQrTarget({
+                ...d,
+                chargeIds: (c.chargesByDebtor.get(d.debtorId) || []).filter((x) => !x.paid).map((x) => x.id),
+              })}
               onSetPaid={c.setChargePaid}
               onEditCharge={setEditTarget}
               onRemoveCharge={c.removeCharge}
@@ -264,6 +337,7 @@ export default function Cobrancas() {
         pixReady={pixReady}
         onClose={() => setQrTarget(null)}
         onConfigure={() => { setQrTarget(null); pixModal.open(); }}
+        onSent={(ids) => c.markCharged(ids)}
       />
 
       {/* Barra de seleção FLUTUANTE — sempre visível, sem rolar a tela */}
@@ -331,15 +405,139 @@ function EmptyState({ onAdd }) {
   );
 }
 
+/**
+ * Painel de alertas — quem precisa ser cobrado (vencido/vencendo).
+ * Esquema de cores por urgência + selo do último lembrete (pra não cobrar 2-3x).
+ */
+function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
+  const total = debtors.reduce((s, d) => s + d.openAmount, 0);
+  const accent = debtors[0].urgency === 'overdue' ? 'border-negative' : 'border-warn';
+  const canNotify = notifyPerm !== 'unsupported';
+
+  return (
+    <div className={`card-flat overflow-hidden border-l-4 ${accent} animate-slide-up`}>
+      <div className="p-3 flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+          <BellRing className="w-[18px] h-[18px] text-negative" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-sm text-ink-900">Pra cobrar</p>
+          <p className="text-[11px] text-ink-500">{debtors.length} pessoa(s) · {formatCurrency(total)} em aberto</p>
+        </div>
+        {canNotify && notifyPerm !== 'granted' && (
+          <button onClick={onEnableNotify} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-[11px] hover:bg-ink-200 transition-colors flex-shrink-0" title="Receber lembretes no navegador">
+            <Bell className="w-3.5 h-3.5" /> Notificar
+          </button>
+        )}
+      </div>
+      <div className="divide-y divide-ink-100 border-t border-ink-100">
+        {debtors.map((d) => {
+          const u = URGENCY[d.urgency];
+          const charged = d.since === 0; // cobrado hoje
+          return (
+            <div key={d.debtorId} className="px-3 py-2.5 flex items-center gap-2.5">
+              <span className={`w-1.5 h-9 rounded-full flex-shrink-0 ${u.bar}`} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-sm text-ink-900 truncate">{d.name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${u.pill}`}>
+                    {d.urgency === 'overdue' ? `${d.overdueCount} vencida(s)` : u.label}
+                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(d.lastChargedAt)}`}>
+                    {reminderLabel(d.lastChargedAt) || 'Nunca cobrado'}
+                  </span>
+                </div>
+              </div>
+              <span className="font-mono font-bold text-sm text-ink-900 flex-shrink-0">{formatCurrency(d.openAmount)}</span>
+              <button
+                onClick={() => onCharge(d)}
+                className={`inline-flex items-center gap-1 px-2.5 py-2 min-h-[40px] rounded-xl font-bold text-xs transition-colors flex-shrink-0 ${
+                  charged ? 'bg-ink-100 text-ink-500' : 'bg-positive text-white hover:opacity-90'
+                }`}
+                title={charged ? 'Já cobrado hoje' : 'Cobrar pelo WhatsApp'}
+              >
+                {charged ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                {charged ? 'Feito' : 'Cobrar'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const EMPTY_SET = new Set();
+
+// ── Status de cobrança / lembretes ─────────────────────────────
+// Esquema de cores e textos pra sinalizar o que já foi cobrado (evita cobrar
+// a mesma pessoa 2-3x) e o que precisa de atenção (vencido / vencendo).
+const DAY = 86400000;
+const STALE_DAYS = 3; // sem lembrete há ≥3 dias → "cobrar de novo"
+
+function daysSince(iso) {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.floor((Date.now() - t) / DAY);
+}
+
+/** Texto curto do último lembrete enviado, ou null se nunca cobrado. */
+function reminderLabel(iso) {
+  const d = daysSince(iso);
+  if (d == null) return null;
+  if (d <= 0) return 'Cobrado hoje';
+  if (d === 1) return 'Cobrado ontem';
+  return `Cobrado há ${d}d`;
+}
+
+/** Tom do "selo" de lembrete: nunca (neutro) · recente (verde) · faz tempo (âmbar). */
+function reminderTone(iso) {
+  const d = daysSince(iso);
+  if (d == null) return 'bg-ink-100 text-ink-500';
+  if (d < STALE_DAYS) return 'bg-emerald-50 text-positive';
+  return 'bg-amber-50 text-warn';
+}
+
+/**
+ * Urgência do devedor → cores e ordenação dos alertas.
+ *   overdue  vermelho · due-soon âmbar · open neutro · settled verde
+ * `stale`: vencido/vencendo e sem lembrete recente → entra no painel de alertas.
+ */
+function debtorStatus(d) {
+  if (!d.openCount) return { urgency: 'settled', stale: false, since: null };
+  let urgency = 'open';
+  if (d.overdueCount > 0) urgency = 'overdue';
+  else if (d.nextDue) {
+    const diff = Math.ceil((new Date(`${d.nextDue}T00:00:00`).getTime() - Date.now()) / DAY);
+    if (diff <= 3) urgency = 'due-soon';
+  }
+  const since = daysSince(d.lastChargedAt);
+  const recently = since != null && since < STALE_DAYS;
+  const stale = (urgency === 'overdue' || urgency === 'due-soon') && !recently;
+  return { urgency, stale, since };
+}
+
+const URGENCY = {
+  overdue:    { bar: 'bg-negative',  pill: 'bg-red-50 text-negative',     label: 'Vencido' },
+  'due-soon': { bar: 'bg-warn',      pill: 'bg-amber-50 text-warn',       label: 'Vence em breve' },
+  open:       { bar: 'bg-ink-200',   pill: 'bg-ink-100 text-ink-600',     label: 'Em dia' },
+  settled:    { bar: 'bg-positive',  pill: 'bg-emerald-50 text-positive', label: 'Quitado' },
+};
 
 function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onEditCharge, onRemoveCharge, onRemoveDebtor, selectedIds = EMPTY_SET, onToggleSelect, onToggleAll }) {
   const [open, setOpen] = useState(false);
   const hasOverdue = debtor.overdueCount > 0;
   const allSelected = charges.length > 0 && selectedIds.size === charges.length;
+  const st = debtorStatus(debtor);
+  const u = URGENCY[st.urgency];
+  const chargedToday = st.since === 0;        // já cobrado hoje
+  const hasDebt = debtor.openCount > 0;
 
   return (
-    <div className="card-flat overflow-hidden">
+    <div className={`card-flat overflow-hidden border-l-4 ${
+      hasDebt ? (st.urgency === 'overdue' ? 'border-negative' : st.urgency === 'due-soon' ? 'border-warn' : 'border-ink-200') : 'border-positive'
+    }`}>
       {/* Cabeçalho do devedor */}
       <div className="p-3 flex items-center gap-3">
         <button onClick={() => setOpen((v) => !v)} className="flex-1 flex items-center gap-3 text-left min-w-0">
@@ -359,14 +557,28 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
                 <span className="text-ink-400">vence {formatDate(debtor.nextDue, 'long')}</span>
               )}
             </div>
+            {/* Selo do último lembrete — sinaliza o que já foi cobrado */}
+            {hasDebt && (
+              <span className={`inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(debtor.lastChargedAt)}`}>
+                <Clock className="w-2.5 h-2.5" /> {reminderLabel(debtor.lastChargedAt) || 'Nunca cobrado'}
+              </span>
+            )}
           </div>
         </button>
       </div>
 
       {/* Ações rápidas */}
       <div className="px-3 pb-3 flex flex-wrap gap-1.5">
-        <button onClick={onCharge} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-positive/10 text-positive font-bold text-xs hover:bg-positive/20 transition-colors">
-          <MessageCircle className="w-3.5 h-3.5" /> Cobrar
+        <button
+          onClick={onCharge}
+          disabled={!hasDebt}
+          className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg font-bold text-xs transition-colors disabled:opacity-40 ${
+            chargedToday ? 'bg-ink-100 text-ink-500' : 'bg-positive/10 text-positive hover:bg-positive/20'
+          }`}
+          title={chargedToday ? 'Já cobrado hoje' : 'Cobrar pelo WhatsApp'}
+        >
+          {chargedToday ? <Check className="w-3.5 h-3.5" /> : <MessageCircle className="w-3.5 h-3.5" />}
+          {chargedToday ? 'Cobrado hoje' : 'Cobrar'}
         </button>
         <button onClick={onShowQr} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
           <QrCode className="w-3.5 h-3.5" /> PIX QR
@@ -537,11 +749,19 @@ function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemo
         <p className={`text-sm font-medium truncate ${charge.paid ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
           {label}
         </p>
-        {charge.due_date && (
-          <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
-            {overdue ? 'Venceu ' : 'Vence '}{formatDate(charge.due_date, 'long')}
-          </p>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {charge.due_date && (
+            <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
+              {overdue ? 'Venceu ' : 'Vence '}{formatDate(charge.due_date, 'long')}
+            </p>
+          )}
+          {/* Sinaliza que esta cobrança já foi cobrada (evita cobrar 2-3x) */}
+          {!charge.paid && charge.last_charged_at && (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(charge.last_charged_at)}`}>
+              <Clock className="w-2.5 h-2.5" /> {reminderLabel(charge.last_charged_at)}
+            </span>
+          )}
+        </div>
       </div>
       <span className={`font-mono font-bold text-sm ${charge.paid ? 'text-ink-400' : 'text-ink-900'}`}>
         {formatCurrency(charge.amount)}
@@ -861,7 +1081,7 @@ function EditChargeModal({ charge, onClose, onSave }) {
 }
 
 // ── Modal: QR Code PIX + link de pagamento ─────────────────────
-function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure }) {
+function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure, onSent }) {
   const [dataUrl, setDataUrl] = useState('');
   const [payload, setPayload] = useState('');
   const [copied, setCopied] = useState(false);
@@ -911,6 +1131,7 @@ function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure }) {
   function sendWhats() {
     const msg = `Oi, ${target?.name || ''}! Segue o link pra pagar via PIX${amount ? ` (${formatCurrency(amount)})` : ''}: ${link}`;
     window.open(waLink(target?.phone, msg), '_blank', 'noopener');
+    if (target?.chargeIds?.length) onSent?.(target.chargeIds); // marca como cobrado
   }
 
   return (

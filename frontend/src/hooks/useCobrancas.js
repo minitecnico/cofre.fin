@@ -103,6 +103,13 @@ export function useCobrancas() {
     await load();
   }, [load]);
 
+  // Marca cobranças como enviadas (lembrete) — sinaliza "cobrado" e recarrega.
+  const markCharged = useCallback(async (ids) => {
+    if (!ids || ids.length === 0) return;
+    await chargeService.markCharged(ids);
+    await load();
+  }, [load]);
+
   // ── Chaves PIX ──────────────────────────────────────────────
   const addPixKey = useCallback(async (payload) => {
     await pixKeyService.create(payload);
@@ -135,7 +142,7 @@ export function useCobrancas() {
     summary, charges, chargesByDebtor, pixKeys, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
-    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge, removeCharges,
+    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge, removeCharges, markCharged,
     addPixKey, removePixKey, setDefaultPixKey,
   };
 }

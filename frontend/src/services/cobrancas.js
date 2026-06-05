@@ -76,6 +76,7 @@ export const debtorService = {
       overdueCount: Number(d.overdue_count) || 0,
       overdueAmount: Number(d.overdue_amount) || 0,
       nextDue: d.next_due,
+      lastChargedAt: d.last_charged_at || null, // último lembrete enviado (dívidas em aberto)
     }));
   },
 };
@@ -178,6 +179,18 @@ export const chargeService = {
     if (!ids || ids.length === 0) return;
     const { error } = await supabase.from('charges').delete().in('id', ids);
     if (error) throw error;
+  },
+
+  /**
+   * Marca cobranças como ENVIADAS (lembrete cobrado). Incrementa o contador e
+   * carimba o momento, pra UI sinalizar "cobrado há Xd" e evitar cobrar a mesma
+   * pessoa várias vezes. Só afeta as não pagas. Retorna quantas foram marcadas.
+   */
+  async markCharged(ids) {
+    if (!ids || ids.length === 0) return 0;
+    const { data, error } = await supabase.rpc('mark_charges_sent', { p_ids: ids });
+    if (error) throw error;
+    return data || 0;
   },
 };
 
