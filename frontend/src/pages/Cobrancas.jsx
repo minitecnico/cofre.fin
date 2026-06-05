@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText, Download,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
-  AlertTriangle, Wallet, Share2, CreditCard, Pencil,
+  AlertTriangle, Wallet, Share2, CreditCard, Pencil, Star, Link2,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
@@ -10,6 +10,7 @@ import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
 import { formatCurrency, formatDate, parseAmount } from '../utils/format';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
+import { pixLinkService } from '../services/cobrancas';
 import {
   buildReminderText, waLink, generateChargesPdf, normalizePhone,
 } from '../services/cobrancasReport';
@@ -118,7 +119,7 @@ export default function Cobrancas() {
       <div className="flex flex-wrap gap-2">
         <button onClick={pixModal.open} className="btn-ghost min-h-[44px] flex items-center gap-2 flex-1 justify-center">
           <KeyRound className="w-4 h-4" />
-          {pixReady ? 'Chave PIX ✓' : 'Configurar PIX'}
+          {c.pixKeys.length ? `Chaves PIX (${c.pixKeys.length})` : 'Cadastrar PIX'}
         </button>
         <button onClick={() => handlePdf(false)} disabled={pdfBusy || c.summary.length === 0} className="btn-ghost min-h-[44px] flex items-center gap-2 flex-1 justify-center disabled:opacity-50">
           {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Relatório PDF
@@ -144,7 +145,7 @@ export default function Cobrancas() {
               charges={c.chargesByDebtor.get(d.debtorId) || []}
               onAddCharge={() => setChargeTarget(d)}
               onCharge={() => handleCharge(d)}
-              onShowQr={() => setQrTarget({ name: d.name, amount: d.openAmount })}
+              onShowQr={() => setQrTarget(d)}
               onSetPaid={c.setChargePaid}
               onEditCharge={setEditTarget}
               onRemoveCharge={c.removeCharge}
@@ -156,7 +157,14 @@ export default function Cobrancas() {
       )}
 
       {/* ── Modais ─────────────────────────────────────────── */}
-      <PixConfigModal isOpen={pixModal.isOpen} onClose={pixModal.close} pix={c.pix} onSave={c.savePix} />
+      <PixKeysModal
+        isOpen={pixModal.isOpen}
+        onClose={pixModal.close}
+        keys={c.pixKeys}
+        onAdd={c.addPixKey}
+        onRemove={c.removePixKey}
+        onSetDefault={c.setDefaultPixKey}
+      />
       <DebtorModal isOpen={debtorModal.isOpen} onClose={debtorModal.close} onSave={c.addDebtor} />
       <ChargeModal
         debtor={chargeTarget}
@@ -171,7 +179,7 @@ export default function Cobrancas() {
       />
       <PixQrModal
         target={qrTarget}
-        pix={c.pix}
+        pixKey={c.activePixKey}
         pixReady={pixReady}
         onClose={() => setQrTarget(null)}
         onConfigure={() => { setQrTarget(null); pixModal.open(); }}
@@ -310,63 +318,106 @@ function ChargeRow({ charge, onSetPaid, onEdit, onRemove }) {
   );
 }
 
-// ── Modal: config PIX ──────────────────────────────────────────
-function PixConfigModal({ isOpen, onClose, pix, onSave }) {
-  const [form, setForm] = useState({ pixKey: '', pixKeyType: 'cpf', pixName: '', pixCity: '' });
+// ── Modal: chaves PIX (múltiplas) ──────────────────────────────
+function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ label: '', keyType: 'cpf', key: '', name: '', city: '' });
   const [saving, setSaving] = useState(false);
 
-  // Ao abrir, carrega os valores já salvos (se houver)
+  // Abre o form automaticamente se não há nenhuma chave
   useEffect(() => {
-    if (isOpen && pix) {
-      setForm({
-        pixKey: pix.pixKey || '',
-        pixKeyType: pix.pixKeyType || 'cpf',
-        pixName: pix.pixName || '',
-        pixCity: pix.pixCity || '',
-      });
-    }
-  }, [isOpen, pix]);
+    if (isOpen) setAdding(keys.length === 0);
+  }, [isOpen, keys.length]);
 
-  async function handleSubmit(e) {
+  async function handleAdd(e) {
     e.preventDefault();
+    if (!form.key.trim() || !form.name.trim() || !form.city.trim()) return;
     setSaving(true);
     try {
-      await onSave(form);
-      onClose();
+      await onAdd({ ...form });
+      setForm({ label: '', keyType: 'cpf', key: '', name: '', city: '' });
+      setAdding(keys.length === 0); // mantém aberto só se ainda for a única
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Chave PIX para receber">
-      <form onSubmit={handleSubmit} className="space-y-3">
-      <div>
-        <label className="label">Tipo de chave</label>
-        <select className="input-field" value={form.pixKeyType} onChange={(e) => setForm((f) => ({ ...f, pixKeyType: e.target.value }))}>
-          <option value="cpf">CPF</option>
-          <option value="cnpj">CNPJ</option>
-          <option value="email">E-mail</option>
-          <option value="phone">Telefone</option>
-          <option value="random">Aleatória</option>
-        </select>
+    <Modal isOpen={isOpen} onClose={onClose} title="Minhas chaves PIX">
+      <div className="space-y-3">
+        {/* Lista de chaves */}
+        {keys.length > 0 && (
+          <div className="space-y-2">
+            {keys.map((k) => (
+              <div key={k.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-ink-50">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-bold text-sm text-ink-900 truncate">{k.label || k.name}</p>
+                    {k.is_default && <span className="text-[10px] font-bold text-accent-dark bg-accent/20 px-1.5 rounded-full">PADRÃO</span>}
+                  </div>
+                  <p className="text-xs text-ink-500 truncate">{k.key_type?.toUpperCase()} · {k.key}</p>
+                </div>
+                {!k.is_default && (
+                  <button onClick={() => onSetDefault(k.id)} className="text-xs font-bold text-ink-600 hover:text-ink-900 px-2 py-1" title="Tornar padrão">
+                    <Star className="w-4 h-4" />
+                  </button>
+                )}
+                <button onClick={() => onRemove(k.id)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center" title="Remover">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Form de nova chave */}
+        {adding ? (
+          <form onSubmit={handleAdd} className="space-y-3 pt-1 border-t border-ink-100">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label">Apelido</label>
+                <input className="input-field" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="Ex: Nubank" />
+              </div>
+              <div>
+                <label className="label">Tipo</label>
+                <select className="input-field" value={form.keyType} onChange={(e) => setForm((f) => ({ ...f, keyType: e.target.value }))}>
+                  <option value="cpf">CPF</option>
+                  <option value="cnpj">CNPJ</option>
+                  <option value="email">E-mail</option>
+                  <option value="phone">Telefone</option>
+                  <option value="random">Aleatória</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label">Chave PIX</label>
+              <input className="input-field" value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="sua chave" required />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label">Nome do recebedor</label>
+                <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Como no PIX" required />
+              </div>
+              <div>
+                <label className="label">Cidade</label>
+                <input className="input-field" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="São Paulo" required />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {keys.length > 0 && (
+                <button type="button" onClick={() => setAdding(false)} className="btn-ghost flex-1 min-h-[44px]">Cancelar</button>
+              )}
+              <button type="submit" disabled={saving} className="btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2 disabled:opacity-60">
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />} Salvar chave
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button onClick={() => setAdding(true)} className="btn-ghost w-full min-h-[48px] flex items-center justify-center gap-2 border border-dashed border-ink-300">
+            <Plus className="w-4 h-4" /> Adicionar outra chave
+          </button>
+        )}
       </div>
-      <div>
-        <label className="label">Chave PIX</label>
-        <input className="input-field" value={form.pixKey} onChange={(e) => setForm((f) => ({ ...f, pixKey: e.target.value }))} placeholder="sua chave" required />
-      </div>
-      <div>
-        <label className="label">Nome do recebedor</label>
-        <input className="input-field" value={form.pixName} onChange={(e) => setForm((f) => ({ ...f, pixName: e.target.value }))} placeholder="Como aparece no PIX" required />
-      </div>
-      <div>
-        <label className="label">Cidade</label>
-        <input className="input-field" value={form.pixCity} onChange={(e) => setForm((f) => ({ ...f, pixCity: e.target.value }))} placeholder="Ex: São Paulo" required />
-      </div>
-        <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
-          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} Salvar
-        </button>
-      </form>
     </Modal>
   );
 }
@@ -571,49 +622,74 @@ function EditChargeModal({ charge, onClose, onSave }) {
   );
 }
 
-// ── Modal: QR Code PIX ─────────────────────────────────────────
-function PixQrModal({ target, pix, pixReady, onClose, onConfigure }) {
+// ── Modal: QR Code PIX + link de pagamento ─────────────────────
+function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure }) {
   const [dataUrl, setDataUrl] = useState('');
   const [payload, setPayload] = useState('');
   const [copied, setCopied] = useState(false);
+  const [link, setLink] = useState('');       // link curto de pagamento
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  // Gera o payload + QR sempre que abre com um novo alvo e o PIX está pronto
+  const amount = target?.openAmount || 0;
+
+  // Gera o payload + QR (preview local) ao abrir
   useEffect(() => {
-    if (!target || !pixReady) { setDataUrl(''); setPayload(''); return; }
-    setCopied(false);
+    if (!target || !pixReady) { setDataUrl(''); setPayload(''); setLink(''); return; }
+    setCopied(false); setLink(''); setLinkCopied(false);
     let alive = true;
     const code = buildPixPayload({
-      key: pix.pixKey, keyType: pix.pixKeyType, name: pix.pixName, city: pix.pixCity,
-      amount: target.amount,
+      key: pixKey.key, keyType: pixKey.key_type, name: pixKey.name, city: pixKey.city, amount,
     });
     setPayload(code);
     setDataUrl('');
     pixQrCodeDataUrl(code).then((url) => { if (alive) setDataUrl(url); }).catch(() => { if (alive) setDataUrl(''); });
     return () => { alive = false; };
-  }, [target, pixReady, pix]);
+  }, [target, pixReady, pixKey, amount]);
 
   async function copy() {
+    try { await navigator.clipboard.writeText(payload); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
+  }
+
+  // Gera o link de pagamento (sobe QR pro Storage + cria pix_link)
+  async function genLink() {
+    setLinkLoading(true);
     try {
-      await navigator.clipboard.writeText(payload);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* ignora */ }
+      const { shortUrl } = await pixLinkService.createPaymentLink({
+        pixKey, amount, recipientName: pixKey.name,
+      });
+      setLink(shortUrl);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); } catch { /* */ }
+  }
+
+  function sendWhats() {
+    const msg = `Oi, ${target?.name || ''}! Segue o link pra pagar via PIX${amount ? ` (${formatCurrency(amount)})` : ''}: ${link}`;
+    window.open(waLink(target?.phone, msg), '_blank', 'noopener');
   }
 
   return (
     <Modal isOpen={!!target} onClose={onClose} title="PIX para receber">
       {!pixReady ? (
         <div className="text-center py-4">
-          <p className="text-sm text-ink-600 mb-4">Configure sua chave PIX primeiro pra gerar o QR Code.</p>
+          <p className="text-sm text-ink-600 mb-4">Cadastre uma chave PIX primeiro pra gerar o QR Code.</p>
           <button onClick={onConfigure} className="btn-primary inline-flex items-center gap-2 min-h-[44px]">
-            <KeyRound className="w-4 h-4" /> Configurar PIX
+            <KeyRound className="w-4 h-4" /> Cadastrar PIX
           </button>
         </div>
       ) : (
         <div className="space-y-4 text-center">
           <div>
             <p className="text-xs text-ink-500">{target?.name} — valor</p>
-            <p className="font-display font-bold text-2xl text-ink-900">{formatCurrency(target?.amount || 0)}</p>
+            <p className="font-display font-bold text-2xl text-ink-900">{formatCurrency(amount)}</p>
+            <p className="text-[11px] text-ink-400 mt-0.5">Recebendo em: {pixKey?.label || pixKey?.name}</p>
           </div>
           {dataUrl ? (
             <img src={dataUrl} alt="QR Code PIX" className="w-56 h-56 mx-auto rounded-2xl border border-ink-100" />
@@ -626,7 +702,27 @@ function PixQrModal({ target, pix, pixReady, onClose, onConfigure }) {
             {copied ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
             {copied ? 'Copiado!' : 'Copiar código PIX'}
           </button>
-          <p className="text-[11px] text-ink-400 break-all px-2">{payload}</p>
+
+          {/* Link de pagamento (página pública /pix/:code) */}
+          {!link ? (
+            <button onClick={genLink} disabled={linkLoading} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
+              {linkLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Link2 className="w-5 h-5" />}
+              Gerar link de pagamento
+            </button>
+          ) : (
+            <div className="space-y-2 animate-slide-up">
+              <div className="flex items-center gap-2 bg-ink-50 rounded-xl p-2">
+                <span className="text-xs text-ink-600 truncate flex-1 ml-1">{link}</span>
+                <button onClick={copyLink} className="px-2.5 py-1.5 rounded-lg bg-white text-ink-700 font-bold text-xs hover:bg-ink-100 flex items-center gap-1">
+                  {linkCopied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
+                  {linkCopied ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+              <button onClick={sendWhats} className="btn-accent w-full min-h-[48px] flex items-center justify-center gap-2">
+                <MessageCircle className="w-5 h-5" /> Enviar link no WhatsApp
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Modal>

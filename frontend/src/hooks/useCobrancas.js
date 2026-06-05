@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { debtorService, chargeService, settingsService } from '../services/cobrancas';
+import { debtorService, chargeService, pixKeyService } from '../services/cobrancas';
 
 /**
  * Hook central da página de Cobranças.
@@ -13,21 +13,21 @@ import { debtorService, chargeService, settingsService } from '../services/cobra
 export function useCobrancas() {
   const [summary, setSummary] = useState([]);    // resumo por devedor (RPC)
   const [charges, setCharges] = useState([]);     // todas as cobranças
-  const [pix, setPix] = useState(null);           // config PIX (ou null)
+  const [pixKeys, setPixKeys] = useState([]);     // chaves PIX cadastradas
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const [sum, chg, settings] = await Promise.all([
+      const [sum, chg, keys] = await Promise.all([
         debtorService.summary(),
         chargeService.list(),
-        settingsService.get(),
+        pixKeyService.list(),
       ]);
       setSummary(sum);
       setCharges(chg);
-      setPix(settings);
+      setPixKeys(keys);
     } catch (err) {
       console.error(err);
       setError('Não foi possível carregar as cobranças.');
@@ -98,21 +98,39 @@ export function useCobrancas() {
     await load();
   }, [load]);
 
-  const savePix = useCallback(async (payload) => {
-    await settingsService.savePix(payload);
-    setPix({
-      pixKey: payload.pixKey || '',
-      pixKeyType: payload.pixKeyType || '',
-      pixName: payload.pixName || '',
-      pixCity: payload.pixCity || '',
-    });
-  }, []);
+  // ── Chaves PIX ──────────────────────────────────────────────
+  const addPixKey = useCallback(async (payload) => {
+    await pixKeyService.create(payload);
+    await load();
+  }, [load]);
+
+  const removePixKey = useCallback(async (id) => {
+    await pixKeyService.remove(id);
+    await load();
+  }, [load]);
+
+  const setDefaultPixKey = useCallback(async (id) => {
+    await pixKeyService.setDefault(id);
+    await load();
+  }, [load]);
+
+  // Chave ativa (padrão, ou a 1ª) + objeto de compatibilidade { pixKey, ... }
+  const activePixKey = useMemo(
+    () => pixKeys.find((k) => k.is_default) || pixKeys[0] || null,
+    [pixKeys]
+  );
+  const pix = useMemo(() => (activePixKey ? {
+    pixKey: activePixKey.key,
+    pixKeyType: activePixKey.key_type,
+    pixName: activePixKey.name,
+    pixCity: activePixKey.city,
+  } : null), [activePixKey]);
 
   return {
-    summary, charges, chargesByDebtor, pix, totals, loading, error,
+    summary, charges, chargesByDebtor, pixKeys, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
     addCharge, addInstallments, updateCharge, setChargePaid, removeCharge,
-    savePix,
+    addPixKey, removePixKey, setDefaultPixKey,
   };
 }

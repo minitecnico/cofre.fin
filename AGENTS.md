@@ -17,6 +17,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/login` | `Login.jsx` | login/registro, OAuth Google | pública |
 | `/reset-password` | `ResetPassword.jsx` | recuperação de senha | pública |
 | `/r/:code` | `RedirectLink.jsx` | encurtador: resolve código → redireciona pro PDF | pública |
+| `/pix/:code` | `PixPay.jsx` | página de pagamento PIX (QR + copia-e-cola + valor) | pública |
 | `/` | `Dashboard.jsx` | KPIs do mês, gráficos, comparação, alertas | Sidebar + BottomNav |
 | `/incomes` | `TransactionListPage.jsx` (type=income) | lista/CRUD receitas | Sidebar + BottomNav |
 | `/expenses` | `TransactionListPage.jsx` (type=expense) | lista/CRUD despesas, swipe-to-delete | Sidebar + BottomNav |
@@ -43,7 +44,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 - **Cartões:** ciclo (`closing_day`/`due_day`), limite ocupado = compras **não pagas** do ciclo. RPCs `get_card_*`.
 - **Alertas (sino):** `services/alerts.js` gera lista (vencidas, cartão alto, saldo negativo). Ações inline no painel: **Marcar paga**, **Adiar 3d** (snooze localStorage), **Ver**. Notificação nativa do navegador opt-in.
 - **Relatórios:** `services/reports.js` → PDF (jsPDF+autotable) com KPIs/categorias/lançamentos. 3 formas de enviar: baixar, **Web Share** (anexo, mobile), **link curto** pra WhatsApp. Link: PDF no Storage `reports` (signed URL ~90d) + código curto em `report_links` → compartilha `<dominio>/r/<code>` (rota pública resolve via RPC `resolve_report_link` e redireciona).
-- **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg pronta + PIX). Relatório PDF com links clicáveis (`cobrancasReport.js`).
+- **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago; **editar** via `EditChargeModal`). **Múltiplas chaves PIX** (`pixKeyService` → tabela `pix_keys`, com padrão). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Link de pagamento** (`pixLinkService.createPaymentLink`): gera QR PNG → bucket público `pix-qr` → `pix_links` → compartilha `<dominio>/pix/<code>` (página `PixPay` pública resolve via RPC `resolve_pix_link`). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg + link). Relatório PDF com links clicáveis (`cobrancasReport.js`).
 - **Assistente IA:** `services/ai.js` chama `/api/ai-chat` (serverless, auth via token Supabase). Análise de documentos (`aiDocuments.js`: mammoth p/ DOCX, pdfjs p/ PDF). Lançamentos por voz/chat.
 - **Import/Export:** `services/importExport.js` (CSV/XLSX), `services/backup.js` (JSON completo).
 - **PWA:** `manifest.json`, install prompt (`useInstallPrompt`). Sem service worker de cache.
@@ -62,17 +63,19 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (PIX), `debtors`, `charges`, `report_links` (encurtador). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento). Todas com RLS `auth.uid() = user_id`.
 
-**Storage:** bucket privado `reports` (PDFs; signed URL). Policies por pasta `{user_id}/...`.
+**Storage:** bucket privado `reports` (PDFs; signed URL) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
-**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_monthly_history`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `get_balance_forecast`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_report_link` (SECURITY DEFINER, pública/anon).
+**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_monthly_history`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `get_balance_forecast`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_report_link` + `resolve_pix_link` (SECURITY DEFINER, pública/anon).
 
 **Migrations** (`supabase/`, rodar em ordem; idempotentes): `schema.sql` + `migration_*.sql`. Aplicar via Dashboard SQL Editor ou `supabase db query --linked -f <arquivo>` (CLI logada). Projeto: `cofre` ref `lnkrplyghpukmovpzkea`.
 
 ---
 
 ## Changelog (alimentar a cada mudança)
+
+- **2026-06-05** — PIX inteligente: **múltiplas chaves** (`pix_keys` + `PixKeysModal`, com padrão) e **link de pagamento** — QR vira imagem PNG no bucket público `pix-qr`, link curto `<dominio>/pix/<code>` → página pública `PixPay` (`/pix/:code`) onde a pessoa paga. Tabela `pix_links` + RPC `resolve_pix_link`. Migration: `migration_pix_keys_links.sql`.
 
 - **2026-06-05** — Cobranças: editar cobrança lançada (canetinha → `EditChargeModal`, `chargeService.update` via hook `updateCharge`).
 

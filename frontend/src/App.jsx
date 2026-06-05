@@ -16,6 +16,7 @@ import Goals from './pages/Goals';
 import ImportExport from './pages/ImportExport';
 import AiAssistant from './pages/AiAssistant';
 import RedirectLink from './pages/RedirectLink';
+import PixPay from './pages/PixPay';
 
 // Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
 const Reports = lazy(() => import('./pages/Reports'));
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/r/:code" element={<RedirectLink />} />
+            <Route path="/pix/:code" element={<PixPay />} />
 
             <Route
               element={

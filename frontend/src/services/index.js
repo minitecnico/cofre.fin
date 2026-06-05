@@ -26,6 +26,16 @@ export async function resolveReportLink(code) {
   return data || null;
 }
 
+/**
+ * Resolve um link de pagamento PIX (/pix/:code) — pra página pública.
+ * Retorna { payload, amount, recipient_name, qr_url } ou null.
+ */
+export async function resolvePixLink(code) {
+  const { data, error } = await supabase.rpc('resolve_pix_link', { p_code: code });
+  if (error) throw error;
+  return (data && data[0]) || null;
+}
+
 export const transactionService = {
   async list(filters = {}) {
     let query = supabase

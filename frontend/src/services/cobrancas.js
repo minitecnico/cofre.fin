@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { currentUserId } from './index';
 import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
+import { buildPixPayload, pixQrCodeDataUrl } from './pix';
 
 /**
  * Services de Cobranças.
@@ -211,5 +212,127 @@ export const settingsService = {
       .single();
     if (error) throw error;
     return data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Chaves PIX (múltiplas)
+// ─────────────────────────────────────────────────────────────────────────
+
+export const pixKeyService = {
+  /** Lista as chaves do usuário (a padrão primeiro). */
+  async list() {
+    const { data, error } = await supabase
+      .from('pix_keys')
+      .select('*')
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async create({ label, key, keyType, name, city, isDefault }) {
+    const userId = await currentUserId();
+    // Se marcou como padrão (ou é a 1ª), desmarca as outras
+    const existing = await this.list();
+    const makeDefault = isDefault || existing.length === 0;
+    if (makeDefault && existing.length) await this._clearDefault(userId);
+
+    const { data, error } = await supabase
+      .from('pix_keys')
+      .insert({
+        user_id: userId,
+        label: label || null,
+        key,
+        key_type: keyType || null,
+        name,
+        city,
+        is_default: makeDefault,
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async remove(id) {
+    const { error } = await supabase.from('pix_keys').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  /** Marca uma chave como padrão (desmarca as demais). */
+  async setDefault(id) {
+    const userId = await currentUserId();
+    await this._clearDefault(userId);
+    const { error } = await supabase.from('pix_keys').update({ is_default: true }).eq('id', id);
+    if (error) throw error;
+  },
+
+  async _clearDefault(userId) {
+    await supabase.from('pix_keys').update({ is_default: false }).eq('user_id', userId);
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Links de pagamento PIX (QR imagem no Storage + link curto público)
+// ─────────────────────────────────────────────────────────────────────────
+
+export const pixLinkService = {
+  /**
+   * Cria um link de pagamento PIX:
+   *   1. monta o copia-e-cola (payload EMV) com a chave escolhida
+   *   2. gera o QR como imagem PNG e sobe pro bucket público `pix-qr`
+   *   3. grava em `pix_links` com um código curto
+   *   4. devolve a URL curta (<dominio>/pix/<code>) pra compartilhar
+   *
+   * @param {Object} args
+   * @param {Object} args.pixKey  linha de pix_keys ({ key, key_type, name, city })
+   * @param {number} [args.amount]
+   * @param {string} [args.recipientName] nome exibido na página (padrão: name da chave)
+   * @returns {Promise<{ shortUrl, payload, qrUrl, code }>}
+   */
+  async createPaymentLink({ pixKey, amount, recipientName }) {
+    const userId = await currentUserId();
+    if (!pixKey?.key) throw new Error('Selecione uma chave PIX.');
+
+    const payload = buildPixPayload({
+      key: pixKey.key,
+      keyType: pixKey.key_type,
+      name: pixKey.name,
+      city: pixKey.city,
+      amount,
+    });
+
+    // QR → imagem PNG → blob
+    const dataUrl = await pixQrCodeDataUrl(payload);
+    const blob = await (await fetch(dataUrl)).blob();
+
+    const code = `${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
+    const path = `${userId}/${code}.png`;
+
+    const { error: upErr } = await supabase.storage
+      .from('pix-qr')
+      .upload(path, blob, { contentType: 'image/png', upsert: true });
+    if (upErr) throw upErr;
+
+    const { data: pub } = supabase.storage.from('pix-qr').getPublicUrl(path);
+    const qrUrl = pub?.publicUrl || null;
+
+    const { error: insErr } = await supabase.from('pix_links').insert({
+      code,
+      user_id: userId,
+      payload,
+      amount: amount ?? null,
+      recipient_name: recipientName || pixKey.name,
+      qr_url: qrUrl,
+    });
+    if (insErr) throw insErr;
+
+    return {
+      shortUrl: `${window.location.origin}/pix/${code}`,
+      payload,
+      qrUrl,
+      code,
+    };
   },
 };
