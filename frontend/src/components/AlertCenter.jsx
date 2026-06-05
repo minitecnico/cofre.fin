@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bell, BellOff, X, AlertCircle, AlertTriangle, Clock,
   CreditCard, TrendingDown, Calendar, CheckCircle2, BellRing,
+  Check, AlarmClock, ChevronRight, Loader2,
 } from 'lucide-react';
 import { useAlerts } from '../hooks/useAlerts';
 import {
@@ -25,7 +26,7 @@ import { formatCurrency } from '../utils/format';
  *   <AlertCenter variant="..."/> // outras variantes
  */
 export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
-  const { alerts, counts, criticalCount, totalCount, loading, dismiss } = useAlerts();
+  const { alerts, counts, criticalCount, totalCount, loading, dismiss, snooze, payExpense } = useAlerts();
   const [open, setOpen] = useState(false);
   const panelRef = useRef(null);
   const buttonRef = useRef(null);
@@ -178,6 +179,8 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
                       alert={alert}
                       onClick={() => handleAlertClick(alert)}
                       onDismiss={() => dismiss(alert.id)}
+                      onSnooze={() => snooze(alert.id, 3)}
+                      onPay={() => payExpense(alert)}
                     />
                   ))}
                 </div>
@@ -193,9 +196,27 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
 /**
  * Item individual de alerta.
  */
-function AlertItem({ alert, onClick, onDismiss }) {
+function AlertItem({ alert, onClick, onDismiss, onSnooze, onPay }) {
   const config = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.info;
   const Icon = KIND_ICONS[alert.kind] || config.icon;
+
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState(false);
+
+  // Só despesas com transação associada podem ser pagas direto do alerta.
+  const canPay = Boolean(alert.meta?.txId);
+
+  async function handlePay(e) {
+    e.stopPropagation();
+    setError(false);
+    setPaying(true);
+    const ok = await onPay();
+    // Em sucesso o alerta some (refresh), então nem chega a re-renderizar.
+    if (!ok) {
+      setPaying(false);
+      setError(true);
+    }
+  }
 
   return (
     <div className={`p-3 hover:bg-ink-50/60 transition-colors group relative ${config.bgClass}`}>
@@ -219,6 +240,41 @@ function AlertItem({ alert, onClick, onDismiss }) {
           <p className="text-xs text-ink-600 mt-0.5 line-clamp-2">{alert.message}</p>
         </div>
       </button>
+
+      {/* Ações inline — agir sem sair do painel */}
+      <div className="flex items-center gap-1.5 mt-2 pl-12 flex-wrap">
+        {canPay && (
+          <button
+            onClick={handlePay}
+            disabled={paying}
+            className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-lg bg-positive/10 text-positive font-bold text-xs hover:bg-positive/20 transition-colors disabled:opacity-60"
+          >
+            {paying
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Check className="w-3.5 h-3.5" strokeWidth={2.5} />}
+            Pagar
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onSnooze(); }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors"
+        >
+          <AlarmClock className="w-3.5 h-3.5" strokeWidth={2.25} />
+          Adiar 3d
+        </button>
+        {alert.link && (
+          <button
+            onClick={onClick}
+            className="inline-flex items-center gap-0.5 px-2.5 py-1 min-h-[32px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors"
+          >
+            Ver
+            <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.25} />
+          </button>
+        )}
+        {error && (
+          <span className="text-xs text-negative font-medium">Falhou — tente de novo</span>
+        )}
+      </div>
 
       {/* Botão dispensar */}
       <button
