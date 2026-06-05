@@ -14,6 +14,18 @@ export async function currentUserId() {
   return data.user?.id;
 }
 
+/**
+ * Resolve um código curto de relatório (/r/:code) na URL real do PDF.
+ * Usa a RPC pública resolve_report_link — funciona pra quem não está logado.
+ * @param {string} code
+ * @returns {Promise<string|null>} URL do PDF ou null se não existir
+ */
+export async function resolveReportLink(code) {
+  const { data, error } = await supabase.rpc('resolve_report_link', { p_code: code });
+  if (error) throw error;
+  return data || null;
+}
+
 export const transactionService = {
   async list(filters = {}) {
     let query = supabase

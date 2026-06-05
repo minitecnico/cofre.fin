@@ -414,11 +414,32 @@ export async function uploadReportAndGetLink({ blob, month }, expiresInSec = 60 
     .createSignedUrl(path, expiresInSec, { download: `relatorio-cofre-${month}.pdf` });
   if (signErr) throw signErr;
 
+  // Encurta: código estável por path → upsert no report_links → link curto no
+  // próprio domínio (/r/<code>). Regerar o relatório mantém o mesmo código.
+  let shortUrl = data.signedUrl;
+  try {
+    const code = shortCodeFor(path);
+    const { error: linkErr } = await supabase
+      .from('report_links')
+      .upsert({ code, user_id: userId, url: data.signedUrl }, { onConflict: 'code' });
+    if (!linkErr) shortUrl = `${window.location.origin}/r/${code}`;
+  } catch { /* se falhar, usa a URL longa mesmo */ }
+
   return {
-    url: data.signedUrl,
+    url: shortUrl,
+    longUrl: data.signedUrl,
     path,
     expiresAt: new Date(Date.now() + expiresInSec * 1000),
   };
+}
+
+/** Código curto determinístico a partir do path (djb2 → base36). */
+function shortCodeFor(path) {
+  let h = 5381;
+  for (let i = 0; i < path.length; i += 1) {
+    h = ((h << 5) + h + path.charCodeAt(i)) >>> 0; // djb2, mantém uint32
+  }
+  return h.toString(36).padStart(7, '0');
 }
 
 /** Baixa o PDF localmente (pra anexar manualmente ou guardar). */

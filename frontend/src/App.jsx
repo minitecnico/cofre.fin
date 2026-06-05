@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import ImportExport from './pages/ImportExport';
 import AiAssistant from './pages/AiAssistant';
+import RedirectLink from './pages/RedirectLink';
 
 // Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
 const Reports = lazy(() => import('./pages/Reports'));
@@ -28,6 +29,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/r/:code" element={<RedirectLink />} />
 
             <Route
               element={
