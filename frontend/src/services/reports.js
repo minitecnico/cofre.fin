@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { transactionService, dashboardService } from './index';
+import { supabase } from './supabase';
+import { transactionService, dashboardService, currentUserId } from './index';
 import { formatCurrency, formatDate } from '../utils/format';
 
 /**
@@ -384,6 +385,40 @@ export function openWhatsappText(text, phone) {
   const base = num ? `https://wa.me/${num}` : 'https://wa.me/';
   const url = `${base}?text=${encodeURIComponent(text)}`;
   window.open(url, '_blank', 'noopener');
+}
+
+/**
+ * Sobe o PDF pro Supabase Storage (bucket privado 'reports') e devolve um
+ * link assinado que BAIXA o arquivo — o destinatário não precisa de login.
+ *
+ * Path: '{userId}/relatorio-YYYY-MM.pdf' (upsert: regerar sobrescreve).
+ * Requer a migration migration_reports_storage.sql aplicada.
+ *
+ * @param {{ blob: Blob, month: string }} args
+ * @param {number} [expiresInSec] validade do link (padrão 90 dias)
+ * @returns {Promise<{ url: string, path: string, expiresAt: Date }>}
+ */
+export async function uploadReportAndGetLink({ blob, month }, expiresInSec = 60 * 60 * 24 * 90) {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Usuário não autenticado.');
+
+  const path = `${userId}/relatorio-${month}.pdf`;
+
+  const { error: upErr } = await supabase.storage
+    .from('reports')
+    .upload(path, blob, { contentType: 'application/pdf', upsert: true });
+  if (upErr) throw upErr;
+
+  const { data, error: signErr } = await supabase.storage
+    .from('reports')
+    .createSignedUrl(path, expiresInSec, { download: `relatorio-cofre-${month}.pdf` });
+  if (signErr) throw signErr;
+
+  return {
+    url: data.signedUrl,
+    path,
+    expiresAt: new Date(Date.now() + expiresInSec * 1000),
+  };
 }
 
 /** Baixa o PDF localmente (pra anexar manualmente ou guardar). */

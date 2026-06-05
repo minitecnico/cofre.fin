@@ -9,7 +9,7 @@ import { supabase } from './supabase';
  * No insert SIM precisamos: o supabase exige user_id pelo policy "with check".
  */
 
-async function currentUserId() {
+export async function currentUserId() {
   const { data } = await supabase.auth.getUser();
   return data.user?.id;
 }

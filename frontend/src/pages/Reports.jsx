@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   FileText, Download, Share2, MessageCircle, Loader2, CheckCircle2,
-  TrendingUp, TrendingDown, Wallet, Clock,
+  TrendingUp, TrendingDown, Wallet, Clock, Link2, Copy, Check,
 } from 'lucide-react';
 import MonthSelector from '../components/MonthSelector';
 import { useMonth } from '../context/MonthContext';
@@ -13,6 +13,7 @@ import {
   shareReportFile,
   openWhatsappText,
   downloadPdf,
+  uploadReportAndGetLink,
 } from '../services/reports';
 
 /**
@@ -32,6 +33,10 @@ export default function Reports() {
   const [pdf, setPdf] = useState(null);        // { blob, filename }
   const [phone, setPhone] = useState('');
   const [sendMsg, setSendMsg] = useState('');
+  const [link, setLink] = useState('');         // URL assinada do PDF no Storage
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // ── Campo 1: gerar ──────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -40,6 +45,9 @@ export default function Reports() {
     setReport(null);
     setPdf(null);
     setSendMsg('');
+    setLink('');
+    setLinkError('');
+    setCopied(false);
     try {
       const data = await buildReportData(month);
       const file = generatePdf(data);
@@ -78,6 +86,38 @@ export default function Reports() {
     openWhatsappText(text, phone);
     setSendMsg('Abrimos o WhatsApp com o resumo. O PDF foi baixado — anexe na conversa.');
   }, [report, pdf, phone]);
+
+  // ── Campo 2b: gerar link do PDF (Storage) e enviar ──────────
+  const handleGenerateLink = useCallback(async () => {
+    if (!report || !pdf) return;
+    setLinkLoading(true);
+    setLinkError('');
+    setCopied(false);
+    try {
+      const { url } = await uploadReportAndGetLink({ blob: pdf.blob, month: report.month });
+      setLink(url);
+    } catch (err) {
+      console.error(err);
+      setLinkError('Não foi possível gerar o link. Confirme se o Storage está configurado.');
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [report, pdf]);
+
+  async function handleCopyLink() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard indisponível */ }
+  }
+
+  function handleSendLink() {
+    if (!link || !report) return;
+    const text = `${buildWhatsappText(report)}\n\n📄 Baixar relatório (PDF): ${link}`;
+    openWhatsappText(text, phone);
+  }
 
   return (
     <div className="space-y-5 pb-6 animate-fade-in">
@@ -188,6 +228,52 @@ export default function Reports() {
           <p className="text-sm text-positive font-medium flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> {sendMsg}
           </p>
+        )}
+
+        {/* Separador */}
+        <div className="flex items-center gap-3 pt-1">
+          <div className="flex-1 h-px bg-ink-100" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">ou por link</span>
+          <div className="flex-1 h-px bg-ink-100" />
+        </div>
+
+        {!link ? (
+          <button
+            onClick={handleGenerateLink}
+            disabled={!report || linkLoading}
+            className="btn-ghost w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {linkLoading
+              ? <><Loader2 className="w-5 h-5 animate-spin" /> Gerando link…</>
+              : <><Link2 className="w-5 h-5" /> Gerar link do PDF</>}
+          </button>
+        ) : (
+          <div className="space-y-2 animate-slide-up">
+            <div className="flex items-center gap-2 bg-ink-50 rounded-xl p-2">
+              <Link2 className="w-4 h-4 text-ink-400 flex-shrink-0 ml-1" />
+              <span className="text-xs text-ink-600 truncate flex-1">{link}</span>
+              <button
+                onClick={handleCopyLink}
+                className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-white text-ink-700 font-bold text-xs hover:bg-ink-100 flex items-center gap-1 flex-shrink-0 transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+            </div>
+            <p className="text-[11px] text-ink-400">
+              Link válido por ~90 dias. Quem abrir baixa o PDF — não precisa de login.
+            </p>
+            <button
+              onClick={handleSendLink}
+              className="btn-accent w-full min-h-[48px] flex items-center justify-center gap-2"
+            >
+              <MessageCircle className="w-5 h-5" /> Enviar link no WhatsApp
+            </button>
+          </div>
+        )}
+
+        {linkError && (
+          <p className="text-sm text-negative font-medium">{linkError}</p>
         )}
       </section>
     </div>
