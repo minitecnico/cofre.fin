@@ -75,6 +75,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-06-05** — Cobranças (funcional): cadastrar cobrança no topo (botão "Cobrança" → `CobrancaQuickForm`); **multi-seleção** de cobranças/parcelas (checkbox + selecionar todas) com barra em lote: **PIX das selecionadas** (soma → QR → link → WhatsApp), **PDF das selecionadas** e **excluir em lote** (`chargeService.removeMany` / hook `removeCharges`). Editar via canetinha (já existia).
+
 - **2026-06-05** — PIX inteligente: **múltiplas chaves** (`pix_keys` + `PixKeysModal`, com padrão) e **link de pagamento** — QR vira imagem PNG no bucket público `pix-qr`, link curto `<dominio>/pix/<code>` → página pública `PixPay` (`/pix/:code`) onde a pessoa paga. Tabela `pix_links` + RPC `resolve_pix_link`. Migration: `migration_pix_keys_links.sql`.
 
 - **2026-06-05** — Cobranças: editar cobrança lançada (canetinha → `EditChargeModal`, `chargeService.update` via hook `updateCharge`).

@@ -98,6 +98,11 @@ export function useCobrancas() {
     await load();
   }, [load]);
 
+  const removeCharges = useCallback(async (ids) => {
+    await chargeService.removeMany(ids);
+    await load();
+  }, [load]);
+
   // ── Chaves PIX ──────────────────────────────────────────────
   const addPixKey = useCallback(async (payload) => {
     await pixKeyService.create(payload);
@@ -130,7 +135,7 @@ export function useCobrancas() {
     summary, charges, chargesByDebtor, pixKeys, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
-    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge,
+    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge, removeCharges,
     addPixKey, removePixKey, setDefaultPixKey,
   };
 }

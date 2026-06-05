@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
+import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
 import { formatCurrency, formatDate, parseAmount } from '../utils/format';
@@ -30,7 +31,8 @@ export default function Cobrancas() {
   const c = useCobrancas();
   const pixModal = useDisclosure();
   const debtorModal = useDisclosure();
-  const [qrTarget, setQrTarget] = useState(null);     // { name, amount } p/ modal QR
+  const addChargeModal = useDisclosure();
+  const [qrTarget, setQrTarget] = useState(null);     // { name, openAmount, phone } p/ modal QR
   const [chargeTarget, setChargeTarget] = useState(null); // devedor p/ nova cobrança
   const [editTarget, setEditTarget] = useState(null);     // cobrança em edição
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -95,6 +97,41 @@ export default function Cobrancas() {
     window.open(waLink(debtor.phone, text), '_blank', 'noopener');
   }
 
+  // Gera PIX (QR + link) só das parcelas/cobranças selecionadas → abre o modal
+  function handleGenPixForCharges(debtor, selectedCharges) {
+    const sum = selectedCharges.reduce((s, x) => s + Number(x.amount), 0);
+    setQrTarget({ name: debtor.name, phone: debtor.phone, openAmount: sum });
+  }
+
+  // Relatório PDF só das cobranças selecionadas de um devedor
+  function handleReportCharges(debtor, selectedCharges) {
+    const open = selectedCharges.filter((x) => !x.paid);
+    const reminderText = pixReady
+      ? buildReminderText(debtor.name, open, {
+          pixPayload: buildPixPayload({
+            key: c.pix.pixKey, keyType: c.pix.pixKeyType, name: c.pix.pixName, city: c.pix.pixCity,
+            amount: selectedCharges.reduce((s, x) => s + Number(x.amount), 0),
+          }),
+          ownerName: c.pix.pixName,
+        })
+      : buildReminderText(debtor.name, open);
+    const openSum = open.reduce((s, x) => s + Number(x.amount), 0);
+    const overdueSum = open
+      .filter((x) => x.due_date && x.due_date < new Date().toISOString().slice(0, 10))
+      .reduce((s, x) => s + Number(x.amount), 0);
+    const report = {
+      debtors: [{
+        name: debtor.name, phone: debtor.phone,
+        openAmount: openSum, overdueAmount: overdueSum,
+        charges: selectedCharges, reminderText,
+      }],
+      totalOpen: openSum,
+      totalOverdue: overdueSum,
+    };
+    const { blob, filename } = generateChargesPdf(report);
+    downloadPdf(blob, filename);
+  }
+
   return (
     <div className="space-y-5 pb-6 animate-fade-in">
       {/* Cabeçalho */}
@@ -103,9 +140,14 @@ export default function Cobrancas() {
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Cobranças</h1>
           <p className="text-ink-500 text-sm mt-1">Controle quem te deve e cobre pelo WhatsApp.</p>
         </div>
-        <button onClick={debtorModal.open} className="btn-primary min-h-[44px] flex items-center gap-2 flex-shrink-0">
-          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Pessoa</span>
-        </button>
+        <div className="flex gap-2 flex-shrink-0">
+          <button onClick={addChargeModal.open} className="btn-accent min-h-[44px] flex items-center gap-2">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Cobrança</span>
+          </button>
+          <button onClick={debtorModal.open} className="btn-primary min-h-[44px] flex items-center gap-2">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Pessoa</span>
+          </button>
+        </div>
       </div>
 
       {/* Resumo de totais */}
@@ -150,6 +192,9 @@ export default function Cobrancas() {
               onEditCharge={setEditTarget}
               onRemoveCharge={c.removeCharge}
               onRemoveDebtor={() => c.removeDebtor(d.debtorId)}
+              onGenPixForCharges={handleGenPixForCharges}
+              onReportCharges={handleReportCharges}
+              onDeleteCharges={c.removeCharges}
               pixReady={pixReady}
             />
           ))}
@@ -166,6 +211,14 @@ export default function Cobrancas() {
         onSetDefault={c.setDefaultPixKey}
       />
       <DebtorModal isOpen={debtorModal.isOpen} onClose={debtorModal.close} onSave={c.addDebtor} />
+
+      {/* Cadastrar cobrança direto (escolhe/cria a pessoa) */}
+      <Modal isOpen={addChargeModal.isOpen} onClose={addChargeModal.close} title="Nova cobrança">
+        <CobrancaQuickForm
+          onSaved={() => { addChargeModal.close(); c.reload(); }}
+          onCancel={addChargeModal.close}
+        />
+      </Modal>
       <ChargeModal
         debtor={chargeTarget}
         onClose={() => setChargeTarget(null)}
@@ -220,9 +273,29 @@ function EmptyState({ onAdd }) {
   );
 }
 
-function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onEditCharge, onRemoveCharge, onRemoveDebtor, pixReady }) {
+function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onEditCharge, onRemoveCharge, onRemoveDebtor, onGenPixForCharges, onReportCharges, onDeleteCharges, pixReady }) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
   const hasOverdue = debtor.overdueCount > 0;
+
+  function toggleSel(id) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+  const clearSel = () => setSelected(new Set());
+  const allSelected = charges.length > 0 && selected.size === charges.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(charges.map((c) => c.id)));
+
+  const selectedCharges = charges.filter((c) => selected.has(c.id));
+  const selSum = selectedCharges.reduce((s, c) => s + Number(c.amount), 0);
+
+  async function handleDelete() {
+    await onDeleteCharges([...selected]);
+    clearSel();
+  }
 
   return (
     <div className="card-flat overflow-hidden">
@@ -267,13 +340,52 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
 
       {/* Lista de cobranças (expandida) */}
       {open && (
-        <div className="border-t border-ink-100 divide-y divide-ink-50 animate-slide-up">
+        <div className="border-t border-ink-100 animate-slide-up">
           {charges.length === 0 ? (
             <p className="p-3 text-xs text-ink-400 text-center">Sem cobranças. Use “Cobrança” pra adicionar.</p>
           ) : (
-            charges.map((ch) => (
-              <ChargeRow key={ch.id} charge={ch} onSetPaid={onSetPaid} onEdit={onEditCharge} onRemove={onRemoveCharge} />
-            ))
+            <>
+              {/* Selecionar todas */}
+              <button onClick={toggleAll} className="w-full px-3 py-2 flex items-center gap-2 text-[11px] font-semibold text-ink-500 hover:bg-ink-50 transition-colors">
+                <SelectBox checked={allSelected} />
+                {allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
+              </button>
+
+              <div className="divide-y divide-ink-50">
+                {charges.map((ch) => (
+                  <ChargeRow
+                    key={ch.id}
+                    charge={ch}
+                    selected={selected.has(ch.id)}
+                    onToggleSelect={() => toggleSel(ch.id)}
+                    onSetPaid={onSetPaid}
+                    onEdit={onEditCharge}
+                    onRemove={onRemoveCharge}
+                  />
+                ))}
+              </div>
+
+              {/* Barra de ação em lote */}
+              {selected.size > 0 && (
+                <div className="p-2.5 bg-ink-900 text-white flex items-center gap-2 flex-wrap text-xs sticky bottom-0 animate-slide-up">
+                  <span className="font-bold">{selected.size} sel. · {formatCurrency(selSum)}</span>
+                  <div className="flex gap-1.5 ml-auto">
+                    {pixReady && (
+                      <button onClick={() => onGenPixForCharges(debtor, selectedCharges)} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg bg-accent text-ink-900 font-bold hover:bg-accent-light transition-colors">
+                        <QrCode className="w-3.5 h-3.5" /> PIX
+                      </button>
+                    )}
+                    <button onClick={() => onReportCharges(debtor, selectedCharges)} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg bg-white/15 text-white font-bold hover:bg-white/25 transition-colors">
+                      <FileText className="w-3.5 h-3.5" /> PDF
+                    </button>
+                    <button onClick={handleDelete} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg bg-negative text-white font-bold hover:opacity-90 transition-opacity">
+                      <Trash2 className="w-3.5 h-3.5" /> Excluir
+                    </button>
+                    <button onClick={clearSel} className="px-2 py-1.5 min-h-[34px] rounded-lg text-white/70 hover:text-white font-bold">limpar</button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -281,11 +393,27 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
   );
 }
 
-function ChargeRow({ charge, onSetPaid, onEdit, onRemove }) {
+/** Caixinha de seleção (visual). */
+function SelectBox({ checked }) {
+  return (
+    <span className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
+      checked ? 'bg-ink-900 text-white' : 'border-2 border-ink-300 text-transparent'
+    }`}>
+      <Check className="w-3 h-3" strokeWidth={3} />
+    </span>
+  );
+}
+
+function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemove }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdue = !charge.paid && charge.due_date && charge.due_date < today;
   return (
-    <div className="p-3 flex items-center gap-3">
+    <div className={`p-3 flex items-center gap-2.5 ${selected ? 'bg-accent/5' : ''}`}>
+      {/* Checkbox de seleção */}
+      <button onClick={onToggleSelect} className="flex-shrink-0" title="Selecionar" aria-label="Selecionar cobrança">
+        <SelectBox checked={selected} />
+      </button>
+      {/* Toggle pago */}
       <button
         onClick={() => onSetPaid(charge.id, !charge.paid)}
         className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
