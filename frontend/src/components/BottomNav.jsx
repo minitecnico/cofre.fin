@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Repeat, Sparkles } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Repeat, Sparkles, FileText } from 'lucide-react';
 
 const links = [
   { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
@@ -8,12 +8,13 @@ const links = [
   { to: '/cards', label: 'Cartões', icon: CreditCard },
   { to: '/recurring', label: 'Recorr.', icon: Repeat },
   { to: '/goals', label: 'Metas', icon: Sparkles },
+  { to: '/reports', label: 'Relat.', icon: FileText },
 ];
 
 export default function BottomNav() {
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-gradient-dark text-ink-50 grid grid-cols-6 shadow-soft-xl"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-gradient-dark text-ink-50 grid grid-cols-7 shadow-soft-xl"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {links.map(({ to, label, icon: Icon, end }) => (
