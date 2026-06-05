@@ -83,6 +83,11 @@ export function useCobrancas() {
     await load();
   }, [load]);
 
+  const updateCharge = useCallback(async (id, patch) => {
+    await chargeService.update(id, patch);
+    await load();
+  }, [load]);
+
   const setChargePaid = useCallback(async (id, paid) => {
     await chargeService.setPaid(id, paid);
     await load();
@@ -107,7 +112,7 @@ export function useCobrancas() {
     summary, charges, chargesByDebtor, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
-    addCharge, addInstallments, setChargePaid, removeCharge,
+    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge,
     savePix,
   };
 }

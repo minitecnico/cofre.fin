@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText, Download,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
-  AlertTriangle, Wallet, Share2, CreditCard,
+  AlertTriangle, Wallet, Share2, CreditCard, Pencil,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
@@ -31,6 +31,7 @@ export default function Cobrancas() {
   const debtorModal = useDisclosure();
   const [qrTarget, setQrTarget] = useState(null);     // { name, amount } p/ modal QR
   const [chargeTarget, setChargeTarget] = useState(null); // devedor p/ nova cobrança
+  const [editTarget, setEditTarget] = useState(null);     // cobrança em edição
   const [pdfBusy, setPdfBusy] = useState(false);
 
   const pixReady = c.pix?.pixKey && c.pix?.pixName && c.pix?.pixCity;
@@ -145,6 +146,7 @@ export default function Cobrancas() {
               onCharge={() => handleCharge(d)}
               onShowQr={() => setQrTarget({ name: d.name, amount: d.openAmount })}
               onSetPaid={c.setChargePaid}
+              onEditCharge={setEditTarget}
               onRemoveCharge={c.removeCharge}
               onRemoveDebtor={() => c.removeDebtor(d.debtorId)}
               pixReady={pixReady}
@@ -161,6 +163,11 @@ export default function Cobrancas() {
         onClose={() => setChargeTarget(null)}
         onSave={c.addCharge}
         onSaveInstallments={c.addInstallments}
+      />
+      <EditChargeModal
+        charge={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSave={c.updateCharge}
       />
       <PixQrModal
         target={qrTarget}
@@ -205,7 +212,7 @@ function EmptyState({ onAdd }) {
   );
 }
 
-function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onRemoveCharge, onRemoveDebtor, pixReady }) {
+function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onEditCharge, onRemoveCharge, onRemoveDebtor, pixReady }) {
   const [open, setOpen] = useState(false);
   const hasOverdue = debtor.overdueCount > 0;
 
@@ -257,7 +264,7 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
             <p className="p-3 text-xs text-ink-400 text-center">Sem cobranças. Use “Cobrança” pra adicionar.</p>
           ) : (
             charges.map((ch) => (
-              <ChargeRow key={ch.id} charge={ch} onSetPaid={onSetPaid} onRemove={onRemoveCharge} />
+              <ChargeRow key={ch.id} charge={ch} onSetPaid={onSetPaid} onEdit={onEditCharge} onRemove={onRemoveCharge} />
             ))
           )}
         </div>
@@ -266,7 +273,7 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
   );
 }
 
-function ChargeRow({ charge, onSetPaid, onRemove }) {
+function ChargeRow({ charge, onSetPaid, onEdit, onRemove }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdue = !charge.paid && charge.due_date && charge.due_date < today;
   return (
@@ -293,6 +300,9 @@ function ChargeRow({ charge, onSetPaid, onRemove }) {
       <span className={`font-mono font-bold text-sm ${charge.paid ? 'text-ink-400' : 'text-ink-900'}`}>
         {formatCurrency(charge.amount)}
       </span>
+      <button onClick={() => onEdit(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Editar">
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
       <button onClick={() => onRemove(charge.id)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center flex-shrink-0" title="Remover">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
@@ -494,6 +504,67 @@ function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
         <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
           {parcelado ? `Adicionar ${count}x` : 'Adicionar cobrança'}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Modal: editar cobrança ─────────────────────────────────────
+function EditChargeModal({ charge, onClose, onSave }) {
+  const [form, setForm] = useState({ description: '', amount: '', dueDate: '' });
+  const [saving, setSaving] = useState(false);
+
+  // Carrega os valores da cobrança ao abrir
+  useEffect(() => {
+    if (charge) {
+      setForm({
+        description: charge.description || '',
+        amount: String(charge.amount ?? ''),
+        dueDate: charge.due_date || '',
+      });
+    }
+  }, [charge]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const amount = parseAmount(form.amount);
+    if (!form.description.trim() || amount <= 0) return;
+    setSaving(true);
+    try {
+      await onSave(charge.id, {
+        description: form.description.trim(),
+        amount,
+        due_date: form.dueDate || null,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={!!charge} onClose={onClose} title="Editar cobrança">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="label">Descrição</label>
+          <input className="input-field" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required autoFocus />
+        </div>
+        <div>
+          <label className="label">Valor</label>
+          <input className="input-field" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required />
+        </div>
+        <div>
+          <label className="label">Vencimento (opcional)</label>
+          <input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
+        </div>
+        {charge?.installment_total > 1 && (
+          <p className="text-[11px] text-ink-400">
+            Parcela {charge.installment_number}/{charge.installment_total} — editar afeta só esta parcela.
+          </p>
+        )}
+        <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} Salvar
         </button>
       </form>
     </Modal>

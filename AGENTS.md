@@ -74,6 +74,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-06-05** — Cobranças: editar cobrança lançada (canetinha → `EditChargeModal`, `chargeService.update` via hook `updateCharge`).
+
 - **2026-06-05** — UI: removido o spinner nativo feio de `input[type=number]` (CSS global em `styles/index.css`); parcelas usam `Stepper.jsx` (−/+) reutilizável.
 
 - **2026-06-05** — Encurtador de link: rota pública `/r/:code` (`RedirectLink.jsx`) + tabela `report_links` + RPC `resolve_report_link`. Relatório agora compartilha link curto no domínio próprio. Migration: `migration_report_links.sql`.
