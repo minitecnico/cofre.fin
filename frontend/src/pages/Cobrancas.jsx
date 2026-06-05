@@ -351,13 +351,14 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
                 {allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
               </button>
 
-              <div className="divide-y divide-ink-50">
-                {charges.map((ch) => (
-                  <ChargeRow
-                    key={ch.id}
-                    charge={ch}
-                    selected={selected.has(ch.id)}
-                    onToggleSelect={() => toggleSel(ch.id)}
+              {/* Cada cobrança é um bloco. Parcelamento vira um bloco agrupado. */}
+              <div className="p-3 space-y-2">
+                {groupCharges(charges).map((g) => (
+                  <ChargeBlock
+                    key={g.groupId || g.items[0].id}
+                    group={g}
+                    selected={selected}
+                    onToggleSelect={toggleSel}
                     onSetPaid={onSetPaid}
                     onEdit={onEditCharge}
                     onRemove={onRemoveCharge}
@@ -393,6 +394,83 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
   );
 }
 
+/**
+ * Agrupa as cobranças em blocos: cada avulsa é um bloco; parcelas do mesmo
+ * installment_group_id viram UM bloco agrupado.
+ */
+function groupCharges(charges) {
+  const groups = [];
+  const byGroup = new Map();
+  for (const c of charges) {
+    if (c.installment_group_id) {
+      let g = byGroup.get(c.installment_group_id);
+      if (!g) {
+        g = { type: 'installment', groupId: c.installment_group_id, items: [] };
+        byGroup.set(c.installment_group_id, g);
+        groups.push(g);
+      }
+      g.items.push(c);
+    } else {
+      groups.push({ type: 'single', items: [c] });
+    }
+  }
+  for (const g of groups) {
+    if (g.type === 'installment') g.items.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
+  }
+  return groups;
+}
+
+/** Bloco de uma cobrança (avulsa) ou de um parcelamento (agrupado). */
+function ChargeBlock({ group, selected, onToggleSelect, onSetPaid, onEdit, onRemove }) {
+  if (group.type === 'single') {
+    const ch = group.items[0];
+    return (
+      <div className="rounded-xl border border-ink-200 overflow-hidden bg-white shadow-soft">
+        <ChargeRow
+          charge={ch}
+          selected={selected.has(ch.id)}
+          onToggleSelect={() => onToggleSelect(ch.id)}
+          onSetPaid={onSetPaid}
+          onEdit={onEdit}
+          onRemove={onRemove}
+        />
+      </div>
+    );
+  }
+
+  // Parcelamento — bloco com cabeçalho + parcelas
+  const items = group.items;
+  const base = items[0].description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
+  const total = items.reduce((s, c) => s + Number(c.amount), 0);
+  const n = items[0].installment_total || items.length;
+  const paidCount = items.filter((c) => c.paid).length;
+
+  return (
+    <div className="rounded-xl border border-ink-200 overflow-hidden bg-white shadow-soft">
+      <div className="px-3 py-2 bg-ink-50 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-ink-900 truncate">{base}</p>
+          <p className="text-[11px] text-ink-500">{n}x · {formatCurrency(total)} · {paidCount}/{n} pagas</p>
+        </div>
+        <CreditCard className="w-4 h-4 text-ink-400 flex-shrink-0" />
+      </div>
+      <div className="divide-y divide-ink-50">
+        {items.map((c) => (
+          <ChargeRow
+            key={c.id}
+            charge={c}
+            selected={selected.has(c.id)}
+            onToggleSelect={() => onToggleSelect(c.id)}
+            onSetPaid={onSetPaid}
+            onEdit={onEdit}
+            onRemove={onRemove}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Caixinha de seleção (visual). */
 function SelectBox({ checked }) {
   return (
@@ -407,6 +485,10 @@ function SelectBox({ checked }) {
 function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemove }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdue = !charge.paid && charge.due_date && charge.due_date < today;
+  // Em parcelamento o nome base fica no cabeçalho do bloco; a linha mostra a parcela.
+  const label = charge.installment_total > 1
+    ? `Parcela ${charge.installment_number}/${charge.installment_total}`
+    : charge.description;
   return (
     <div className={`p-3 flex items-center gap-2.5 ${selected ? 'bg-accent/5' : ''}`}>
       {/* Checkbox de seleção */}
@@ -425,7 +507,7 @@ function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemo
       </button>
       <div className="min-w-0 flex-1">
         <p className={`text-sm font-medium truncate ${charge.paid ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
-          {charge.description}
+          {label}
         </p>
         {charge.due_date && (
           <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
