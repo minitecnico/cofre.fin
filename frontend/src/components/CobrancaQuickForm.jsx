@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Loader2, CreditCard, UserPlus, HandCoins } from 'lucide-react';
+import { Plus, Minus, Loader2, CreditCard, UserPlus, HandCoins } from 'lucide-react';
 import { debtorService, chargeService } from '../services/cobrancas';
 import { formatCurrency, parseAmount } from '../utils/format';
+import Stepper from './Stepper';
 
 /**
  * Form rápido de Cobrança — usado pelo botão "+" (FAB), lado a lado com a
@@ -133,8 +134,7 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         <div className="space-y-2 animate-slide-up">
           <div>
             <label className="label">Número de parcelas</label>
-            <input className="input-field" type="number" min="2" max="48" value={count}
-              onChange={(e) => setCount(Math.max(2, Math.min(48, Number(e.target.value) || 2)))} />
+            <Stepper value={count} min={2} max={48} onChange={setCount} suffix="x" />
           </div>
           {perParcel > 0 && (
             <p className="text-xs text-ink-500">{count}x de aprox. <span className="font-bold text-ink-800">{formatCurrency(perParcel)}</span> — uma por mês.</p>

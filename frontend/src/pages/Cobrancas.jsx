@@ -5,6 +5,7 @@ import {
   AlertTriangle, Wallet, Share2, CreditCard,
 } from 'lucide-react';
 import Modal from '../components/Modal';
+import Stepper from '../components/Stepper';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
 import { formatCurrency, formatDate, parseAmount } from '../utils/format';
@@ -475,15 +476,7 @@ function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
           <div className="space-y-2 animate-slide-up">
             <div>
               <label className="label">Número de parcelas</label>
-              <input
-                className="input-field"
-                type="number"
-                min="2"
-                max="48"
-                value={count}
-                onChange={(e) => setCount(Math.max(2, Math.min(48, Number(e.target.value) || 2)))}
-                required
-              />
+              <Stepper value={count} min={2} max={48} onChange={setCount} suffix="x" />
             </div>
             {perParcel > 0 && (
               <p className="text-xs text-ink-500">

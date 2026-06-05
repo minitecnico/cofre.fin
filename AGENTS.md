@@ -74,6 +74,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-06-05** — UI: removido o spinner nativo feio de `input[type=number]` (CSS global em `styles/index.css`); parcelas usam `Stepper.jsx` (−/+) reutilizável.
+
 - **2026-06-05** — Encurtador de link: rota pública `/r/:code` (`RedirectLink.jsx`) + tabela `report_links` + RPC `resolve_report_link`. Relatório agora compartilha link curto no domínio próprio. Migration: `migration_report_links.sql`.
 - **2026-06-05** — FAB ("+"): seletor Transação | **Cobrança** (`CobrancaQuickForm.jsx`, escolhe/cria devedor + parcela), lançar cobrança de qualquer tela.
 - **2026-06-05** — Cobranças: módulo novo (devedores, dívidas, PIX/QR, WhatsApp, PDF) + parcelamento. Relatórios: PDF mensal + link via Storage + WhatsApp. Alertas: ações inline (pagar/adiar/ver). BottomNav: 5 + "Mais". Fix PIX: POI estático "11", normalização de chave, txid "***". Migrations: `migration_cobrancas.sql`, `migration_cobrancas_installments.sql`, `migration_reports_storage.sql`.
