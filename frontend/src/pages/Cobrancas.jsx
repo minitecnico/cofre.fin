@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText, Download,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
-  AlertTriangle, Wallet, Share2,
+  AlertTriangle, Wallet, Share2, CreditCard,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useDisclosure } from '../hooks/useDisclosure';
@@ -46,8 +46,8 @@ export default function Cobrancas() {
           const reminderText = pixReady
             ? buildReminderText(d.name, open, {
                 pixPayload: buildPixPayload({
-                  key: c.pix.pixKey, name: c.pix.pixName, city: c.pix.pixCity,
-                  amount: d.openAmount, txid: 'COBRANCA',
+                  key: c.pix.pixKey, keyType: c.pix.pixKeyType, name: c.pix.pixName, city: c.pix.pixCity,
+                  amount: d.openAmount,
                 }),
                 ownerName: c.pix.pixName,
               })
@@ -84,8 +84,8 @@ export default function Cobrancas() {
     const open = charges.filter((x) => !x.paid);
     const pixPayload = pixReady
       ? buildPixPayload({
-          key: c.pix.pixKey, name: c.pix.pixName, city: c.pix.pixCity,
-          amount: debtor.openAmount, txid: 'COBRANCA',
+          key: c.pix.pixKey, keyType: c.pix.pixKeyType, name: c.pix.pixName, city: c.pix.pixCity,
+          amount: debtor.openAmount,
         })
       : undefined;
     const text = buildReminderText(debtor.name, open, { pixPayload, ownerName: c.pix?.pixName });
@@ -159,6 +159,7 @@ export default function Cobrancas() {
         debtor={chargeTarget}
         onClose={() => setChargeTarget(null)}
         onSave={c.addCharge}
+        onSaveInstallments={c.addInstallments}
       />
       <PixQrModal
         target={qrTarget}
@@ -401,18 +402,41 @@ function DebtorModal({ isOpen, onClose, onSave }) {
 }
 
 // ── Modal: adicionar cobrança a um devedor ─────────────────────
-function ChargeModal({ debtor, onClose, onSave }) {
+function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
   const [form, setForm] = useState({ description: '', amount: '', dueDate: '' });
+  const [parcelado, setParcelado] = useState(false);
+  const [count, setCount] = useState(2);
   const [saving, setSaving] = useState(false);
+
+  function reset() {
+    setForm({ description: '', amount: '', dueDate: '' });
+    setParcelado(false);
+    setCount(2);
+  }
+
+  const total = parseAmount(form.amount);
+  // Prévia do valor de cada parcela (1ª pega o centavo extra)
+  const perParcel = parcelado && total > 0 && count > 1
+    ? Math.floor((total / count) * 100) / 100
+    : 0;
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const amount = parseAmount(form.amount);
-    if (!form.description.trim() || amount <= 0) return;
+    if (!form.description.trim() || total <= 0) return;
     setSaving(true);
     try {
-      await onSave({ debtorId: debtor.debtorId, description: form.description.trim(), amount, dueDate: form.dueDate || null });
-      setForm({ description: '', amount: '', dueDate: '' });
+      if (parcelado && count > 1) {
+        await onSaveInstallments({
+          debtorId: debtor.debtorId,
+          description: form.description.trim(),
+          totalAmount: total,
+          count,
+          firstDueDate: form.dueDate || null,
+        });
+      } else {
+        await onSave({ debtorId: debtor.debtorId, description: form.description.trim(), amount: total, dueDate: form.dueDate || null });
+      }
+      reset();
       onClose();
     } finally {
       setSaving(false);
@@ -427,15 +451,56 @@ function ChargeModal({ debtor, onClose, onSave }) {
           <input className="input-field" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Ex: Compra na Amazon" required autoFocus />
         </div>
         <div>
-          <label className="label">Valor</label>
+          <label className="label">{parcelado ? 'Valor total' : 'Valor'}</label>
           <input className="input-field" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="R$ 0,00" required />
         </div>
+
+        {/* Toggle parcelar — mesma ideia da despesa no cartão */}
+        <button
+          type="button"
+          onClick={() => setParcelado((v) => !v)}
+          className={`w-full flex items-center justify-between min-h-[44px] px-3 rounded-xl border transition-colors ${
+            parcelado ? 'border-accent bg-accent/10' : 'border-ink-200 bg-ink-50'
+          }`}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-ink-800">
+            <CreditCard className="w-4 h-4" /> Parcelar (cartão emprestado)
+          </span>
+          <span className={`w-9 h-5 rounded-full relative transition-colors ${parcelado ? 'bg-accent' : 'bg-ink-300'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${parcelado ? 'left-[18px]' : 'left-0.5'}`} />
+          </span>
+        </button>
+
+        {parcelado && (
+          <div className="space-y-2 animate-slide-up">
+            <div>
+              <label className="label">Número de parcelas</label>
+              <input
+                className="input-field"
+                type="number"
+                min="2"
+                max="48"
+                value={count}
+                onChange={(e) => setCount(Math.max(2, Math.min(48, Number(e.target.value) || 2)))}
+                required
+              />
+            </div>
+            {perParcel > 0 && (
+              <p className="text-xs text-ink-500">
+                {count}x de aprox. <span className="font-bold text-ink-800">{formatCurrency(perParcel)}</span> — uma por mês a partir do vencimento.
+              </p>
+            )}
+          </div>
+        )}
+
         <div>
-          <label className="label">Vencimento (opcional)</label>
+          <label className="label">{parcelado ? 'Vencimento da 1ª parcela' : 'Vencimento (opcional)'}</label>
           <input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
         </div>
+
         <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
-          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />} Adicionar cobrança
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+          {parcelado ? `Adicionar ${count}x` : 'Adicionar cobrança'}
         </button>
       </form>
     </Modal>
@@ -454,8 +519,8 @@ function PixQrModal({ target, pix, pixReady, onClose, onConfigure }) {
     setCopied(false);
     let alive = true;
     const code = buildPixPayload({
-      key: pix.pixKey, name: pix.pixName, city: pix.pixCity,
-      amount: target.amount, txid: 'COBRANCA',
+      key: pix.pixKey, keyType: pix.pixKeyType, name: pix.pixName, city: pix.pixCity,
+      amount: target.amount,
     });
     setPayload(code);
     setDataUrl('');

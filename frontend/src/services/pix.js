@@ -47,30 +47,60 @@ function crc16(payload) {
 }
 
 /**
+ * Normaliza a chave PIX conforme o tipo, pro formato que o banco registrou.
+ * Erro comum: telefone sem +55 ou CPF com pontuação → "chave não encontrada".
+ *
+ * @param {string} key
+ * @param {string} [type] 'cpf' | 'cnpj' | 'email' | 'phone' | 'random'
+ */
+export function normalizePixKey(key, type) {
+  const raw = (key || '').trim();
+  switch (type) {
+    case 'cpf':
+    case 'cnpj':
+      return raw.replace(/\D/g, ''); // só dígitos
+    case 'phone': {
+      let d = raw.replace(/\D/g, '');
+      if (d.startsWith('55') && d.length >= 12) return `+${d}`;     // já tem DDI
+      if (d.length === 10 || d.length === 11) return `+55${d}`;     // DDD+numero
+      return raw.startsWith('+') ? raw : `+${d}`;
+    }
+    case 'email':
+      return raw.toLowerCase();
+    default:
+      return raw; // aleatória (EVP) e demais: como está
+  }
+}
+
+/**
  * Gera o payload PIX (copia e cola).
  *
  * @param {Object} cfg
  * @param {string} cfg.key    chave PIX (cpf/cnpj/email/telefone/aleatória)
+ * @param {string} [cfg.keyType] tipo da chave (normaliza o formato)
  * @param {string} cfg.name   nome do recebedor (máx 25)
  * @param {string} cfg.city   cidade do recebedor (máx 15)
  * @param {number} [cfg.amount] valor (opcional; se ausente, QR sem valor fixo)
  * @param {string} [cfg.txid]   identificador (opcional; padrão '***')
  * @returns {string} BR Code completo, com CRC
  */
-export function buildPixPayload({ key, name, city, amount, txid }) {
+export function buildPixPayload({ key, keyType, name, city, amount, txid }) {
   if (!key) throw new Error('Chave PIX obrigatória.');
 
   // Template 26 — conta do recebedor PIX
-  const merchantAccount = tlv('00', 'br.gov.bcb.pix') + tlv('01', key.trim());
+  const merchantAccount = tlv('00', 'br.gov.bcb.pix') + tlv('01', normalizePixKey(key, keyType));
 
   // Template 62 — dados adicionais (referência / txid)
-  const reference = tlv('05', (txid && txid.trim()) || '***');
+  // Em PIX ESTÁTICO o txid deve ser '***' (não especificado). Bancos costumam
+  // rejeitar txid customizado em QR estático. Sanitizamos pra A-Z0-9 (máx 25).
+  const safeTxid = txid ? sanitize(txid, 25).replace(/[^A-Z0-9]/g, '') : '';
+  const reference = tlv('05', safeTxid || '***');
 
   const hasAmount = amount != null && Number(amount) > 0;
 
   let payload =
     tlv('00', '01') +                              // Payload Format Indicator
-    (hasAmount ? tlv('01', '12') : '') +           // 12 = uso único (cobrança c/ valor)
+    tlv('01', '11') +                              // 11 = PIX estático reutilizável
     tlv('26', merchantAccount) +
     tlv('52', '0000') +                            // Merchant Category Code
     tlv('53', '986') +                             // moeda BRL

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { currentUserId } from './index';
+import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
 
 /**
  * Services de Cobranças.
@@ -109,6 +110,43 @@ export const chargeService = {
       })
       .select('*, debtor:debtors ( id, name, phone )')
       .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Cria uma cobrança PARCELADA: N parcelas independentes compartilhando um
+   * installment_group_id. Mesma lógica das despesas no cartão — cada parcela
+   * tem vencimento no mês correto e a 1ª pega o centavo sobressalente.
+   *
+   * @param {Object} args
+   * @param {string} args.debtorId
+   * @param {string} args.description  base (vira "Desc (1/6)", "Desc (2/6)"…)
+   * @param {number} args.totalAmount  valor total a parcelar
+   * @param {number} args.count        nº de parcelas
+   * @param {string} args.firstDueDate vencimento da 1ª parcela 'YYYY-MM-DD'
+   */
+  async createInstallments({ debtorId, description, totalAmount, count, firstDueDate }) {
+    const userId = await currentUserId();
+    const groupId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.round(totalAmount * 100)}`;
+    const amounts = splitInstallmentAmount(totalAmount, count);
+    const dates = firstDueDate ? generateInstallmentDates(firstDueDate, count) : Array(count).fill(null);
+
+    const rows = amounts.map((amt, i) => ({
+      user_id: userId,
+      debtor_id: debtorId,
+      description: `${description} (${i + 1}/${count})`,
+      amount: amt,
+      due_date: dates[i],
+      installment_total: count,
+      installment_number: i + 1,
+      installment_group_id: groupId,
+    }));
+
+    const { data, error } = await supabase
+      .from('charges')
+      .insert(rows)
+      .select('*, debtor:debtors ( id, name, phone )');
     if (error) throw error;
     return data;
   },
