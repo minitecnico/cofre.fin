@@ -437,7 +437,15 @@ function groupCharges(charges) {
   for (const g of groups) {
     if (g.type === 'installment') g.items.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
   }
-  return groups;
+  // Pagas afundam: blocos totalmente quitados vão pro fim, abertos ficam no topo.
+  // Mantém a ordem relativa original dentro de cada grupo (sort estável). Assim,
+  // o usuário sempre vê em cima o que ainda falta receber e, ao desmarcar, a
+  // cobrança volta pra cima (relatório geral = desmarcar as pagas).
+  const isDone = (g) => g.items.every((c) => c.paid);
+  return groups
+    .map((g, i) => [g, i])
+    .sort((a, b) => (isDone(a[0]) - isDone(b[0])) || (a[1] - b[1]))
+    .map(([g]) => g);
 }
 
 /** Bloco de uma cobrança (avulsa) ou de um parcelamento (agrupado). */
