@@ -164,7 +164,7 @@ export default function Cobrancas() {
   return (
     <div className="space-y-5 pb-6 animate-fade-in">
       {/* Cabeçalho */}
-      <div className="flex items-start justify-between gap-3">
+      <div data-tour="page-header" className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Cobranças</h1>
           <p className="text-ink-500 text-sm mt-1 truncate">Controle quem te deve e cobre pelo WhatsApp.</p>

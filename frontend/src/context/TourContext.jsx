@@ -16,7 +16,7 @@ import Joyride, { EVENTS, STATUS, ACTIONS } from 'react-joyride';
  * re-disparado por useTour().start() (botão em Ajustes).
  */
 const TourContext = createContext(null);
-const STORAGE_KEY = 'cofre_tour_v1';
+const STORAGE_KEY = 'cofre_tour_v2';
 
 const STEPS = [
   {
@@ -55,6 +55,26 @@ const STEPS = [
     route: '/goals', target: '[data-tour="page-header"]',
     title: 'Metas e desafios',
     content: 'Crie metas de economia, organize notas e acompanhe o desafio das 52 semanas.',
+  },
+  {
+    route: '/cobrancas', target: '[data-tour="page-header"]',
+    title: 'Cobranças — quem te deve',
+    content: 'Cadastre quem te deve (até parcelado), marque o que já foi pago e cobre pelo WhatsApp. As pagas afundam pro fim; as em aberto ficam sempre no topo.',
+  },
+  {
+    route: '/cobrancas', target: '[data-tour="page-header"]',
+    title: 'PIX e relatório de cobrança',
+    content: 'Cadastre suas chaves PIX pra gerar QR Code e link de pagamento. Selecione as cobranças em aberto pra mandar o PDF de quem te deve — ou desmarque as pagas pro relatório geral.',
+  },
+  {
+    route: '/reports', target: '[data-tour="page-header"]',
+    title: 'Relatórios do mês',
+    content: 'Gere o resumo financeiro de qualquer mês (receitas, despesas, saldo) e compartilhe direto pelo WhatsApp.',
+  },
+  {
+    route: '/ai', target: '[data-tour="page-header"]',
+    title: 'Cofre IA',
+    content: 'Um assistente que conhece suas finanças do mês. Pergunte onde você gastou mais, peça dicas de economia ou um resumo rápido.',
   },
   {
     route: '/settings', target: '[data-tour="link-accounts"]', placement: 'top',

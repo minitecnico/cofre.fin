@@ -77,6 +77,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 - **2026-06-05** — UX Cobranças/nav: barra de seleção agora é **flutuante** (fixa acima da BottomNav, sempre visível — seleção elevada à página, age sobre 1 devedor por vez); botões "Cobrança"/"Pessoa" com **texto sempre visível** no PWA; **BottomNav primário** = Início, Receitas, Despesas, Cobranças, Relatórios (Cartões/IA/Recorrências/Objetivos/Categorias/Ajustes vão pro "Mais").
 
+- **2026-06-05** — Tour guiado atualizado (`TourContext.jsx`, `STORAGE_KEY` → `cofre_tour_v2` re-dispara p/ todos): novos passos **Cobranças** (devedores, parcelamento, pagas afundam), **PIX/relatório de cobrança**, **Relatórios** e **Cofre IA**. Anchors `data-tour="page-header"` adicionados em `Cobrancas.jsx`, `Reports.jsx`, `AiAssistant.jsx`.
+
 - **2026-06-05** — Cobranças (ordenação): cobranças **pagas afundam** — blocos totalmente quitados vão pro fim, abertos ficam no topo (`groupCharges` faz sort estável por `every(c.paid)`). Desmarcar volta a cobrança pro topo. Fluxo de relatório: seleciona as em aberto → PDF "em aberto"; pra relatório geral, basta desmarcar as pagas.
 
 - **2026-06-05** — Cobranças (organização): cada cobrança vira um **bloco** visual separado (`ChargeBlock`); parcelamento = um bloco agrupado por `installment_group_id` com cabeçalho (base, Nx, total, pagas) e as parcelas dentro.

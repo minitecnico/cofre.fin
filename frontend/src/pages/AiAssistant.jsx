@@ -363,7 +363,7 @@ export default function AiAssistant() {
   return (
     <div className="max-w-4xl mx-auto">
       <section className="feature-card overflow-hidden min-h-[calc(100dvh-10.5rem)] md:min-h-[calc(100vh-4rem)] flex flex-col">
-        <header className="border-b border-hairline-light px-4 py-3 md:px-5 flex items-center justify-between gap-3">
+        <header data-tour="page-header" className="border-b border-hairline-light px-4 py-3 md:px-5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-full bg-accent text-ink-950 flex items-center justify-center flex-shrink-0">
               <Bot className="w-4.5 h-4.5" />

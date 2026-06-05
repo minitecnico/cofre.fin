@@ -122,7 +122,7 @@ export default function Reports() {
   return (
     <div className="space-y-5 pb-6 animate-fade-in">
       {/* Cabeçalho */}
-      <div>
+      <div data-tour="page-header">
         <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Relatórios</h1>
         <p className="text-ink-500 text-sm mt-1">
           Gere o resumo financeiro de um mês e envie pelo WhatsApp.
