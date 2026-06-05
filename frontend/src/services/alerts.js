@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { cardService, dashboardService } from './index';
+import { cardService, dashboardService, transactionService } from './index';
 
 /**
  * Service de Alertas — detecta situações que merecem atenção do usuário.
@@ -314,6 +314,48 @@ export function markNotified(alertId) {
   try {
     localStorage.setItem(NOTIFIED_KEY, JSON.stringify(arr));
   } catch { /* ignora */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Snooze: adiar um alerta por N dias (persiste timestamp de re-exibição)
+// ─────────────────────────────────────────────────────────────────────────
+
+const SNOOZE_KEY = 'cofre:snoozed-alerts';
+
+/** Retorna { [alertId]: epochMsParaReexibir }. Limpa entradas já expiradas. */
+export function getSnoozed() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}');
+    const now = Date.now();
+    const valid = {};
+    for (const [id, until] of Object.entries(raw)) {
+      if (Number(until) > now) valid[id] = until;
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+/** Adia um alerta por `days` dias. */
+export function snoozeAlert(alertId, days = 3) {
+  const map = getSnoozed();
+  map[alertId] = Date.now() + days * 24 * 60 * 60 * 1000;
+  try {
+    localStorage.setItem(SNOOZE_KEY, JSON.stringify(map));
+  } catch { /* storage indisponível */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ações diretas a partir de um alerta (marcar pago)
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Marca a despesa associada a um alerta como paga.
+ * Reaproveita o transactionService — não toca em supabase direto além do detector.
+ */
+export async function payAlertExpense(txId) {
+  return transactionService.togglePaid(txId, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

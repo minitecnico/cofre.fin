@@ -7,6 +7,9 @@ import {
   markNotified,
   showNativeNotification,
   getNotificationsEnabled,
+  getSnoozed,
+  snoozeAlert as snoozeAlertStorage,
+  payAlertExpense,
 } from '../services/alerts';
 
 /**
@@ -29,6 +32,8 @@ import {
 export function useAlerts() {
   const [allAlerts, setAllAlerts] = useState([]);
   const [dismissedSet, setDismissedSet] = useState(() => getDismissed());
+  const [snoozedSet, setSnoozedSet] = useState(() => new Set(Object.keys(getSnoozed())));
+  const [pendingSet, setPendingSet] = useState(() => new Set()); // ações em voo (otimista)
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -36,6 +41,8 @@ export function useAlerts() {
       // Alertas são GLOBAIS (independem do mês selecionado na UI).
       const list = await detectAllAlerts();
       setAllAlerts(list);
+      // Re-sincroniza snooze: entradas expiradas voltam a aparecer
+      setSnoozedSet(new Set(Object.keys(getSnoozed())));
 
       // Notificações nativas pra alertas NOVOS (não dispensados, não notificados)
       if (getNotificationsEnabled()) {
@@ -71,10 +78,12 @@ export function useAlerts() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  // Filtra dispensados (na sessão atual)
+  // Filtra dispensados, adiados (snooze) e os que estão em ação otimista
   const visibleAlerts = useMemo(
-    () => allAlerts.filter((a) => !dismissedSet.has(a.id)),
-    [allAlerts, dismissedSet]
+    () => allAlerts.filter(
+      (a) => !dismissedSet.has(a.id) && !snoozedSet.has(a.id) && !pendingSet.has(a.id)
+    ),
+    [allAlerts, dismissedSet, snoozedSet, pendingSet]
   );
 
   const counts = useMemo(() => {
@@ -92,6 +101,40 @@ export function useAlerts() {
     });
   }, []);
 
+  // Adia o alerta por N dias — some agora, reaparece quando o prazo expira.
+  const snooze = useCallback((alertId, days = 3) => {
+    snoozeAlertStorage(alertId, days);
+    setSnoozedSet((prev) => {
+      const next = new Set(prev);
+      next.add(alertId);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Marca a despesa do alerta como paga (otimista).
+   * Esconde o alerta na hora; reverte se o servidor falhar.
+   * Retorna true em sucesso, false em falha (pra UI mostrar toast).
+   */
+  const payExpense = useCallback(async (alert) => {
+    const txId = alert?.meta?.txId;
+    if (!txId) return false;
+    setPendingSet((prev) => new Set(prev).add(alert.id));
+    try {
+      await payAlertExpense(txId);
+      await refresh(); // o alerta deixa de existir (despesa virou paga)
+      return true;
+    } catch (err) {
+      console.warn('Falha ao marcar despesa como paga:', err);
+      setPendingSet((prev) => {
+        const next = new Set(prev);
+        next.delete(alert.id);
+        return next;
+      });
+      return false;
+    }
+  }, [refresh]);
+
   return {
     alerts: visibleAlerts,
     allAlerts,
@@ -102,5 +145,7 @@ export function useAlerts() {
     loading,
     refresh,
     dismiss,
+    snooze,
+    payExpense,
   };
 }

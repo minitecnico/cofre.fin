@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Bell, BellOff, X, AlertCircle, AlertTriangle, Clock,
-  CreditCard, TrendingDown, Calendar, CheckCircle2, BellRing, Check,
+  CreditCard, TrendingDown, Calendar, CheckCircle2, BellRing,
+  Check, AlarmClock, ChevronRight,
 } from 'lucide-react';
 import { useAlerts } from '../hooks/useAlerts';
 import { transactionService } from '../services';
@@ -27,7 +28,7 @@ import { formatCurrency } from '../utils/format';
  *   <AlertCenter variant="..."/> // outras variantes
  */
 export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
-  const { alerts, counts, criticalCount, totalCount, loading, dismiss, refresh } = useAlerts();
+  const { alerts, counts, criticalCount, totalCount, loading, dismiss, snooze, refresh } = useAlerts();
   const [open, setOpen] = useState(false);
   const [payingId, setPayingId] = useState(null);
   const panelRef = useRef(null);
@@ -225,6 +226,7 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
                           onClick={() => handleAlertClick(alert)}
                           onDismiss={() => dismiss(alert.id)}
                           onMarkPaid={() => handleMarkPaid(alert)}
+                          onSnooze={() => snooze(alert.id, 3)}
                         />
                       </motion.div>
                     ))}
@@ -242,7 +244,7 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
 /**
  * Item individual de alerta.
  */
-function AlertItem({ alert, onClick, onDismiss, onMarkPaid, paying }) {
+function AlertItem({ alert, onClick, onDismiss, onMarkPaid, paying, onSnooze }) {
   const config = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.info;
   const Icon = KIND_ICONS[alert.kind] || config.icon;
   // Alertas ligados a uma despesa (vencida / hoje / em breve) podem ser
@@ -272,17 +274,35 @@ function AlertItem({ alert, onClick, onDismiss, onMarkPaid, paying }) {
         </div>
       </button>
 
-      {/* Ação rápida: marcar despesa como paga */}
-      {payable && (
+      {/* Ações inline — resolver sem sair do painel */}
+      <div className="flex items-center gap-1.5 mt-2 pl-12 flex-wrap">
+        {payable && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}
+            disabled={paying}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[32px] rounded-full bg-ink-950 text-white text-xs font-bold hover:bg-ink-800 transition-colors disabled:opacity-60"
+          >
+            <Check className="w-3.5 h-3.5" strokeWidth={3} />
+            {paying ? 'Pagando…' : 'Marcar paga'}
+          </button>
+        )}
         <button
-          onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}
-          disabled={paying}
-          className="mt-2 ml-12 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink-950 text-white text-xs font-bold hover:bg-ink-800 transition-colors disabled:opacity-60"
+          onClick={(e) => { e.stopPropagation(); onSnooze(); }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors"
         >
-          <Check className="w-3.5 h-3.5" strokeWidth={3} />
-          {paying ? 'Pagando…' : 'Marcar paga'}
+          <AlarmClock className="w-3.5 h-3.5" strokeWidth={2.25} />
+          Adiar 3d
         </button>
-      )}
+        {alert.link && (
+          <button
+            onClick={onClick}
+            className="inline-flex items-center gap-0.5 px-2.5 py-1 min-h-[32px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors"
+          >
+            Ver
+            <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.25} />
+          </button>
+        )}
+      </div>
 
       {/* Botão dispensar */}
       <button
