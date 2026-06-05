@@ -75,6 +75,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-06-05** — UX Cobranças/nav: barra de seleção agora é **flutuante** (fixa acima da BottomNav, sempre visível — seleção elevada à página, age sobre 1 devedor por vez); botões "Cobrança"/"Pessoa" com **texto sempre visível** no PWA; **BottomNav primário** = Início, Receitas, Despesas, Cobranças, Relatórios (Cartões/IA/Recorrências/Objetivos/Categorias/Ajustes vão pro "Mais").
+
 - **2026-06-05** — Cobranças (organização): cada cobrança vira um **bloco** visual separado (`ChargeBlock`); parcelamento = um bloco agrupado por `installment_group_id` com cabeçalho (base, Nx, total, pagas) e as parcelas dentro.
 
 - **2026-06-05** — Cobranças (funcional): cadastrar cobrança no topo (botão "Cobrança" → `CobrancaQuickForm`); **multi-seleção** de cobranças/parcelas (checkbox + selecionar todas) com barra em lote: **PIX das selecionadas** (soma → QR → link → WhatsApp), **PDF das selecionadas** e **excluir em lote** (`chargeService.removeMany` / hook `removeCharges`). Editar via canetinha (já existia).

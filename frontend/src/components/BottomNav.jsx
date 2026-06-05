@@ -6,22 +6,22 @@ import {
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
-// Itens fixos na barra inferior (mobile) — só os de uso diário + IA.
+// Itens fixos na barra inferior (mobile) — os de uso diário.
 const primary = [
   { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
   { to: '/incomes', label: 'Receitas', icon: ArrowUpCircle },
   { to: '/expenses', label: 'Despesas', icon: ArrowDownCircle },
-  { to: '/cards', label: 'Cartões', icon: CreditCard },
-  { to: '/ai', label: 'IA', icon: Bot },
+  { to: '/cobrancas', label: 'Cobranças', icon: HandCoins },
+  { to: '/reports', label: 'Relatórios', icon: FileText },
 ];
 
 // Itens secundários — abrem na folha "Mais" (resolve a falta de espaço e
 // dá acesso mobile a páginas que antes só existiam na sidebar do desktop).
 const secondary = [
-  { to: '/cobrancas', label: 'Cobranças', icon: HandCoins },
+  { to: '/cards', label: 'Cartões', icon: CreditCard },
+  { to: '/ai', label: 'Assistente IA', icon: Bot },
   { to: '/recurring', label: 'Recorrências', icon: Repeat },
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
-  { to: '/reports', label: 'Relatórios', icon: FileText },
   { to: '/categories', label: 'Categorias', icon: Tag },
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ];
