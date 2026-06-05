@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, ArrowLeftRight, HandCoins } from 'lucide-react';
 import { useDisclosure } from '../hooks/useDisclosure';
 import Modal from './Modal';
 import TransactionForm from './TransactionForm';
 import BatchTransactionForm from './BatchTransactionForm';
+import CobrancaQuickForm from './CobrancaQuickForm';
 
 const MOBILE_FAB_TOP_KEY = 'cofre:mobile-fab-top';
 const MOBILE_FAB_SIZE = 56;
@@ -36,7 +37,8 @@ function storeMobileTop(top) {
 
 export default function FloatingAddButton({ onAdded }) {
   const { isOpen, open, close } = useDisclosure();
-  const [mode, setMode] = useState('single'); // 'single' | 'batch'
+  const [mode, setMode] = useState('single'); // 'single' | 'batch' | 'cobranca'
+  const [kind, setKind] = useState('transacao'); // 'transacao' | 'cobranca' (aba do topo)
   const [batchType, setBatchType] = useState('expense'); // tipo do batch
   const [mobileTop, setMobileTop] = useState(null);
   const dragRef = useRef(null);
@@ -72,12 +74,14 @@ export default function FloatingAddButton({ onAdded }) {
     }
 
     setMode('single');
+    setKind('transacao');
     open();
   }
 
   function handleClose() {
     close();
     setMode('single'); // reset pro próximo abrir
+    setKind('transacao');
   }
 
   function switchToBatch(typeFromForm) {
@@ -149,23 +153,53 @@ export default function FloatingAddButton({ onAdded }) {
       <Modal
         isOpen={isOpen}
         onClose={handleClose}
-        title={mode === 'batch' ? `Lançamento em massa — ${batchType === 'income' ? 'Receitas' : 'Despesas'}` : 'Nova transação'}
+        title={
+          mode === 'batch'
+            ? `Lançamento em massa — ${batchType === 'income' ? 'Receitas' : 'Despesas'}`
+            : kind === 'cobranca' ? 'Nova cobrança' : 'Novo lançamento'
+        }
         size={mode === 'batch' ? 'lg' : 'md'}
       >
-        {mode === 'single' ? (
+        {/* Abas: Transação | Cobrança (só no modo single) */}
+        {mode === 'single' && (
+          <div className="grid grid-cols-2 gap-1 p-1 bg-ink-100 rounded-xl mb-4">
+            <button
+              type="button"
+              onClick={() => setKind('transacao')}
+              className={`flex items-center justify-center gap-1.5 min-h-[40px] rounded-lg text-sm font-bold transition-colors ${
+                kind === 'transacao' ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-700'
+              }`}
+            >
+              <ArrowLeftRight className="w-4 h-4" /> Transação
+            </button>
+            <button
+              type="button"
+              onClick={() => setKind('cobranca')}
+              className={`flex items-center justify-center gap-1.5 min-h-[40px] rounded-lg text-sm font-bold transition-colors ${
+                kind === 'cobranca' ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-700'
+              }`}
+            >
+              <HandCoins className="w-4 h-4" /> Cobrança
+            </button>
+          </div>
+        )}
+
+        {mode === 'batch' ? (
+          <BatchTransactionForm
+            type={batchType}
+            onSaved={(count) => { handleClose(); onAdded?.(count); }}
+            onCancel={handleClose}
+          />
+        ) : kind === 'cobranca' ? (
+          <CobrancaQuickForm
+            onSaved={() => { handleClose(); onAdded?.(); }}
+            onCancel={handleClose}
+          />
+        ) : (
           <TransactionForm
             onSaved={() => { handleClose(); onAdded?.(); }}
             onCancel={handleClose}
             onSwitchToBatch={switchToBatch}
-          />
-        ) : (
-          <BatchTransactionForm
-            type={batchType}
-            onSaved={(count) => {
-              handleClose();
-              onAdded?.(count);
-            }}
-            onCancel={handleClose}
           />
         )}
       </Modal>
