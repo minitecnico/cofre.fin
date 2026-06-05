@@ -14,8 +14,9 @@ import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import ImportExport from './pages/ImportExport';
 
-// Lazy: a página de Relatórios carrega jsPDF (pesado) — só baixa quando acessada.
+// Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
 const Reports = lazy(() => import('./pages/Reports'));
+const Cobrancas = lazy(() => import('./pages/Cobrancas'));
 
 export default function App() {
   return (
@@ -45,6 +46,14 @@ export default function App() {
                 element={
                   <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
                     <Reports />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="cobrancas"
+                element={
+                  <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                    <Cobrancas />
                   </Suspense>
                 }
               />
