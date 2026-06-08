@@ -25,13 +25,14 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/cards` | `Cards.jsx` | cartões, faturas, ciclos, limite inteligente | Sidebar + BottomNav |
 | `/cobrancas` | `Cobrancas.jsx` (lazy) | quem te deve, PIX/QR, WhatsApp, PDF, **parcelamento** | Sidebar + "Mais" |
 | `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | Sidebar + "Mais" |
+| `/empregos` | `Empregos.jsx` | buscador de vagas (multi-fonte), filtros, favoritos | Sidebar + "Mais" |
 | `/reports` | `Reports.jsx` (lazy) | relatório mensal PDF, link Storage, envio WhatsApp | Sidebar + "Mais" |
 | `/categories` | `Categories.jsx` | CRUD categorias | Sidebar + "Mais" |
 | `/ai` | `AiAssistant.jsx` | assistente IA (chat, análise de documentos, lançamentos por voz) | Sidebar + BottomNav |
 | `/import-export` | `ImportExport.jsx` | CSV/XLSX import/export, backup JSON | via Settings |
 | `/settings` | `Settings.jsx` | conta, senha, preferências | Sidebar + "Mais" |
 
-**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cartões, IA) + botão **"Mais"** (folha com Cobranças, Recorrências, Objetivos, Relatórios, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
+**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cartões, IA) + botão **"Mais"** (folha com Cobranças, Recorrências, Objetivos, Vagas, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
 
 ---
 
@@ -46,6 +47,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 - **Relatórios:** `services/reports.js` → PDF (jsPDF+autotable) com KPIs/categorias/lançamentos. 3 formas de enviar: baixar, **Web Share** (anexo, mobile), **link curto** pra WhatsApp. Link: PDF no Storage `reports` (signed URL ~90d) + código curto em `report_links` → compartilha `<dominio>/r/<code>` (rota pública resolve via RPC `resolve_report_link` e redireciona).
 - **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago; **editar** via `EditChargeModal`). **Múltiplas chaves PIX** (`pixKeyService` → tabela `pix_keys`, com padrão). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Link de pagamento** (`pixLinkService.createPaymentLink`): gera QR PNG → bucket público `pix-qr` → `pix_links` → compartilha `<dominio>/pix/<code>` (página `PixPay` pública resolve via RPC `resolve_pix_link`). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg + link). Relatório PDF com links clicáveis (`cobrancasReport.js`).
 - **Assistente IA:** `services/ai.js` chama `/api/ai-chat` (serverless, auth via token Supabase). Análise de documentos (`aiDocuments.js`: mammoth p/ DOCX, pdfjs p/ PDF). Lançamentos por voz/chat.
+- **Buscador de Vagas:** `services/jobs.js` (`jobService.search` chama `/api/jobs`; `savedJobService` p/ favoritos). Engine no **serverless** `frontend/api/jobs.js` (mesmo molde do ai-chat: auth Supabase + proxy — resolve CORS e esconde chaves). Providers **plugáveis** num array (`{ name, search }`), rodam **em paralelo** com timeout 8s e dedup por `title|company|location`; falha de 1 não derruba a busca. Fontes grátis sem chave: **Remotive**, **Arbeitnow** (Adzuna/JSearch ficam plugáveis p/ ligar com env). Cache "5 min" via `useJobSearch` (sessionStorage TTL, no lugar de React Query); buscas recentes também no sessionStorage. Favoritos em `saved_jobs`. ⚠️ Rodar `migration_jobs.sql`.
 - **Import/Export:** `services/importExport.js` (CSV/XLSX), `services/backup.js` (JSON completo).
 - **PWA:** `manifest.json`, install prompt (`useInstallPrompt`). Sem service worker de cache.
 
@@ -53,9 +55,11 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Mapa de código
 
-**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, settingsService), `cobrancasReport.js`, `pix.js`, `ai.js`, `aiDocuments.js`, `importExport.js`, `backup.js`, `supabase.js` (singleton).
+**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, settingsService), `cobrancasReport.js`, `pix.js`, `ai.js`, `aiDocuments.js`, `jobs.js` (jobService, savedJobService), `importExport.js`, `backup.js`, `supabase.js` (singleton).
 
-**Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`.
+**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router), `jobs.js` (engine de busca de vagas, providers plugáveis). Ambos autenticam via token Supabase.
+
+**Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`, `useJobSearch` (cache TTL), `useSavedJobs`.
 
 **Regra de arquitetura:** componentes NÃO importam `supabase` direto — sempre via service. Lógica de domínio pesada vai em RPC SQL. Páginas consomem hooks.
 
@@ -63,7 +67,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `saved_jobs` (vagas favoritadas). Todas com RLS `auth.uid() = user_id`.
 
 **Storage:** bucket privado `reports` (PDFs; signed URL) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
@@ -75,6 +79,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-06-08** — Módulo **Buscador de Vagas** (`/empregos`): engine serverless `frontend/api/jobs.js` com providers plugáveis (Remotive + Arbeitnow, grátis sem chave) rodando em paralelo c/ timeout + dedup + fallback resiliente; normalização pro formato `Job`. Front: `services/jobs.js`, `hooks/useJobSearch` (cache 5min sessionStorage, sem React Query) + `useSavedJobs` (otimista), página `Empregos.jsx` (abas Buscar/Salvos, filtros avançados, skeletons, estados vazio/erro, buscas recentes), `JobCard.jsx` + `JobFilters.jsx`. Favoritos em `saved_jobs` (RLS padrão). Item de menu em Sidebar + "Mais". ⚠️ Rodar `migration_jobs.sql` e fazer deploy (function serverless nova). Adzuna/JSearch ficam plugáveis p/ ligar depois com env vars na Vercel.
+- **2026-06-08** — Gráficos refatorados (`Charts.jsx`): visual minimalista, cores seguem semântica receita=verde/despesa=vermelho, rótulos de valor fixos nas barras (lê sem hover), wrapper polimórfico `ChartCard`.
 - **2026-06-05** — UX Cobranças/nav: barra de seleção agora é **flutuante** (fixa acima da BottomNav, sempre visível — seleção elevada à página, age sobre 1 devedor por vez); botões "Cobrança"/"Pessoa" com **texto sempre visível** no PWA; **BottomNav primário** = Início, Receitas, Despesas, Cobranças, Relatórios (Cartões/IA/Recorrências/Objetivos/Categorias/Ajustes vão pro "Mais").
 
 - **2026-06-05** — Cobranças (lembretes + alertas): rastreio de envio pra **não cobrar a mesma pessoa 2-3x**. Migration `migration_cobrancas_reminders.sql` adiciona `charges.last_charged_at` + `charged_count`, RPC `mark_charges_sent(p_ids)` e recria `get_debtors_summary` com `last_charged_at`. Ao **Cobrar** (WhatsApp) ou enviar **link PIX**, marca as dívidas abertas como cobradas (`chargeService.markCharged` / hook `markCharged`). UI: **selo** "Cobrado hoje/há Xd / Nunca cobrado" (neutro→verde→âmbar), **esquema de cores por urgência** (borda do card: vencido vermelho, vence-em-breve âmbar, quitado verde), **painel de alertas** "Pra cobrar" (vencidos/vencendo, ordenados, com botão Cobrar) e **notificação de navegador** opt-in (1x/dia se há vencidas). ⚠️ Rodar a migration no Supabase.
