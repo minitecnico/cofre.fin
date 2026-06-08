@@ -241,7 +241,8 @@ const jooble = {
     const r = await fetch(`https://jooble.org/api/${env('JOOBLE_API_KEY')}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: filters.keyword || '', location: filters.location || 'Brasil' }),
+      // Jooble espera o país em inglês ("Brazil"); "Brasil" retorna 0.
+      body: JSON.stringify({ keywords: filters.keyword || '', location: filters.location || 'Brazil' }),
       signal,
     });
     if (!r.ok) throw new Error(`Jooble HTTP ${r.status}`);
