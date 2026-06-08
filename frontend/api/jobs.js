@@ -268,6 +268,7 @@ function applyFilters(jobs, f) {
     if (loc && !lower(j.location).includes(loc)) return false;
     if (comp && !lower(j.company).includes(comp)) return false;
     if (f.workMode && j.workMode !== f.workMode) return false;
+    if (f.contractType && lower(j.contractType) !== lower(f.contractType)) return false;
     if (f.salaryMin && j.salaryMax && j.salaryMax < Number(f.salaryMin)) return false;
     if (f.salaryMax && j.salaryMin && j.salaryMin > Number(f.salaryMax)) return false;
     if (cutoff && j.publishedAt && new Date(j.publishedAt).getTime() < cutoff) return false;

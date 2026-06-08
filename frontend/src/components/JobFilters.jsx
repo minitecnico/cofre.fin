@@ -73,7 +73,7 @@ export default function JobFilters({ onSearch, loading }) {
             <label className="label">Modalidade</label>
             <select value={f.workMode} onChange={set('workMode')} className="input-field">
               <option value="">Todas</option>
-              <option value="remote">Remoto</option>
+              <option value="remote">Remoto / Home office</option>
               <option value="hybrid">Híbrido</option>
               <option value="onsite">Presencial</option>
             </select>
