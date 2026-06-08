@@ -1,11 +1,46 @@
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '../utils/format';
 
-const monthLabel = (key) => {
-  const [, m] = key.split('-');
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  return months[parseInt(m, 10) - 1];
+/**
+ * Paleta dos gráficos — espelha os tokens do design system (tailwind.config.js).
+ * Centralizada aqui pra evitar hex soltos espalhados (dívida antiga: usava
+ * #c4f542 / #161610, que nem batiam com a paleta real).
+ */
+const CHART = {
+  income: '#b8e94e', // accent.DEFAULT
+  expense: '#18181b', // ink-900
+  axis: '#a1a1aa', // ink-400
+  grid: '#e4e4e7', // ink-200
+  fallback: '#a1a1aa',
 };
+
+const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const monthLabel = (key) => MONTHS[parseInt(key.split('-')[1], 10) - 1];
+
+/** Tooltip claro e suave — substitui o card preto pesado de antes. */
+function SoftTooltip({ active, payload, label, rows }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl bg-white shadow-soft-lg border border-ink-100 px-3 py-2">
+      {label && <p className="text-[11px] font-semibold text-ink-900 mb-1">{label}</p>}
+      {rows(payload).map((r, i) => (
+        <div key={i} className="flex items-center gap-2 text-[11px]">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+          <span className="text-ink-500">{r.name}</span>
+          <span className="ml-auto font-mono font-semibold text-ink-900">{formatCurrency(r.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Dot de legenda compacto pro header dos cards. */
+const LegendDot = ({ color, children }) => (
+  <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
+    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+    {children}
+  </span>
+);
 
 export function MonthlyChart({ data = [] }) {
   if (data.length === 0) {
@@ -16,49 +51,43 @@ export function MonthlyChart({ data = [] }) {
     );
   }
 
-  const formatted = data.map((d) => ({
-    ...d,
-    monthLabel: monthLabel(d.month),
-  }));
+  const formatted = data.map((d) => ({ ...d, monthLabel: monthLabel(d.month) }));
 
   return (
     <div className="card-flat p-4 md:p-5 h-full">
-      <div className="mb-2 md:mb-3">
+      <div className="flex items-start justify-between mb-3 md:mb-4">
         <h3 className="font-display text-base md:text-lg font-bold tracking-tight">Últimos 6 meses</h3>
-        <p className="text-[11px] md:text-xs text-ink-500">Receitas vs Despesas</p>
+        <div className="flex items-center gap-3 pt-1">
+          <LegendDot color={CHART.income}>Receitas</LegendDot>
+          <LegendDot color={CHART.expense}>Despesas</LegendDot>
+        </div>
       </div>
       <ResponsiveContainer width="100%" height={160} className="md:!h-[200px]">
-        <BarChart data={formatted} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={2}>
+        <BarChart data={formatted} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barGap={3}>
           <XAxis
             dataKey="monthLabel"
-            stroke="#161610"
-            tick={{ fontSize: 11, fontWeight: 500 }}
-            tickLine={false}
-            axisLine={{ stroke: '#e4e4e0', strokeWidth: 1 }}
-          />
-          <YAxis
-            stroke="#83836f"
-            tick={{ fontSize: 10 }}
-            tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+            stroke={CHART.axis}
+            tick={{ fontSize: 11, fontWeight: 500, fill: CHART.axis }}
             tickLine={false}
             axisLine={false}
-            width={38}
+            dy={4}
           />
           <Tooltip
-            contentStyle={{
-              backgroundColor: '#161610',
-              border: 'none',
-              borderRadius: 12,
-              color: '#fff',
-              fontSize: 12,
-              boxShadow: '0 8px 24px -8px rgba(0,0,0,0.4)',
-            }}
-            formatter={(value, name) => [formatCurrency(value), name === 'income' ? 'Receitas' : 'Despesas']}
-            labelStyle={{ color: '#c4f542', fontWeight: 600 }}
-            cursor={{ fill: 'rgba(196, 245, 66, 0.1)' }}
+            cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 8 }}
+            content={
+              <SoftTooltip
+                rows={(p) =>
+                  p.map((x) => ({
+                    color: x.dataKey === 'income' ? CHART.income : CHART.expense,
+                    name: x.dataKey === 'income' ? 'Receitas' : 'Despesas',
+                    value: x.value,
+                  }))
+                }
+              />
+            }
           />
-          <Bar dataKey="income" fill="#c4f542" radius={[5, 5, 0, 0]} maxBarSize={26} />
-          <Bar dataKey="expense" fill="#161610" radius={[5, 5, 0, 0]} maxBarSize={26} />
+          <Bar dataKey="income" fill={CHART.income} radius={[6, 6, 6, 6]} maxBarSize={20} />
+          <Bar dataKey="expense" fill={CHART.expense} radius={[6, 6, 6, 6]} maxBarSize={20} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -78,56 +107,59 @@ export function CategoryChart({ data = [] }) {
 
   return (
     <div className="card-flat p-4 md:p-5 h-full">
-      <div className="mb-2 md:mb-3">
+      <div className="mb-3 md:mb-4">
         <h3 className="font-display text-base md:text-lg font-bold tracking-tight">Gastos por categoria</h3>
         <p className="text-[11px] md:text-xs text-ink-500">Distribuição do mês atual</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:gap-4 items-center">
-        <ResponsiveContainer width="100%" height={150} className="md:!h-[180px]">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="total"
-              nameKey="name"
-              innerRadius={42}
-              outerRadius={68}
-              paddingAngle={2}
-              stroke="#fff"
-              strokeWidth={2}
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color || '#64748b'} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#161610',
-                border: 'none',
-                borderRadius: 12,
-                color: '#fff',
-                fontSize: 12,
-                boxShadow: '0 8px 24px -8px rgba(0,0,0,0.4)',
-              }}
-              formatter={(value) => formatCurrency(value)}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        {/* Donut fino com total no centro */}
+        <div className="relative">
+          <ResponsiveContainer width="100%" height={150} className="md:!h-[170px]">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="total"
+                nameKey="name"
+                innerRadius="68%"
+                outerRadius="100%"
+                paddingAngle={data.length > 1 ? 2 : 0}
+                stroke="none"
+              >
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={entry.color || CHART.fallback} />
+                ))}
+              </Pie>
+              <Tooltip
+                content={<SoftTooltip rows={(p) => p.map((x) => ({ color: x.payload.color || CHART.fallback, name: x.name, value: x.value }))} />}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-[10px] text-ink-500">Total</span>
+            <span className="font-mono font-bold text-ink-900 text-sm md:text-base leading-tight">
+              {formatCurrency(total, { compact: true })}
+            </span>
+          </div>
+        </div>
 
-        <div className="space-y-1 md:space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+        {/* Lista de categorias */}
+        <div className="space-y-1.5 md:space-y-2 max-h-[170px] overflow-y-auto pr-1">
           {data.slice(0, 8).map((c) => {
             const pct = total > 0 ? (c.total / total) * 100 : 0;
             return (
-              <div key={c.categoryId} className="flex items-center gap-2 text-xs">
-                <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: c.color }}
-                />
-                <span className="flex-1 truncate text-ink-700">{c.name}</span>
-                <span className="font-mono text-ink-900 font-semibold whitespace-nowrap text-[11px]">
-                  {formatCurrency(c.total, { compact: true })}
-                </span>
-                <span className="text-[10px] text-ink-500 w-8 text-right flex-shrink-0">{pct.toFixed(0)}%</span>
+              <div key={c.categoryId} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color || CHART.fallback }} />
+                  <span className="flex-1 truncate text-ink-700">{c.name}</span>
+                  <span className="font-mono text-ink-900 font-semibold whitespace-nowrap text-[11px]">
+                    {formatCurrency(c.total, { compact: true })}
+                  </span>
+                </div>
+                {/* Barra de proporção minimalista */}
+                <div className="mt-1 ml-[18px] h-1 rounded-full bg-ink-100 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: c.color || CHART.fallback }} />
+                </div>
               </div>
             );
           })}
