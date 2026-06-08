@@ -1,23 +1,52 @@
-import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { formatCurrency } from '../utils/format';
 
 /**
- * Paleta dos gráficos — espelha os tokens do design system (tailwind.config.js).
- * Centralizada aqui pra evitar hex soltos espalhados (dívida antiga: usava
- * #c4f542 / #161610, que nem batiam com a paleta real).
+ * Paleta dos gráficos — segue a MESMA semântica do resto do app:
+ * receita = verde (positive), despesa = vermelho (negative).
+ * Centralizada aqui pra não espalhar hex solto.
  */
 const CHART = {
-  income: '#10b981', // positive — mesma lógica de receita no resto do app
-  expense: '#ef4444', // negative — mesma lógica de despesa no resto do app
+  income: '#10b981', // positive
+  expense: '#ef4444', // negative
   axis: '#a1a1aa', // ink-400
-  grid: '#e4e4e7', // ink-200
+  track: '#f4f4f5', // ink-100
   fallback: '#a1a1aa',
 };
 
 const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const monthLabel = (key) => MONTHS[parseInt(key.split('-')[1], 10) - 1];
 
-/** Tooltip claro e suave — substitui o card preto pesado de antes. */
+/* ─── Primitivos reutilizáveis ─────────────────────────────────────────── */
+
+/**
+ * Wrapper polimórfico de card de gráfico: cuida de header, legenda e
+ * estado vazio. O conteúdo (children) é o gráfico em si. Evita duplicar
+ * a casca entre MonthlyChart e CategoryChart.
+ */
+function ChartCard({ title, subtitle, legend, isEmpty, empty, children }) {
+  if (isEmpty) {
+    return (
+      <div className="card-flat p-6 md:p-8 text-center">
+        <p className="text-ink-500 text-sm md:text-base">{empty}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="card-flat p-4 md:p-5 h-full">
+      <div className="flex items-start justify-between mb-3 md:mb-4 gap-3">
+        <div className="min-w-0">
+          <h3 className="font-display text-base md:text-lg font-bold tracking-tight">{title}</h3>
+          {subtitle && <p className="text-[11px] md:text-xs text-ink-500">{subtitle}</p>}
+        </div>
+        {legend && <div className="flex items-center gap-3 pt-1 flex-shrink-0">{legend}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Tooltip claro e suave (toque/hover) — complementa os rótulos fixos. */
 function SoftTooltip({ active, payload, label, rows }) {
   if (!active || !payload?.length) return null;
   return (
@@ -34,7 +63,6 @@ function SoftTooltip({ active, payload, label, rows }) {
   );
 }
 
-/** Dot de legenda compacto pro header dos cards. */
 const LegendDot = ({ color, children }) => (
   <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
@@ -42,28 +70,36 @@ const LegendDot = ({ color, children }) => (
   </span>
 );
 
-export function MonthlyChart({ data = [] }) {
-  if (data.length === 0) {
-    return (
-      <div className="card-flat p-6 md:p-8 text-center">
-        <p className="text-ink-500 text-sm md:text-base">Sem dados suficientes para exibir o histórico mensal.</p>
-      </div>
-    );
-  }
+/** Rótulo de valor fixo no topo da barra — chave pro gráfico "ter valor" sem hover. */
+const barValueLabel = (color) => (props) => {
+  const { x, y, width, value } = props;
+  if (!value) return null;
+  return (
+    <text x={x + width / 2} y={y - 5} fill={color} fontSize={9} fontWeight={700} textAnchor="middle">
+      {formatCurrency(value, { compact: true })}
+    </text>
+  );
+};
 
+/* ─── Gráficos ─────────────────────────────────────────────────────────── */
+
+export function MonthlyChart({ data = [] }) {
   const formatted = data.map((d) => ({ ...d, monthLabel: monthLabel(d.month) }));
 
   return (
-    <div className="card-flat p-4 md:p-5 h-full">
-      <div className="flex items-start justify-between mb-3 md:mb-4">
-        <h3 className="font-display text-base md:text-lg font-bold tracking-tight">Últimos 6 meses</h3>
-        <div className="flex items-center gap-3 pt-1">
+    <ChartCard
+      title="Últimos 6 meses"
+      isEmpty={data.length === 0}
+      empty="Sem dados suficientes para exibir o histórico mensal."
+      legend={
+        <>
           <LegendDot color={CHART.income}>Receitas</LegendDot>
           <LegendDot color={CHART.expense}>Despesas</LegendDot>
-        </div>
-      </div>
-      <ResponsiveContainer width="100%" height={160} className="md:!h-[200px]">
-        <BarChart data={formatted} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barGap={3}>
+        </>
+      }
+    >
+      <ResponsiveContainer width="100%" height={180} className="md:!h-[220px]">
+        <BarChart data={formatted} margin={{ top: 18, right: 0, left: 0, bottom: 0 }} barGap={3}>
           <XAxis
             dataKey="monthLabel"
             stroke={CHART.axis}
@@ -86,32 +122,28 @@ export function MonthlyChart({ data = [] }) {
               />
             }
           />
-          <Bar dataKey="income" fill={CHART.income} radius={[6, 6, 6, 6]} maxBarSize={20} />
-          <Bar dataKey="expense" fill={CHART.expense} radius={[6, 6, 6, 6]} maxBarSize={20} />
+          <Bar dataKey="income" fill={CHART.income} radius={[6, 6, 6, 6]} maxBarSize={22}>
+            <LabelList dataKey="income" content={barValueLabel(CHART.income)} />
+          </Bar>
+          <Bar dataKey="expense" fill={CHART.expense} radius={[6, 6, 6, 6]} maxBarSize={22}>
+            <LabelList dataKey="expense" content={barValueLabel(CHART.expense)} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </ChartCard>
   );
 }
 
 export function CategoryChart({ data = [] }) {
-  if (data.length === 0) {
-    return (
-      <div className="card-flat p-6 md:p-8 text-center">
-        <p className="text-ink-500 text-sm md:text-base">Sem despesas no período.</p>
-      </div>
-    );
-  }
-
   const total = data.reduce((s, d) => s + d.total, 0);
 
   return (
-    <div className="card-flat p-4 md:p-5 h-full">
-      <div className="mb-3 md:mb-4">
-        <h3 className="font-display text-base md:text-lg font-bold tracking-tight">Gastos por categoria</h3>
-        <p className="text-[11px] md:text-xs text-ink-500">Distribuição do mês atual</p>
-      </div>
-
+    <ChartCard
+      title="Gastos por categoria"
+      subtitle="Distribuição do mês atual"
+      isEmpty={data.length === 0}
+      empty="Sem despesas no período."
+    >
       <div className="grid grid-cols-2 gap-3 md:gap-4 items-center">
         {/* Donut fino com total no centro */}
         <div className="relative">
@@ -131,7 +163,11 @@ export function CategoryChart({ data = [] }) {
                 ))}
               </Pie>
               <Tooltip
-                content={<SoftTooltip rows={(p) => p.map((x) => ({ color: x.payload.color || CHART.fallback, name: x.name, value: x.value }))} />}
+                content={
+                  <SoftTooltip
+                    rows={(p) => p.map((x) => ({ color: x.payload.color || CHART.fallback, name: x.name, value: x.value }))}
+                  />
+                }
               />
             </PieChart>
           </ResponsiveContainer>
@@ -143,7 +179,7 @@ export function CategoryChart({ data = [] }) {
           </div>
         </div>
 
-        {/* Lista de categorias */}
+        {/* Lista: nome, valor, % e barra de proporção */}
         <div className="space-y-1.5 md:space-y-2 max-h-[170px] overflow-y-auto pr-1">
           {data.slice(0, 8).map((c) => {
             const pct = total > 0 ? (c.total / total) * 100 : 0;
@@ -155,9 +191,9 @@ export function CategoryChart({ data = [] }) {
                   <span className="font-mono text-ink-900 font-semibold whitespace-nowrap text-[11px]">
                     {formatCurrency(c.total, { compact: true })}
                   </span>
+                  <span className="text-[10px] text-ink-500 w-9 text-right flex-shrink-0">{pct.toFixed(0)}%</span>
                 </div>
-                {/* Barra de proporção minimalista */}
-                <div className="mt-1 ml-[18px] h-1 rounded-full bg-ink-100 overflow-hidden">
+                <div className="mt-1 ml-[18px] h-1 rounded-full overflow-hidden" style={{ backgroundColor: CHART.track }}>
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: c.color || CHART.fallback }} />
                 </div>
               </div>
@@ -165,6 +201,6 @@ export function CategoryChart({ data = [] }) {
           })}
         </div>
       </div>
-    </div>
+    </ChartCard>
   );
 }
