@@ -227,9 +227,74 @@ function adzunaContract(j) {
   return 'Não informado';
 }
 
+/**
+ * Jooble — AGREGADOR com API grátis (precisa chave: JOOBLE_API_KEY). Junta
+ * vagas de muitos boards BR (inclusive estilo TrabalhaBrasil/Catho), o que a
+ * gente não consegue pegar direto (esses sites não têm API pública). É o maior
+ * ganho de cobertura BR. Gated por `enabled()` — inerte sem chave.
+ * Pegar chave grátis: jooble.org/api/about
+ */
+const jooble = {
+  name: 'Jooble',
+  enabled: () => Boolean(env('JOOBLE_API_KEY')),
+  async search(filters, { signal }) {
+    const r = await fetch(`https://jooble.org/api/${env('JOOBLE_API_KEY')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keywords: filters.keyword || '', location: filters.location || 'Brasil' }),
+      signal,
+    });
+    if (!r.ok) throw new Error(`Jooble HTTP ${r.status}`);
+    const json = await r.json();
+    return (json.jobs || []).map((j) => ({
+      id: `jooble-${j.id}`,
+      title: j.title,
+      company: j.company || null,
+      location: j.location || 'Brasil',
+      workMode: workModeFrom({ location: j.location }),
+      contractType: prettyContract(j.type),
+      ...parseSalary(j.salary),
+      publishedAt: j.updated || null,
+      source: 'Jooble',
+      applyUrl: j.link,
+      description: stripHtml(j.snippet),
+    }));
+  },
+};
+
+/**
+ * Jobicy — vagas remotas, grátis e SEM chave. Ganho imediato de volume remoto.
+ * Salário é anual em moeda estrangeira → omitido pra não exibir como R$ mensal.
+ */
+const jobicy = {
+  name: 'Jobicy',
+  free: true,
+  async search(filters, { signal }) {
+    const url = new URL('https://jobicy.com/api/v2/remote-jobs');
+    url.searchParams.set('count', '50');
+    if (filters.keyword) url.searchParams.set('tag', filters.keyword);
+    const r = await fetch(url, { signal });
+    if (!r.ok) throw new Error(`Jobicy HTTP ${r.status}`);
+    const json = await r.json();
+    return (json.jobs || []).map((j) => ({
+      id: `jobicy-${j.id}`,
+      title: j.jobTitle,
+      company: j.companyName || null,
+      location: j.jobGeo || 'Remoto',
+      workMode: 'remote',
+      contractType: prettyContract((j.jobType || [])[0]),
+      publishedAt: j.pubDate || null,
+      source: 'Jobicy',
+      applyUrl: j.url,
+      description: stripHtml(j.jobDescription),
+    }));
+  },
+};
+
 // Ordem = prioridade de exibição quando há empate na deduplicação.
-// Fontes BR primeiro. Providers com `enabled()` só rodam se as chaves existirem.
-const PROVIDERS = [githubVagasBR, adzunaBR, remotive, arbeitnow];
+// Fontes BR/agregadores primeiro. Providers com `enabled()` só rodam se as
+// chaves existirem (Adzuna/Jooble); os `free` rodam sempre.
+const PROVIDERS = [githubVagasBR, adzunaBR, jooble, remotive, arbeitnow, jobicy];
 
 function prettyContract(type) {
   const map = {
