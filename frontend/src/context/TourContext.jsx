@@ -16,7 +16,7 @@ import Joyride, { EVENTS, STATUS, ACTIONS } from 'react-joyride';
  * re-disparado por useTour().start() (botão em Ajustes).
  */
 const TourContext = createContext(null);
-const STORAGE_KEY = 'cofre_tour_v2';
+const STORAGE_KEY = 'cofre_tour_v3';
 
 const STEPS = [
   {
@@ -75,6 +75,11 @@ const STEPS = [
     route: '/ai', target: '[data-tour="page-header"]',
     title: 'Cofre IA',
     content: 'Um assistente que conhece suas finanças do mês. Pergunte onde você gastou mais, peça dicas de economia ou um resumo rápido.',
+  },
+  {
+    route: '/empregos', target: '[data-tour="page-header"]',
+    title: 'Buscador de Vagas',
+    content: 'Encontre vagas de várias fontes num lugar só — inclusive vagas BR da comunidade dev no GitHub. Filtre por cargo, modalidade e salário, e salve as que interessam na aba "Salvos".',
   },
   {
     route: '/settings', target: '[data-tour="link-accounts"]', placement: 'top',

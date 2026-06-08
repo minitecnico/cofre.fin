@@ -55,7 +55,7 @@ export default function Empregos() {
   return (
     <div className="space-y-4 md:space-y-5 pb-24 md:pb-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div data-tour="page-header" className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl bg-gradient-accent flex items-center justify-center shadow-soft-md flex-shrink-0">
           <Briefcase className="w-5 h-5 text-ink-900" strokeWidth={2.25} />
         </div>

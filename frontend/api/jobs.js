@@ -113,9 +113,75 @@ const arbeitnow = {
   },
 };
 
+/**
+ * GitHub Vagas BR — as ISSUES dos repositórios de vaga da comunidade dev
+ * brasileira são as vagas (em português, BR). É a fonte BR grátis e viva que
+ * substitui o "GitHub Jobs" morto que o spec original citava.
+ * Sem chave: 60 req/h por IP. Opcional GITHUB_TOKEN sobe pra 5000/h.
+ */
+const githubVagasBR = {
+  name: 'GitHub Vagas BR',
+  free: true,
+  async search(_filters, { signal }) {
+    const repos = ['frontendbr/vagas', 'backend-br/vagas', 'react-brasil/vagas', 'androiddevbr/vagas', 'python-brasil/vagas'];
+    const token = env('GITHUB_TOKEN');
+    const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'cofre-jobs' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const lists = await Promise.all(
+      repos.map(async (repo) => {
+        try {
+          const r = await fetch(
+            `https://api.github.com/repos/${repo}/issues?state=open&per_page=30&sort=created&direction=desc`,
+            { headers, signal }
+          );
+          if (!r.ok) return [];
+          const issues = await r.json();
+          return (Array.isArray(issues) ? issues : [])
+            .filter((i) => !i.pull_request) // o endpoint /issues mistura PRs
+            .map((i) => issueToJob(i, repo));
+        } catch {
+          return [];
+        }
+      })
+    );
+    return lists.flat();
+  },
+};
+
+function issueToJob(issue, repo) {
+  const labels = (issue.labels || []).map((l) => lower(typeof l === 'string' ? l : l.name));
+  const text = `${lower(issue.title)} ${labels.join(' ')}`;
+  const remote = /remoto|remote|home.?office|an[yi]where/.test(text);
+  const workMode = remote ? 'remote' : /h[íi]brido|hybrid/.test(text) ? 'hybrid' : 'onsite';
+  return {
+    id: `github-${repo}-${issue.number}`,
+    title: issue.title,
+    company: null, // o nome da empresa costuma vir no título; não é o dono do repo
+    location: remote ? 'Remoto' : 'Brasil',
+    workMode,
+    contractType: contractFromText(text),
+    publishedAt: issue.created_at,
+    source: 'GitHub Vagas BR',
+    applyUrl: issue.html_url,
+    description: stripHtml(issue.body),
+  };
+}
+
+function contractFromText(text) {
+  if (/estag|estág/.test(text)) return 'Estágio';
+  if (/trainee/.test(text)) return 'Trainee';
+  if (/freelanc/.test(text)) return 'Freelancer';
+  if (/tempor[áa]ri/.test(text)) return 'Temporário';
+  if (/\bpj\b/.test(text)) return 'PJ / Contrato';
+  if (/\bclt\b/.test(text)) return 'CLT / Full-time';
+  return 'Não informado';
+}
+
 // Ordem = prioridade de exibição quando há empate na deduplicação.
-// Fontes com chave (Adzuna/JSearch) entram aqui depois, só ligar quando houver env.
-const PROVIDERS = [remotive, arbeitnow];
+// GitHub BR primeiro (vagas em português). Fontes com chave (Adzuna/JSearch)
+// entram aqui depois, só ligar quando houver env.
+const PROVIDERS = [githubVagasBR, remotive, arbeitnow];
 
 function prettyContract(type) {
   const map = {
