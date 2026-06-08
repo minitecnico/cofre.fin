@@ -7,8 +7,8 @@ import { formatCurrency } from '../utils/format';
  * #c4f542 / #161610, que nem batiam com a paleta real).
  */
 const CHART = {
-  income: '#b8e94e', // accent.DEFAULT
-  expense: '#18181b', // ink-900
+  income: '#10b981', // positive — mesma lógica de receita no resto do app
+  expense: '#ef4444', // negative — mesma lógica de despesa no resto do app
   axis: '#a1a1aa', // ink-400
   grid: '#e4e4e7', // ink-200
   fallback: '#a1a1aa',
