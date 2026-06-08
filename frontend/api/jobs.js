@@ -178,10 +178,58 @@ function contractFromText(text) {
   return 'Não informado';
 }
 
+/**
+ * Adzuna BR — cobre vagas brasileiras NÃO-tech (vendas, adm, saúde…) que as
+ * outras fontes não pegam. Exige chave grátis (tier free, sem cartão):
+ * ADZUNA_APP_ID + ADZUNA_APP_KEY nas env vars da Vercel.
+ * `enabled()` faz o provider ficar INERTE se as chaves não existirem — nada
+ * quebra, ele só não roda.
+ */
+const adzunaBR = {
+  name: 'Adzuna BR',
+  enabled: () => Boolean(env('ADZUNA_APP_ID') && env('ADZUNA_APP_KEY')),
+  async search(filters, { signal }) {
+    const url = new URL('https://api.adzuna.com/v1/api/jobs/br/search/1');
+    url.searchParams.set('app_id', env('ADZUNA_APP_ID'));
+    url.searchParams.set('app_key', env('ADZUNA_APP_KEY'));
+    url.searchParams.set('results_per_page', '50');
+    url.searchParams.set('content-type', 'application/json');
+    if (filters.keyword) url.searchParams.set('what', filters.keyword);
+    if (filters.location) url.searchParams.set('where', filters.location);
+    if (filters.company) url.searchParams.set('company', filters.company);
+    if (filters.salaryMin) url.searchParams.set('salary_min', String(filters.salaryMin));
+    if (filters.salaryMax) url.searchParams.set('salary_max', String(filters.salaryMax));
+
+    const r = await fetch(url, { signal });
+    if (!r.ok) throw new Error(`Adzuna HTTP ${r.status}`);
+    const json = await r.json();
+    return (json.results || []).map((j) => ({
+      id: `adzuna-${j.id}`,
+      title: j.title,
+      company: j.company?.display_name || null,
+      location: j.location?.display_name || 'Brasil',
+      workMode: workModeFrom({ location: j.location?.display_name }),
+      contractType: adzunaContract(j),
+      salaryMin: j.salary_min || undefined,
+      salaryMax: j.salary_max || undefined,
+      publishedAt: j.created,
+      source: 'Adzuna BR',
+      applyUrl: j.redirect_url,
+      description: stripHtml(j.description),
+    }));
+  },
+};
+
+function adzunaContract(j) {
+  if (j.contract_type === 'contract') return 'PJ / Contrato';
+  if (j.contract_time === 'part_time') return 'Meio período';
+  if (j.contract_time === 'full_time' || j.contract_type === 'permanent') return 'CLT / Full-time';
+  return 'Não informado';
+}
+
 // Ordem = prioridade de exibição quando há empate na deduplicação.
-// GitHub BR primeiro (vagas em português). Fontes com chave (Adzuna/JSearch)
-// entram aqui depois, só ligar quando houver env.
-const PROVIDERS = [githubVagasBR, remotive, arbeitnow];
+// Fontes BR primeiro. Providers com `enabled()` só rodam se as chaves existirem.
+const PROVIDERS = [githubVagasBR, adzunaBR, remotive, arbeitnow];
 
 function prettyContract(type) {
   const map = {
@@ -248,9 +296,12 @@ export default async function handler(req, res) {
 
   const filters = req.body?.filters || {};
 
+  // Só roda providers habilitados (os que exigem chave ficam inertes sem env).
+  const active = PROVIDERS.filter((p) => !p.enabled || p.enabled());
+
   // Fan-out paralelo com timeout por provider; falha de uma não derruba a busca.
   const settled = await Promise.all(
-    PROVIDERS.map(async (p) => {
+    active.map(async (p) => {
       try {
         const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
         const jobs = await p.search(filters, { signal });
