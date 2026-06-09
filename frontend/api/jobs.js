@@ -40,6 +40,30 @@ async function authenticate(req) {
 
 const lower = (v) => String(v || '').toLowerCase();
 
+/**
+ * Normaliza locais p/ comparação: "Brazil"(z, inglês das APIs) e "Brasil"(s,
+ * pt-BR que o usuário digita) viram a MESMA string. Sem isso o filtro de
+ * localização nunca casava entre fonte e busca.
+ */
+const normLoc = (v) => lower(v).replace(/brazil/g, 'brasil');
+
+/** Local no formato que APIs estrangeiras esperam (Jooble/The Muse usam inglês). */
+const toApiLocation = (v) => (/bras[ií]l|brazil/i.test(v || '') ? 'Brazil' : v);
+
+/**
+ * Vaga é relevante p/ quem está no Brasil? Mantém: vagas BR explícitas e vagas
+ * remotas abertas globalmente (anywhere/worldwide/latam) — essas servem pra cá.
+ * Descarta vaga presencial/remota presa a OUTRO país (ex.: "USA Only", "Berlin").
+ */
+const BR_RE = /bras[ií]l|brazil/i;
+const GLOBAL_REMOTE_RE = /\b(remote|remoto|anywhere|worldwide|global|latam|latin\s*america|am[ée]rica\s*latina|home.?office)\b/i;
+function isBrazilJob(j) {
+  const loc = lower(j.location).trim();
+  if (!loc || loc === '—' || loc === 'não informado') return true; // local desconhecido → não derruba
+  if (BR_RE.test(loc)) return true;
+  return j.workMode === 'remote' && GLOBAL_REMOTE_RE.test(loc);
+}
+
 /** Tenta extrair faixa salarial de texto livre ("R$ 3.000 - 5.000", "$4k"). */
 function parseSalary(raw) {
   if (!raw) return {};
@@ -242,7 +266,7 @@ const jooble = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // Jooble espera o país em inglês ("Brazil"); "Brasil" retorna 0.
-      body: JSON.stringify({ keywords: filters.keyword || '', location: filters.location || 'Brazil' }),
+      body: JSON.stringify({ keywords: filters.keyword || '', location: toApiLocation(filters.location) || 'Brazil' }),
       signal,
     });
     if (!r.ok) throw new Error(`Jooble HTTP ${r.status}`);
@@ -330,7 +354,8 @@ const theMuse = {
   async search(filters, { signal }) {
     const url = new URL('https://www.themuse.com/api/public/jobs');
     url.searchParams.set('page', '1');
-    if (filters.location) url.searchParams.set('location', filters.location);
+    // Sem location → foca Brasil (board é global; evita inundar de vaga gringa).
+    url.searchParams.set('location', toApiLocation(filters.location) || 'Brazil');
     const key = env('THEMUSE_API_KEY');
     if (key) url.searchParams.set('api_key', key);
     const r = await fetch(url, { signal });
@@ -386,14 +411,14 @@ function stripHtml(html) {
 
 function applyFilters(jobs, f) {
   const kw = lower(f.keyword);
-  const loc = lower(f.location);
+  const loc = normLoc(f.location);
   const comp = lower(f.company);
   const sinceDays = { today: 1, '3d': 3, week: 7, month: 30 }[f.datePosted];
   const cutoff = sinceDays ? Date.now() - sinceDays * 86400000 : null;
 
   return jobs.filter((j) => {
     if (kw && !(`${lower(j.title)} ${lower(j.company)} ${lower(j.description)}`.includes(kw))) return false;
-    if (loc && !lower(j.location).includes(loc)) return false;
+    if (loc && !normLoc(j.location).includes(loc)) return false;
     if (comp && !lower(j.company).includes(comp)) return false;
     if (f.workMode && j.workMode !== f.workMode) return false;
     if (f.contractType && lower(j.contractType) !== lower(f.contractType)) return false;
@@ -447,7 +472,12 @@ export default async function handler(req, res) {
     return send(res, 502, { error: 'Não foi possível consultar as fontes de vagas agora. Tente novamente em instantes.' });
   }
 
-  const merged = dedupe(applyFilters(ok.flatMap((s) => s.jobs), filters)).sort(
+  // Gate "só Brasil / remoto-BR": LIGADO por padrão (usuário está no Brasil e
+  // não quer vaga presa a outro país). Desligável só com brazilOnly === false.
+  let pool = applyFilters(ok.flatMap((s) => s.jobs), filters);
+  if (filters.brazilOnly !== false) pool = pool.filter(isBrazilJob);
+
+  const merged = dedupe(pool).sort(
     (a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0)
   );
 

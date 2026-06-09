@@ -10,6 +10,7 @@ const EMPTY = {
   datePosted: '',
   salaryMin: '',
   salaryMax: '',
+  brazilOnly: true, // padrão: só vagas BR / remotas abertas ao Brasil
 };
 
 /**
@@ -22,11 +23,15 @@ export default function JobFilters({ onSearch, loading }) {
   const [advanced, setAdvanced] = useState(false);
 
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const setBool = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.checked }));
 
   const submit = (e) => {
     e.preventDefault();
-    // remove campos vazios antes de enviar (cache key mais estável)
-    const clean = Object.fromEntries(Object.entries(f).filter(([, v]) => String(v).trim() !== ''));
+    // remove strings vazias antes de enviar (cache key mais estável); booleanos
+    // como brazilOnly são preservados (precisam viajar mesmo quando false).
+    const clean = Object.fromEntries(
+      Object.entries(f).filter(([, v]) => typeof v === 'boolean' || String(v).trim() !== '')
+    );
     onSearch(clean);
   };
 
@@ -50,14 +55,27 @@ export default function JobFilters({ onSearch, loading }) {
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setAdvanced((v) => !v)}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900"
-      >
-        <SlidersHorizontal className="w-3.5 h-3.5" />
-        Filtros avançados
-      </button>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setAdvanced((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Filtros avançados
+        </button>
+
+        {/* BR-only sempre visível: comunica o recorte sem precisar abrir avançado. */}
+        <label className="inline-flex items-center gap-2 text-xs font-semibold text-ink-700 cursor-pointer select-none min-h-[44px]">
+          <input
+            type="checkbox"
+            checked={f.brazilOnly}
+            onChange={setBool('brazilOnly')}
+            className="w-4 h-4 rounded accent-accent-dark"
+          />
+          🇧🇷 Só Brasil (e remoto p/ BR)
+        </label>
+      </div>
 
       {advanced && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 animate-fade-in">
