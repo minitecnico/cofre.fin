@@ -292,10 +292,72 @@ const jobicy = {
   },
 };
 
+/**
+ * Himalayas — board de vagas remotas, grátis e SEM chave. Volume alto (>100k
+ * vagas). `pubDate` vem em unix (segundos). Salário é anual em moeda estrangeira
+ * → omitido pra não exibir como R$ mensal (mesmo critério do Jobicy).
+ */
+const himalayas = {
+  name: 'Himalayas',
+  free: true,
+  async search(_filters, { signal }) {
+    const r = await fetch('https://himalayas.app/jobs/api?limit=50', { signal });
+    if (!r.ok) throw new Error(`Himalayas HTTP ${r.status}`);
+    const json = await r.json();
+    return (json.jobs || []).map((j) => ({
+      id: `himalayas-${j.guid || j.applicationLink}`,
+      title: j.title,
+      company: j.companyName || null,
+      location: (j.locationRestrictions || [])[0] || 'Remoto',
+      workMode: 'remote',
+      contractType: prettyContract(j.employmentType),
+      publishedAt: j.pubDate ? new Date(j.pubDate * 1000).toISOString() : null,
+      source: 'Himalayas',
+      applyUrl: j.applicationLink || j.guid,
+      description: stripHtml(j.description || j.excerpt),
+    }));
+  },
+};
+
+/**
+ * The Muse — board global, grátis e SEM chave (THEMUSE_API_KEY opcional só sobe
+ * o rate limit). Sem busca por palavra-chave server-side → filtramos depois;
+ * suporta filtro de `location` (ex.: "Brazil") quando o usuário informa.
+ */
+const theMuse = {
+  name: 'The Muse',
+  free: true,
+  async search(filters, { signal }) {
+    const url = new URL('https://www.themuse.com/api/public/jobs');
+    url.searchParams.set('page', '1');
+    if (filters.location) url.searchParams.set('location', filters.location);
+    const key = env('THEMUSE_API_KEY');
+    if (key) url.searchParams.set('api_key', key);
+    const r = await fetch(url, { signal });
+    if (!r.ok) throw new Error(`The Muse HTTP ${r.status}`);
+    const json = await r.json();
+    return (json.results || []).map((j) => {
+      const location = (j.locations || [])[0]?.name || 'Não informado';
+      return {
+        id: `themuse-${j.id}`,
+        title: j.name,
+        company: j.company?.name || null,
+        location,
+        workMode: workModeFrom({ location }),
+        contractType: prettyContract(j.type),
+        publishedAt: j.publication_date || null,
+        source: 'The Muse',
+        applyUrl: j.refs?.landing_page,
+        description: stripHtml(j.contents),
+      };
+    });
+  },
+};
+
 // Ordem = prioridade de exibição quando há empate na deduplicação.
 // Fontes BR/agregadores primeiro. Providers com `enabled()` só rodam se as
 // chaves existirem (Adzuna/Jooble); os `free` rodam sempre.
-const PROVIDERS = [githubVagasBR, adzunaBR, jooble, remotive, arbeitnow, jobicy];
+const PROVIDERS = [githubVagasBR, adzunaBR, jooble, remotive, arbeitnow, jobicy, himalayas, theMuse];
 
 function prettyContract(type) {
   const map = {
