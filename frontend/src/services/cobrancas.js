@@ -90,7 +90,7 @@ export const chargeService = {
   async list({ debtorId } = {}) {
     let query = supabase
       .from('charges')
-      .select('*, debtor:debtors ( id, name, phone )')
+      .select('*, debtor:debtors ( id, name, phone ), credit_card:credit_cards ( id, name, color )')
       .order('paid', { ascending: true })
       .order('due_date', { ascending: true, nullsFirst: false });
     if (debtorId) query = query.eq('debtor_id', debtorId);
@@ -99,7 +99,7 @@ export const chargeService = {
     return data || [];
   },
 
-  async create({ debtorId, description, amount, dueDate }) {
+  async create({ debtorId, description, amount, dueDate, cardId }) {
     const userId = await currentUserId();
     const { data, error } = await supabase
       .from('charges')
@@ -109,8 +109,9 @@ export const chargeService = {
         description,
         amount,
         due_date: dueDate || null,
+        credit_card_id: cardId || null,
       })
-      .select('*, debtor:debtors ( id, name, phone )')
+      .select('*, debtor:debtors ( id, name, phone ), credit_card:credit_cards ( id, name, color )')
       .single();
     if (error) throw error;
     return data;
@@ -128,7 +129,7 @@ export const chargeService = {
    * @param {number} args.count        nº de parcelas
    * @param {string} args.firstDueDate vencimento da 1ª parcela 'YYYY-MM-DD'
    */
-  async createInstallments({ debtorId, description, totalAmount, count, firstDueDate }) {
+  async createInstallments({ debtorId, description, totalAmount, count, firstDueDate, cardId }) {
     const userId = await currentUserId();
     const groupId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.round(totalAmount * 100)}`;
     const amounts = splitInstallmentAmount(totalAmount, count);
@@ -140,6 +141,7 @@ export const chargeService = {
       description: `${description} (${i + 1}/${count})`,
       amount: amt,
       due_date: dates[i],
+      credit_card_id: cardId || null,
       installment_total: count,
       installment_number: i + 1,
       installment_group_id: groupId,
@@ -148,7 +150,7 @@ export const chargeService = {
     const { data, error } = await supabase
       .from('charges')
       .insert(rows)
-      .select('*, debtor:debtors ( id, name, phone )');
+      .select('*, debtor:debtors ( id, name, phone ), credit_card:credit_cards ( id, name, color )');
     if (error) throw error;
     return data;
   },
@@ -158,7 +160,7 @@ export const chargeService = {
       .from('charges')
       .update(patch)
       .eq('id', id)
-      .select('*, debtor:debtors ( id, name, phone )')
+      .select('*, debtor:debtors ( id, name, phone ), credit_card:credit_cards ( id, name, color )')
       .single();
     if (error) throw error;
     return data;

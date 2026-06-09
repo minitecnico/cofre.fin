@@ -8,6 +8,7 @@ import {
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
 import CobrancaQuickForm from '../components/CobrancaQuickForm';
+import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
 import { formatCurrency, formatDate, parseAmount } from '../utils/format';
@@ -322,12 +323,14 @@ export default function Cobrancas() {
       </Modal>
       <ChargeModal
         debtor={chargeTarget}
+        cards={c.cards}
         onClose={() => setChargeTarget(null)}
         onSave={c.addCharge}
         onSaveInstallments={c.addInstallments}
       />
       <EditChargeModal
         charge={editTarget}
+        cards={c.cards}
         onClose={() => setEditTarget(null)}
         onSave={c.updateCharge}
       />
@@ -692,7 +695,9 @@ function ChargeBlock({ group, selected, onToggleSelect, onSetPaid, onEdit, onRem
           <p className="text-sm font-bold text-ink-900 truncate">{base}</p>
           <p className="text-[11px] text-ink-500">{n}x · {formatCurrency(total)} · {paidCount}/{n} pagas</p>
         </div>
-        <CreditCard className="w-4 h-4 text-ink-400 flex-shrink-0" />
+        {items[0].credit_card
+          ? <CardTag card={items[0].credit_card} className="flex-shrink-0" />
+          : <CreditCard className="w-4 h-4 text-ink-400 flex-shrink-0" />}
       </div>
       <div className="divide-y divide-ink-50">
         {items.map((c) => (
@@ -754,6 +759,10 @@ function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemo
             <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
               {overdue ? 'Venceu ' : 'Vence '}{formatDate(charge.due_date, 'long')}
             </p>
+          )}
+          {/* Tarja do cartão (só em avulsas; no parcelamento ela fica no cabeçalho) */}
+          {charge.installment_total <= 1 && charge.credit_card && (
+            <CardTag card={charge.credit_card} />
           )}
           {/* Sinaliza que esta cobrança já foi cobrada (evita cobrar 2-3x) */}
           {!charge.paid && charge.last_charged_at && (
@@ -922,14 +931,16 @@ function DebtorModal({ isOpen, onClose, onSave }) {
 }
 
 // ── Modal: adicionar cobrança a um devedor ─────────────────────
-function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
+function ChargeModal({ debtor, cards, onClose, onSave, onSaveInstallments }) {
   const [form, setForm] = useState({ description: '', amount: '', dueDate: '' });
+  const [cardId, setCardId] = useState('');
   const [parcelado, setParcelado] = useState(false);
   const [count, setCount] = useState(2);
   const [saving, setSaving] = useState(false);
 
   function reset() {
     setForm({ description: '', amount: '', dueDate: '' });
+    setCardId('');
     setParcelado(false);
     setCount(2);
   }
@@ -952,9 +963,10 @@ function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
           totalAmount: total,
           count,
           firstDueDate: form.dueDate || null,
+          cardId: cardId || null,
         });
       } else {
-        await onSave({ debtorId: debtor.debtorId, description: form.description.trim(), amount: total, dueDate: form.dueDate || null });
+        await onSave({ debtorId: debtor.debtorId, description: form.description.trim(), amount: total, dueDate: form.dueDate || null, cardId: cardId || null });
       }
       reset();
       onClose();
@@ -1010,6 +1022,8 @@ function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
           <input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
         </div>
 
+        <CardSelect cards={cards} value={cardId} onChange={setCardId} />
+
         <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
           {parcelado ? `Adicionar ${count}x` : 'Adicionar cobrança'}
@@ -1020,8 +1034,9 @@ function ChargeModal({ debtor, onClose, onSave, onSaveInstallments }) {
 }
 
 // ── Modal: editar cobrança ─────────────────────────────────────
-function EditChargeModal({ charge, onClose, onSave }) {
+function EditChargeModal({ charge, cards, onClose, onSave }) {
   const [form, setForm] = useState({ description: '', amount: '', dueDate: '' });
+  const [cardId, setCardId] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Carrega os valores da cobrança ao abrir
@@ -1032,6 +1047,7 @@ function EditChargeModal({ charge, onClose, onSave }) {
         amount: String(charge.amount ?? ''),
         dueDate: charge.due_date || '',
       });
+      setCardId(charge.credit_card_id || '');
     }
   }, [charge]);
 
@@ -1045,6 +1061,7 @@ function EditChargeModal({ charge, onClose, onSave }) {
         description: form.description.trim(),
         amount,
         due_date: form.dueDate || null,
+        credit_card_id: cardId || null,
       });
       onClose();
     } finally {
@@ -1067,6 +1084,7 @@ function EditChargeModal({ charge, onClose, onSave }) {
           <label className="label">Vencimento (opcional)</label>
           <input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
         </div>
+        <CardSelect cards={cards} value={cardId} onChange={setCardId} />
         {charge?.installment_total > 1 && (
           <p className="text-[11px] text-ink-400">
             Parcela {charge.installment_number}/{charge.installment_total} — editar afeta só esta parcela.

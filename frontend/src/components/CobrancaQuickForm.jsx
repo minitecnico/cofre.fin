@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Plus, Minus, Loader2, CreditCard, UserPlus, HandCoins } from 'lucide-react';
 import { debtorService, chargeService } from '../services/cobrancas';
+import { cardService } from '../services/index';
 import { formatCurrency, parseAmount } from '../utils/format';
 import Stepper from './Stepper';
+import { CardSelect } from './CardTag';
 
 /**
  * Form rápido de Cobrança — usado pelo botão "+" (FAB), lado a lado com a
@@ -17,6 +19,8 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
   const [debtorId, setDebtorId] = useState('');     // '' = nenhum, 'new' = criar
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [cards, setCards] = useState([]);
+  const [cardId, setCardId] = useState('');
   const [form, setForm] = useState({ description: '', amount: '', dueDate: '' });
   const [parcelado, setParcelado] = useState(false);
   const [count, setCount] = useState(2);
@@ -31,6 +35,7 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         setDebtorId(list.length ? list[0].id : 'new');
       })
       .catch(() => setDebtorId('new'));
+    cardService.listSimple().then(setCards).catch(() => setCards([]));
   }, []);
 
   const total = parseAmount(form.amount);
@@ -62,6 +67,7 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
           totalAmount: total,
           count,
           firstDueDate: form.dueDate || null,
+          cardId: cardId || null,
         });
       } else {
         await chargeService.create({
@@ -69,6 +75,7 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
           description: form.description.trim(),
           amount: total,
           dueDate: form.dueDate || null,
+          cardId: cardId || null,
         });
       }
       onSaved?.();
@@ -146,6 +153,8 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         <label className="label">{parcelado ? 'Vencimento da 1ª parcela' : 'Vencimento (opcional)'}</label>
         <input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
       </div>
+
+      <CardSelect cards={cards} value={cardId} onChange={setCardId} />
 
       {error && <p className="text-sm text-negative font-medium">{error}</p>}
 

@@ -252,6 +252,20 @@ export const categoryService = {
 };
 
 export const cardService = {
+  /**
+   * Lista enxuta dos cartões ativos (id, name, color) — sem o summary via RPC.
+   * Pra selects/tarjas onde só interessa identificar o cartão (ex.: Cobranças).
+   */
+  async listSimple() {
+    const { data, error } = await supabase
+      .from('credit_cards')
+      .select('id, name, color')
+      .eq('active', true)
+      .order('created_at');
+    if (error) throw error;
+    return data || [];
+  },
+
   async list() {
     const { data, error } = await supabase
       .from('credit_cards')

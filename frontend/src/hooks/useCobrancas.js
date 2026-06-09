@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { debtorService, chargeService, pixKeyService } from '../services/cobrancas';
+import { cardService } from '../services/index';
 
 /**
  * Hook central da página de Cobranças.
@@ -14,20 +15,23 @@ export function useCobrancas() {
   const [summary, setSummary] = useState([]);    // resumo por devedor (RPC)
   const [charges, setCharges] = useState([]);     // todas as cobranças
   const [pixKeys, setPixKeys] = useState([]);     // chaves PIX cadastradas
+  const [cards, setCards] = useState([]);         // cartões (p/ tarja/seletor)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const [sum, chg, keys] = await Promise.all([
+      const [sum, chg, keys, crd] = await Promise.all([
         debtorService.summary(),
         chargeService.list(),
         pixKeyService.list(),
+        cardService.listSimple(),
       ]);
       setSummary(sum);
       setCharges(chg);
       setPixKeys(keys);
+      setCards(crd);
     } catch (err) {
       console.error(err);
       setError('Não foi possível carregar as cobranças.');
@@ -139,7 +143,7 @@ export function useCobrancas() {
   } : null), [activePixKey]);
 
   return {
-    summary, charges, chargesByDebtor, pixKeys, activePixKey, pix, totals, loading, error,
+    summary, charges, chargesByDebtor, pixKeys, cards, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
     addCharge, addInstallments, updateCharge, setChargePaid, removeCharge, removeCharges, markCharged,
