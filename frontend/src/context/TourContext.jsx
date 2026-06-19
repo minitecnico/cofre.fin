@@ -77,11 +77,6 @@ const STEPS = [
     content: 'Um assistente que conhece suas finanças do mês. Pergunte onde você gastou mais, peça dicas de economia ou um resumo rápido.',
   },
   {
-    route: '/empregos', target: '[data-tour="page-header"]',
-    title: 'Buscador de Vagas',
-    content: 'Encontre vagas de várias fontes num lugar só — inclusive vagas BR da comunidade dev no GitHub. Filtre por cargo, modalidade e salário, e salve as que interessam na aba "Salvos".',
-  },
-  {
     route: '/settings', target: '[data-tour="link-accounts"]', placement: 'top',
     title: 'Conta e login Google',
     content: 'Vincule o Google pra entrar com um toque. Aqui também troca senha e exporta seus dados.',

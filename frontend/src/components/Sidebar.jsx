@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Bot, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, FileText, HandCoins, Briefcase } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Bot, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, FileText, HandCoins } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AlertCenter from './AlertCenter';
 
@@ -11,7 +11,6 @@ const links = [
   { to: '/cards', label: 'Cartões', icon: CreditCard },
   { to: '/cobrancas', label: 'Cobranças', icon: HandCoins },
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
-  { to: '/empregos', label: 'Buscador de Vagas', icon: Briefcase },
   { to: '/ai', label: 'Assistente IA', icon: Bot },
   { to: '/reports', label: 'Relatórios', icon: FileText },
   { to: '/categories', label: 'Categorias', icon: Tag },

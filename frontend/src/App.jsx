@@ -17,7 +17,6 @@ import ImportExport from './pages/ImportExport';
 import AiAssistant from './pages/AiAssistant';
 import RedirectLink from './pages/RedirectLink';
 import PixPay from './pages/PixPay';
-import Empregos from './pages/Empregos';
 
 // Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
 const Reports = lazy(() => import('./pages/Reports'));
@@ -65,7 +64,6 @@ export default function App() {
                   </Suspense>
                 }
               />
-              <Route path="empregos" element={<Empregos />} />
               <Route path="import-export" element={<ImportExport />} />
               <Route path="ai" element={<AiAssistant />} />
             </Route>
