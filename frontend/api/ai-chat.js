@@ -277,7 +277,39 @@ CONTEXTO_FINANCEIRO:
 ${serialized}`;
 }
 
+/**
+ * CORS restrito às origens do app nativo.
+ *
+ * Na web a chamada é same-origin e nem passa por CORS. Já o WebView do
+ * Capacitor serve o app de `https://localhost` (Android) ou `capacitor://localhost`
+ * (iOS), então o POST vira cross-origin e o navegador exige preflight.
+ * A allowlist é fechada de propósito: o endpoint gasta créditos de IA, e a
+ * autenticação por JWT do Supabase não deve ser a única barreira.
+ */
+const NATIVE_ORIGINS = new Set([
+  'https://localhost',
+  'capacitor://localhost',
+  'http://localhost',
+]);
+
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin || !NATIVE_ORIGINS.has(origin)) return;
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
 export default async function handler(req, res) {
+  applyCors(req, res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return send(res, 405, { error: 'Método não permitido.' });

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Splash screen do app nativo. Fundo no ink-950 (#161610) do design system,
+  igual ao background_color do manifest.json — assim não há flash de cor entre
+  a splash nativa e o primeiro paint do React.
+  A carteira fica pequena e centralizada porque a splash é cortada de formas
+  diferentes em cada proporção de tela; só o centro é área segura.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <rect width="2732" height="2732" fill="#161610"/>
+
+  <g transform="translate(1366, 1366) scale(1.6)" fill="#c4f542">
+    <rect x="-145" y="-100" width="290" height="200" rx="28" ry="28"/>
+    <rect x="-145" y="-22" width="290" height="44" fill="#161610"/>
+    <circle cx="105" cy="0" r="22" fill="#161610"/>
+    <circle cx="105" cy="0" r="11" fill="#c4f542"/>
+  </g>
+</svg>

@@ -16,6 +16,17 @@
 *.key
 *.cert
 *.crt
+# Assinatura do APK — quem tem o keystore publica update em nome do seu app.
+*.jks
+*.keystore
+keystore.properties
+
+
+# ─── ANDROID / CAPACITOR ────────────────────────────────────
+# O resto (build/, .gradle/, local.properties) já está coberto
+# pelo frontend/android/.gitignore gerado pelo Capacitor.
+frontend/android/app/release/
+frontend/android/app/debug/
 
 
 # ─── DEPENDÊNCIAS ───────────────────────────────────────────
@@ -107,3 +118,11 @@ backup-*.json
 *.orig
 .scratch/
 scratch/
+
+
+# ─── VERCEL CLI (adicionado pelo `vercel link`) ─────────────
+.vercel
+.env*
+# Reafirma a exceção do topo: regra posterior vence no .gitignore, e o
+# `.env*` acima anularia o `!.env.example` se ele não fosse repetido aqui.
+!.env.example

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fonte do ícone do app nativo (Android/iOS).
+  Mantido em sync com public/icons/icon.svg — se um mudar, mude o outro e rode
+  `npm run android:assets`.
+  A carteira ocupa ~57% da largura para caber na zona segura do adaptive icon.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#c4f542"/>
+
+  <g transform="translate(256, 256)" fill="#161610">
+    <rect x="-145" y="-100" width="290" height="200" rx="28" ry="28"/>
+    <rect x="-145" y="-22" width="290" height="44" fill="#c4f542"/>
+    <circle cx="105" cy="0" r="22" fill="#c4f542"/>
+    <circle cx="105" cy="0" r="11" fill="#161610"/>
+  </g>
+</svg>

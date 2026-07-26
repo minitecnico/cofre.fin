@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Background SEM inset de propósito: o adaptive icon é recortado por máscaras
+      diferentes em cada launcher (e ganha parallax no Pixel). Com inset, os cantos
+      do recorte ficariam transparentes. O foreground mantém o inset porque é ele
+      que precisa respeitar a zona segura.
+    -->
+    <background>
+        <inset android:drawable="@mipmap/ic_launcher_background" android:inset="0%" />
+    </background>
+    <foreground>
+        <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="16.7%" />
+    </foreground>
+</adaptive-icon>

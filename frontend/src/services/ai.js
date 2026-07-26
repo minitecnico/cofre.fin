@@ -1,5 +1,15 @@
 import { supabase } from './supabase';
 
+/**
+ * Base da função serverless do assistente.
+ *
+ * Na web (Vercel) a função vive na mesma origem, então caminho relativo basta.
+ * Dentro do app Android (Capacitor) a origem passa a ser `https://localhost`,
+ * onde `/api/ai-chat` não existe — aí é obrigatório apontar para o domínio
+ * publicado via VITE_API_BASE_URL (sem barra no final).
+ */
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
 export async function sendAiMessage(messages, context, documents = []) {
   const data = await aiRequest({ messages, context, documents });
   return data.message;
@@ -17,7 +27,7 @@ async function aiRequest(body) {
     throw new Error('Sua sessão expirou. Entre novamente na sua conta.');
   }
 
-  const response = await fetch('/api/ai-chat', {
+  const response = await fetch(`${API_BASE_URL}/api/ai-chat`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${session.access_token}`,

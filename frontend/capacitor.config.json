@@ -1,0 +1,15 @@
+{
+  "appId": "com.cofre.app",
+  "appName": "Cofre",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "url": "https://minitecnico-projeto-financas-pessoa.vercel.app",
+    "cleartext": false
+  },
+  "android": {
+    "backgroundColor": "#161610",
+    "allowMixedContent": false,
+    "linuxAndroidStudioPath": "/snap/bin/android-studio"
+  }
+}

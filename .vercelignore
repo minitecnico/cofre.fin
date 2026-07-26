@@ -1,0 +1,22 @@
+# Arquivos que NÃO devem subir no deploy da Vercel.
+#
+# Existe porque esta pasta não é um repositório git: sem .gitignore em vigor,
+# a CLI empacotaria tudo — inclusive os artefatos do build Android, que são
+# centenas de MB e não têm nada a ver com o site.
+
+node_modules
+frontend/node_modules
+
+# Projeto nativo (Capacitor) — só serve para gerar o APK.
+frontend/android
+frontend/assets
+frontend/capacitor.config.json
+
+# Build local; a Vercel gera o dela.
+frontend/dist
+
+# Documentação e SQL — o site não usa nada disso em runtime.
+*.md
+supabase
+.claude
+.claudeignore

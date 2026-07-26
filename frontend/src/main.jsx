@@ -17,8 +17,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
  *
  * Só registra em produção (import.meta.env.PROD) para não atrapalhar o HMR
  * do Vite em dev. O SW vive em /sw.js (public/), com escopo na raiz.
+ *
+ * O SW é pulado APENAS quando o app nativo roda com os assets empacotados
+ * dentro do APK (origem `localhost`): ali o cache não traria ganho e ainda
+ * arriscaria servir versão velha depois de atualizar o app.
+ *
+ * Com `server.url` no capacitor.config, o APK carrega o site publicado — e aí
+ * o SW é justamente o que garante que o app abra sem internet. Por isso o
+ * teste olha a origem, não só a presença do Capacitor.
  */
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+const isBundledNative =
+  Boolean(window.Capacitor?.isNativePlatform?.()) && window.location.hostname === 'localhost';
+
+if (import.meta.env.PROD && !isBundledNative && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     const hadController = Boolean(navigator.serviceWorker.controller);
 
