@@ -18,9 +18,14 @@ export default function Toast({ message, onClose, duration = 4500, icon: Icon = 
 
   return (
     <AnimatePresence>
+      {/*
+        O `top` com safe-area existe por causa do APK: no Android 15 o app desenha
+        edge-to-edge, e um `top-4` cru colocaria o toast por baixo do relógio.
+        No desktop o `md:top-6` continua mandando; no navegador o env() vira 0.
+      */}
       {message && (
         <motion.div
-          className="fixed z-50 left-4 right-4 top-4 md:left-auto md:right-6 md:top-6 md:max-w-sm
+          className="fixed z-50 left-4 right-4 top-[calc(env(safe-area-inset-top,0px)+1rem)] md:left-auto md:right-6 md:top-6 md:max-w-sm
                      bg-accent rounded-2xl shadow-soft-lg
                      p-3 md:p-4 flex items-start gap-3"
           role="status"

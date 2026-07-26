@@ -13,6 +13,12 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!--
+          Ícones da barra de status sempre claros. O header do app é escuro
+          (bg-gradient-dark); sem isto, o tema DayNight pode pedir ícones escuros
+          no modo claro do sistema e o relógio some sobre o header.
+        -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 
