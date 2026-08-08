@@ -6,6 +6,17 @@ A segurança vem das **policies de Row Level Security** do Postgres — nunca de
 
 ---
 
+## Como trabalhar neste repo
+
+Estas quatro regras valem para qualquer alteração de código. Versão completa em `.claude/skills/karpathy-guidelines/SKILL.md` (invocável via `/karpathy-guidelines`).
+
+1. **Pense antes de codar.** Declare premissas. Se há mais de uma interpretação, apresente-as em vez de escolher em silêncio. Se algo está obscuro, pergunte antes de implementar.
+2. **Simplicidade primeiro.** O mínimo de código que resolve o problema. Nada de abstração para uso único, "flexibilidade" não pedida ou tratamento de erro para cenário impossível.
+3. **Mudanças cirúrgicas.** Toda linha alterada deve rastrear até o pedido. Não refatore o que não está quebrado; código morto não relacionado se menciona, não se apaga. Remova só os órfãos que a sua própria mudança criou.
+4. **Execução guiada por objetivo.** Antes de começar, defina como saberá que funcionou. Sem testes automatizados aqui, o critério é concreto e observável: `npm run build` limpo, passo reproduzível na UI, ou query SQL que comprove o resultado.
+
+---
+
 ## Stack real (verificada)
 
 | Camada | Tecnologia | Versão |

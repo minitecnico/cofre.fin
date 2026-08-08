@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -c '^\\\\.env$')",
+      "Edit(/.claude/skills/karpathy-guidelines/**)"
+    ]
+  }
+}
