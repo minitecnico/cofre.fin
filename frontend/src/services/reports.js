@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from './supabase';
 import { transactionService, dashboardService, currentUserId } from './index';
 import { formatCurrency, formatDate } from '../utils/format';
+import { randomLinkCode } from '../utils/randomCode';
 
 /**
  * Service de Relatórios.
@@ -414,14 +415,19 @@ export async function uploadReportAndGetLink({ blob, month }, expiresInSec = 60 
     .createSignedUrl(path, expiresInSec, { download: `relatorio-cofre-${month}.pdf` });
   if (signErr) throw signErr;
 
-  // Encurta: código estável por path → upsert no report_links → link curto no
-  // próprio domínio (/r/<code>). Regerar o relatório mantém o mesmo código.
+  // Encurta: código aleatório → insert no report_links → link curto no próprio
+  // domínio (/r/<code>).
+  //
+  // O código É a credencial (a RPC resolve_report_link é pública), então cada
+  // geração cria um código novo e imprevisível. Regerar o relatório não reusa
+  // mais o código antigo — mas o link antigo continua funcionando, porque o
+  // upload é upsert no mesmo path e a URL assinada segue válida.
   let shortUrl = data.signedUrl;
   try {
-    const code = shortCodeFor(path);
+    const code = randomLinkCode();
     const { error: linkErr } = await supabase
       .from('report_links')
-      .upsert({ code, user_id: userId, url: data.signedUrl }, { onConflict: 'code' });
+      .insert({ code, user_id: userId, url: data.signedUrl });
     if (!linkErr) shortUrl = `${window.location.origin}/r/${code}`;
   } catch { /* se falhar, usa a URL longa mesmo */ }
 
@@ -431,15 +437,6 @@ export async function uploadReportAndGetLink({ blob, month }, expiresInSec = 60 
     path,
     expiresAt: new Date(Date.now() + expiresInSec * 1000),
   };
-}
-
-/** Código curto determinístico a partir do path (djb2 → base36). */
-function shortCodeFor(path) {
-  let h = 5381;
-  for (let i = 0; i < path.length; i += 1) {
-    h = ((h << 5) + h + path.charCodeAt(i)) >>> 0; // djb2, mantém uint32
-  }
-  return h.toString(36).padStart(7, '0');
 }
 
 /** Baixa o PDF localmente (pra anexar manualmente ou guardar). */

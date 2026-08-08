@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { currentUserId } from './index';
 import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
 import { buildPixPayload, pixQrCodeDataUrl } from './pix';
+import { randomLinkCode } from '../utils/randomCode';
 
 /**
  * Services de Cobranças.
@@ -329,7 +330,10 @@ export const pixLinkService = {
     const dataUrl = await pixQrCodeDataUrl(payload);
     const blob = await (await fetch(dataUrl)).blob();
 
-    const code = `${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
+    // O código é a credencial do link público (resolve_pix_link é liberada pro
+    // `anon` e devolve o payload EMV, que contém a chave PIX). Precisa ser
+    // imprevisível — `Math.random()` não serve.
+    const code = randomLinkCode();
     const path = `${userId}/${code}.png`;
 
     const { error: upErr } = await supabase.storage
