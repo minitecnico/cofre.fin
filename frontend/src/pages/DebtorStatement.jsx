@@ -8,7 +8,7 @@ import { formatCurrency, formatDate } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
 
 /**
- * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
+ * Rota pública /e/:code (e o antigo /extrato/:code) — a "carteira" vista pelo DEVEDOR.
  *
  * Quem deve abre o link (sem login) e vê, sempre atualizado: total da dívida,
  * quanto já pagou, quanto falta, parcelas pagas × pendentes e cada dívida.

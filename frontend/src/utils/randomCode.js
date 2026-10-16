@@ -1,5 +1,5 @@
 /**
- * Código aleatório para links públicos (/r/:code, /pix/:code).
+ * Código aleatório para links públicos (/r/:code, /p/:code, /e/:code).
  *
  * Por que existe: esses links são resolvidos por RPCs `security definer`
  * liberadas pro `anon`, então o código É a credencial de acesso. Duas armadilhas

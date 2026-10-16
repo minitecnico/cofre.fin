@@ -5,7 +5,7 @@ import { resolvePixLink } from '../services';
 import { formatCurrency } from '../utils/format';
 
 /**
- * Rota pública /pix/:code — página de pagamento PIX.
+ * Rota pública /p/:code (e o antigo /pix/:code) — página de pagamento PIX.
  *
  * Quem recebe a cobrança abre aqui (sem login): vê o QR Code (imagem do
  * Storage), o valor e o recebedor, e copia o código PIX pra pagar no app do banco.
