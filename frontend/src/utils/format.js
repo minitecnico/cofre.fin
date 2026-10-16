@@ -60,6 +60,16 @@ export function formatDate(date, pattern = 'short') {
 }
 
 /**
+ * Número → texto pra PREENCHER um input de valor: 16.67 → "16,67".
+ * Nunca use String(numero) no input: "16.67" volta pelo parseAmount como 1667
+ * (o ponto é separador de milhar no pt-BR).
+ */
+export function toAmountInput(value) {
+  if (value === null || value === undefined || value === '') return '';
+  return (Number(value) || 0).toFixed(2).replace('.', ',');
+}
+
+/**
  * Data de hoje em 'YYYY-MM-DD' no fuso LOCAL.
  * `new Date().toISOString().slice(0, 10)` usa UTC: no Brasil, depois das 21h já
  * devolve o dia seguinte (e uma cobrança que vence hoje aparece "vencida").

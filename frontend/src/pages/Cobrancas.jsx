@@ -14,7 +14,7 @@ import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
-import { formatCurrency, formatDate, parseAmount, todayISO } from '../utils/format';
+import { formatCurrency, formatDate, parseAmount, todayISO, toAmountInput } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue, debtorCode, sameNameDebtors } from '../utils/charges';
 import {
   DAY_MS, CHARGE_STALE_DAYS, CHARGE_DUE_SOON_DAYS, CHARGE_NOTIFY_STORAGE_KEY,
@@ -1319,7 +1319,7 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
     if (charge) {
       setForm({
         description: charge.description || '',
-        amount: String(charge.amount ?? ''),
+        amount: toAmountInput(charge.amount),
         dueDate: charge.due_date || '',
       });
       setCardId(charge.credit_card_id || '');
@@ -1354,6 +1354,7 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
         <div>
           <label className="label">Valor</label>
           <input className="input-field" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required />
+          <AmountPreview value={form.amount} />
         </div>
         <div>
           <label className="label">Vencimento (opcional)</label>
@@ -1373,6 +1374,13 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
   );
 }
 
+/** Mostra como o valor digitado será salvo — erro de vírgula/ponto aparece antes de salvar. */
+function AmountPreview({ value, suffix = '' }) {
+  const n = parseAmount(value);
+  if (!n) return null;
+  return <p className="text-[11px] text-ink-500 mt-1">Vai salvar: <b className="text-ink-800">{formatCurrency(n)}</b> {suffix}</p>;
+}
+
 // ── Modal: editar parcelamento inteiro ─────────────────────────
 function EditGroupModal({ group, cards, onClose, onSave }) {
   const [description, setDescription] = useState('');
@@ -1388,7 +1396,7 @@ function EditGroupModal({ group, cards, onClose, onSave }) {
     if (!group) return;
     setDescription(baseDescription(group.items[0].description));
     const firstPending = group.items.find((x) => !x.paid);
-    setAmount(firstPending ? String(firstPending.amount) : '');
+    setAmount(firstPending ? toAmountInput(firstPending.amount) : '');
     setCardId(group.items[0].credit_card_id || '');
   }, [group]);
 
@@ -1419,6 +1427,7 @@ function EditGroupModal({ group, cards, onClose, onSave }) {
           <div>
             <label className="label">Valor de cada parcela pendente</label>
             <input className="input-field" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            <AmountPreview value={amount} suffix="por parcela" />
           </div>
         )}
         <CardSelect cards={cards} value={cardId} onChange={setCardId} />
