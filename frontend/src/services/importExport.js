@@ -258,7 +258,6 @@ function parseDate(input) {
   // ISO: 2026-05-04 (com ou sem hora)
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) {
-    const y = parseInt(m[1], 10);
     const mo = parseInt(m[2], 10);
     const d = parseInt(m[3], 10);
     if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
@@ -718,13 +717,6 @@ function arraysToSheet(data, columnWidths) {
     ws['!cols'] = columnWidths.map((w) => ({ wch: w }));
   }
   return ws;
-}
-
-/** Aplica formatação básica nos cabeçalhos (negrito + fundo verde-limão). */
-function applyHeaderStyle(ws, range) {
-  // SheetJS Community não suporta estilos completos sem biblioteca paga.
-  // Mas formatação numérica (datas, moeda) FUNCIONA — é o mais importante pra usabilidade.
-  // Para datas em pt-BR e moeda, definimos `z` (number format) nas células.
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ArrowUpCircle, ArrowDownCircle, Plus, Search, X, Filter } from 'lucide-react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useTransactions } from '../hooks/useTransactions';
 import TransactionList from '../components/TransactionList';
 import Modal from '../components/Modal';

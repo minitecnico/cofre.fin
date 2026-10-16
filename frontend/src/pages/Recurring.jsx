@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks, Filter } from 'lucide-react';
+import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { recurringService, categoryService, cardService, loanService, transactionService } from '../services';
 import { formatCurrency, parseAmount } from '../utils/format';
@@ -495,10 +495,6 @@ export default function RecurringPage() {
 
   function selectAll(itemList) {
     setSelectedIds(new Set(itemList.map((it) => it.id)));
-  }
-
-  function clearSelection() {
-    setSelectedIds(new Set());
   }
 
   function exitSelectionMode() {

@@ -56,7 +56,6 @@ export function MonthProvider({ children }) {
   // Helpers derivados — calculados uma vez por mudança de mês
   const helpers = useMemo(() => {
     const [year, monthNum] = month.split('-').map(Number);
-    const monthDate = new Date(year, monthNum - 1, 1);
     const monthNames = [
       'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',

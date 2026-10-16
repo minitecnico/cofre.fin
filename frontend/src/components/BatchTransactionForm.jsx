@@ -35,8 +35,6 @@ function emptyItem(defaults = {}) {
   };
 }
 
-const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 18, 24, 36, 48, 60, 72, 84, 96, 120, 180, 240];
-
 export default function BatchTransactionForm({ type = 'expense', onSaved, onCancel }) {
   const isIncome = type === 'income';
   const { isCurrentMonth, startDate: monthStart } = useMonth();
