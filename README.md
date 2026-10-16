@@ -1,7 +1,7 @@
 # 💰 Cofre — Personal Finance Dashboard
 
 Sistema completo de controle de finanças pessoais. O frontend conversa direto
-com Supabase e usa uma função serverless privada para o assistente financeiro.
+com o Supabase; a única função serverless é a que envia as notificações push.
 
 ```
 finance-dashboard/
@@ -36,12 +36,10 @@ finance-dashboard/
 - ✅ Filtros por período (dia, semana, mês)
 - ✅ Alertas automáticos de gastos altos
 - ✅ Simulação de saldo futuro
-- ✅ Exportação CSV
+- ✅ Importação e exportação em Excel (XLSX)
 - ✅ Login/registro com Supabase Auth (email/senha)
 - ✅ Cada usuário só vê seus dados (Row Level Security do Postgres)
-- ✅ Assistente IA para conversar sobre os dados financeiros do mês
-- ✅ Central de IA com diagnóstico mensal, lançamento por texto, busca natural e criação de metas
-- ✅ Sugestão de categorias com IA durante a importação de planilhas
+- ✅ Cobranças: quem te deve, parcelas, PIX, extrato público ao vivo e aviso de pagamento
 
 ---
 
@@ -107,7 +105,6 @@ frontend/
 │   ├── context/AuthContext.jsx
 │   ├── utils/format.js
 │   └── styles/index.css
-├── public/_redirects       # SPA routing fallback
 ├── vercel.json             # config de deploy
 ├── tailwind.config.js
 └── package.json

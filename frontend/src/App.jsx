@@ -14,7 +14,6 @@ import Recurring from './pages/Recurring';
 import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import ImportExport from './pages/ImportExport';
-import AiAssistant from './pages/AiAssistant';
 import RedirectLink from './pages/RedirectLink';
 import PixPay from './pages/PixPay';
 
@@ -75,7 +74,6 @@ export default function App() {
                 }
               />
               <Route path="import-export" element={<ImportExport />} />
-              <Route path="ai" element={<AiAssistant />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -67,17 +67,10 @@
     @apply bg-surface-card border border-hairline-light rounded-2xl transition-colors duration-300;
   }
 
-  /* Card escuro (storytelling band) — equivalente do surface-elevated. */
-  .feature-card-dark {
-    @apply bg-surface-elevated text-white border border-hairline-dark rounded-2xl;
-  }
-
   /* ─────────────────────────────────────────────────────────────────
    * BOTÕES — todos em pill (rounded-full) seguindo a linguagem.
    * - btn-accent: stamp da marca, verde-limão. Substitui o cobalto.
    * - btn-primary: pill escuro em fundo claro (button-dark Revolut).
-   * - btn-soft: pill suave (button-soft Revolut), CTA terciário.
-   * - btn-outline: pill outlined.
    * - btn-pill-sm: chip pequeno pra sub-nav e filtros.
    * - btn-ghost: ainda discreto, pill suave.
    * ───────────────────────────────────────────────────────────────── */
@@ -95,22 +88,6 @@
            hover:bg-accent-light
            active:scale-[0.98] transition-all duration-200 text-sm md:text-base;
     letter-spacing: -0.01em;
-  }
-
-  .btn-soft {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 min-h-[48px]
-           bg-surface-soft text-ink-900 font-semibold rounded-full
-           hover:bg-ink-200
-           active:scale-[0.98] transition-all duration-200 text-sm md:text-base;
-    letter-spacing: -0.01em;
-  }
-
-  .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 min-h-[48px]
-           bg-white text-ink-900 font-semibold rounded-full
-           border border-hairline-strong
-           hover:bg-ink-50
-           active:scale-[0.98] transition-all duration-200 text-sm md:text-base;
   }
 
   .btn-ghost {
@@ -182,7 +159,6 @@
 
   /* Hairline: divisor 1px pra substituir sombra em layouts editoriais. */
   .hairline { @apply border-t border-hairline-light; }
-  .hairline-dark { @apply border-t border-hairline-dark; }
 
   /* Esconde scrollbar (mas mantém scroll) — usado em sub-nav rolável no mobile */
   .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }

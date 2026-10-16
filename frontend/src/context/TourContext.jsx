@@ -72,11 +72,6 @@ const STEPS = [
     content: 'Gere o resumo financeiro de qualquer mês (receitas, despesas, saldo) e compartilhe direto pelo WhatsApp.',
   },
   {
-    route: '/ai', target: '[data-tour="page-header"]',
-    title: 'Cofre IA',
-    content: 'Um assistente que conhece suas finanças do mês. Pergunte onde você gastou mais, peça dicas de economia ou um resumo rápido.',
-  },
-  {
     route: '/settings', target: '[data-tour="link-accounts"]', placement: 'top',
     title: 'Conta e login Google',
     content: 'Vincule o Google pra entrar com um toque. Aqui também troca senha e exporta seus dados.',

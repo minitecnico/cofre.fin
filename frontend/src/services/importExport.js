@@ -333,82 +333,6 @@ function canonicalizeHeaders(headers) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Geração de template
-// ─────────────────────────────────────────────────────────────────────────
-
-export function generateTemplateCSV() {
-  const today = new Date();
-  const todayStr = today.toLocaleDateString('pt-BR'); // DD/MM/YYYY
-
-  const lines = [
-    ['Tipo', 'Descrição', 'Valor', 'Data', 'Categoria', 'Cartão', 'Parcelas', 'Pago', 'Observações'],
-    ['Despesa', 'Aluguel', '1800,00', todayStr, 'Moradia', '', '1', 'Não', 'Pago via PIX'],
-    ['Despesa', 'Tênis novo', '300,00', todayStr, 'Vestuário', 'Nubank', '8', 'Não', 'Black Friday'],
-    ['Receita', 'Salário', '5000,00', todayStr, 'Trabalho', '', '1', 'Sim', ''],
-    [],
-    ['# DICAS DE PREENCHIMENTO:'],
-    ['# Tipo:'],
-    ['#   "Despesa" ou "Receita" (também aceita Saída/Entrada)'],
-    ['# Valor:'],
-    ['#   Use vírgula para decimais. Ex: 1234,56'],
-    ['# Data:'],
-    ['#   Formato BR (DD/MM/AAAA) ou ISO (AAAA-MM-DD). Ex: 04/05/2026'],
-    ['# Categoria:'],
-    ['#   Nome aproximado da categoria já cadastrada. Ex: "Alimentação", "alimentacao"'],
-    ['# Cartão:'],
-    ['#   Nome do cartão já cadastrado, ou deixe vazio para "Conta/dinheiro"'],
-    ['# Parcelas:'],
-    ['#   1 ou vazio = à vista. 8 = parcela em 8x. Apenas com cartão.'],
-    ['# Pago:'],
-    ['#   "Sim" se já paga, "Não" ou vazio se pendente.'],
-    ['# Apague essas linhas com # antes de subir o arquivo.'],
-  ];
-
-  return lines.map((row) => row.map(csvEscape).join(',')).join('\n');
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Export CSV das transações
-// ─────────────────────────────────────────────────────────────────────────
-
-export async function exportTransactionsCSV({ startDate, endDate } = {}) {
-  let query = supabase
-    .from('transactions')
-    .select(`*, category:categories(name), credit_card:credit_cards(name)`)
-    .order('date', { ascending: false });
-
-  if (startDate) query = query.gte('date', startDate);
-  if (endDate) query = query.lte('date', endDate);
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const lines = [
-    ['Tipo', 'Descrição', 'Valor', 'Data', 'Categoria', 'Cartão', 'Parcelas', 'Pago', 'Observações'],
-  ];
-
-  for (const t of data || []) {
-    const tipo = t.type === 'income' ? 'Receita' : 'Despesa';
-    const valor = String(Number(t.amount).toFixed(2)).replace('.', ',');
-    const date = t.date ? t.date.slice(0, 10).split('-').reverse().join('/') : '';
-    const categoria = t.category?.name || '';
-    const cartao = t.credit_card?.name || '';
-    const parcelas = t.installment_total > 1
-      ? `${t.installment_number}/${t.installment_total}`
-      : '1';
-    const pago = t.paid ? 'Sim' : 'Não';
-    const obs = t.notes || '';
-
-    lines.push([tipo, t.description || '', valor, date, categoria, cartao, parcelas, pago, obs]);
-  }
-
-  return {
-    csv: lines.map((row) => row.map(csvEscape).join(',')).join('\n'),
-    count: data?.length || 0,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────
 // Parse + validação do CSV de upload
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -422,7 +346,7 @@ export async function exportTransactionsCSV({ startDate, endDate } = {}) {
  *     summary: { ok, warn, error, total }
  *   }
  */
-export async function parseImportCSV(text, { categories, cards, existingTransactions }) {
+async function parseImportCSV(text, { categories, cards, existingTransactions }) {
   const rawLines = parseCsvText(text);
   if (rawLines.length === 0) {
     throw new Error('Arquivo vazio.');
@@ -689,21 +613,6 @@ export async function loadImportContext() {
     cards: cardsRes.data || [],
     existingTransactions: txsRes.data || [],
   };
-}
-
-/** Helper pra disparar download de string como arquivo. */
-export function downloadCSV(content, filename) {
-  // BOM UTF-8 pra Excel abrir com acentos certos
-  const BOM = '\uFEFF';
-  const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 // =========================================================================

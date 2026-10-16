@@ -110,14 +110,16 @@ Expanda **"Environment Variables"** e adicione:
 |----------------------------|------------------------------------------------|
 | `VITE_SUPABASE_URL`        | a Project URL do Supabase                      |
 | `VITE_SUPABASE_ANON_KEY`   | a anon public key do Supabase                  |
-| `NINEROUTER_API_KEY`       | a chave privada gerada no painel do 9Router    |
-| `NINEROUTER_BASE_URL`      | `https://9router.com/v1`                       |
-| `NINEROUTER_MODEL`         | nome do combo configurado, ex.: `free-combo`   |
+| `SUPABASE_SERVICE_ROLE_KEY`| a service_role key do Supabase (secreta)       |
+| `VAPID_PRIVATE_KEY`        | chave privada VAPID do Web Push (secreta)      |
+| `VAPID_SUBJECT`            | `mailto:` + seu e-mail                         |
 
 ⚠️ **Não adicione `/` no final da URL.**
 
-As variáveis `NINEROUTER_*` ficam somente no servidor da Vercel. Nunca use o
-prefixo `VITE_` para a chave privada do 9Router.
+`SUPABASE_SERVICE_ROLE_KEY` e `VAPID_PRIVATE_KEY` são usadas só pela função
+`/api/push-notify` e ficam somente no servidor da Vercel. Nunca use o prefixo
+`VITE_` nelas (iria pro bundle público). Sem elas o app funciona; só o aviso de
+pagamento com o app fechado deixa de chegar.
 
 ### 3.5. Deploy
 Clique no botão **"Deploy"** e aguarde ~1-2 minutos.

@@ -6,7 +6,7 @@
 
 App de controle financeiro pessoal. **React puro + Supabase** (RLS é a segurança). PWA instalável. Deploy Vercel. Sem TypeScript, sem testes, sem state manager externo (só hooks + Context).
 
-⚠️ **Exceção ao "sem backend":** existe **uma** função serverless `/api/ai-chat` (Vercel) usada só pelo Assistente IA. Todo o resto fala direto com o Supabase via services.
+⚠️ **Exceção ao "sem backend":** existe **uma** função serverless `/api/push-notify` (Vercel) que envia o Web Push do aviso de pagamento. Todo o resto fala direto com o Supabase via services.
 
 ---
 
@@ -28,11 +28,10 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | Sidebar + "Mais" |
 | `/reports` | `Reports.jsx` (lazy) | relatório mensal PDF, link Storage, envio WhatsApp | Sidebar + "Mais" |
 | `/categories` | `Categories.jsx` | CRUD categorias | Sidebar + "Mais" |
-| `/ai` | `AiAssistant.jsx` | assistente IA (chat, análise de documentos, lançamentos por voz) | Sidebar + BottomNav |
 | `/import-export` | `ImportExport.jsx` | CSV/XLSX import/export, backup JSON | via Settings |
 | `/settings` | `Settings.jsx` | conta, senha, preferências | Sidebar + "Mais" |
 
-**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cartões, IA) + botão **"Mais"** (folha com Cobranças, Recorrências, Objetivos, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
+**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cobranças, Relatórios) + botão **"Mais"** (folha com Cartões, Recorrências, Objetivos, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
 
 ---
 
@@ -46,7 +45,6 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 - **Alertas (sino):** `services/alerts.js` gera lista (vencidas, cartão alto, saldo negativo). Ações inline no painel: **Marcar paga**, **Adiar 3d** (snooze localStorage), **Ver**. Notificação nativa do navegador opt-in.
 - **Relatórios:** `services/reports.js` → PDF (jsPDF+autotable) com KPIs/categorias/lançamentos. 3 formas de enviar: baixar, **Web Share** (anexo, mobile), **link curto** pra WhatsApp. Link: PDF no Storage `reports` (signed URL ~90d) + código curto em `report_links` → compartilha `<dominio>/r/<code>` (rota pública resolve via RPC `resolve_report_link` e redireciona).
 - **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago; **editar** via `EditChargeModal`; **cartão opcional** via `charges.credit_card_id` → tarja colorida `CardTag` + `CardSelect` em `components/CardTag.jsx`, cartões via `cardService.listSimple`). **Múltiplas chaves PIX** (`pixKeyService` → tabela `pix_keys`, com padrão). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Link de pagamento** (`pixLinkService.createPaymentLink`): gera QR PNG → bucket público `pix-qr` → `pix_links` → compartilha `<dominio>/pix/<code>` (página `PixPay` pública resolve via RPC `resolve_pix_link`). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg + link). Relatório PDF com links clicáveis (`cobrancasReport.js`).
-- **Assistente IA:** `services/ai.js` chama `/api/ai-chat` (serverless, auth via token Supabase). Análise de documentos (`aiDocuments.js`: mammoth p/ DOCX, pdfjs p/ PDF). Lançamentos por voz/chat.
 - **Import/Export:** `services/importExport.js` (CSV/XLSX).
 - **PWA:** `manifest.json`, install prompt (`useInstallPrompt`). Sem service worker de cache.
 
@@ -54,7 +52,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Mapa de código
 
-**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, settingsService), `cobrancasReport.js`, `pix.js`, `ai.js`, `aiDocuments.js`, `importExport.js`, `supabase.js` (singleton).
+**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `push.js` (pushService), `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, pixKeyService, pixLinkService, paymentNoticeService), `cobrancasReport.js`, `pix.js`, `importExport.js`, `supabase.js` (singleton).
 
 **Constantes** (`frontend/src/constants/`): `index.js` (prazos de cobrança, `PUBLIC_APP_URL` dos links públicos, tipos de chave PIX, bandeiras/cores de cartão, limites) e `banks.js` (catálogo de 41 bancos BR + `findBank(texto)`). Número mágico novo vai pra cá.
 
@@ -62,7 +60,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 **Componentes base:** `Select.jsx` (seletor com ícone/logo, busca automática >7 opções, abre em linha — use no lugar de `<select>`), `ConfirmDialog.jsx` (trava p/ ações destrutivas), `BankLogo.jsx` (logo por `bankId` ou texto livre; lib `@edusites/bancos-brasil` carregada lazy — importada via alias do Vite p/ `src/core.js`, pois o `index.js` dela puxa `vue`).
 
-**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router, autentica via token Supabase) e `push-notify.js` (Web Push do aviso de pagamento; pública, valida pelo código do extrato, usa service role).
+**Serverless** (`frontend/api/`): `push-notify.js` (Web Push do aviso de pagamento; pública, valida pelo código do extrato, usa service role).
 
 **Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`.
 
@@ -84,6 +82,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-10-16** — **IA removida por completo** (decisão do usuário): página `/ai` (`AiAssistant.jsx`), `services/ai.js`, `services/aiDocuments.js`, serverless `api/ai-chat.js`, itens de menu (Sidebar/BottomNav), passo do tour, botão "Sugerir categorias com IA" na importação, `MAX_AI_ATTACHMENTS`, deps `mammoth`/`pdfjs-dist` e envs `NINEROUTER_*`. **Faxina geral** (knip + lint): funções mortas `clearDismissed`, `settingsService` (PIX único legado), `generateTemplateCSV`/`exportTransactionsCSV`/`downloadCSV` (app usa XLSX); `export` desnecessário tirado de `normalizePhone`/`normalizePixKey`/`parseImportCSV`; estado órfão `importContext`; classes CSS sem uso (`btn-soft`, `btn-outline`, `feature-card-dark`, `hairline-dark`); `public/_redirects` (Netlify). Docs atualizadas.
 - **2026-10-16** — Cobranças: layout responsivo. Card do devedor em 1 linha no md+ (identidade + selos | valor "a receber · N% pago" alinhado à direita | ações com divisória), empilhado no mobile com `ActionButton` (ícone sobre texto, 44px, larguras iguais). Barra PIX/PDF/compartilhar como pílulas (`TOOL_BTN`, grid 1fr 1fr auto no mobile). Resumo 2 col no mobile (3º ocupa a linha) → 3 col sm+. Carteira: stats + progresso lado a lado no md+. Blocos de cobrança em 2 colunas no xl.
 - **2026-10-16** — Extrato, passo "Pagar via PIX": logo + "Recebe no <banco>" (via `findBank(pix.label)`) e logo no "Copiar só a chave". `resolve_debtor_statement` passa a devolver `pix.label`. ⚠️ Rodar `migration_extrato_pix_label.sql`.
 - **2026-10-16** — **Web Push** (aviso com o app FECHADO). `services/push.js` inscreve o aparelho (`pushManager.subscribe` com `VAPID_PUBLIC_KEY` de `constants`) e grava em `push_subscriptions` — ao ativar notificações em Cobranças e, silenciosamente, a cada abertura do app se já autorizado. Extrato: após `notify_payment` ok → `POST /api/push-notify {code}` (keepalive). Serverless `api/push-notify.js` (lib `web-push`, service role): acha o aviso pendente ≤2 min sem `pushed_at`, carimba antes de enviar (não reenvia), manda pra todas as inscrições do credor e apaga as mortas (404/410). `sw.js` trata `push`. Mesma `tag` do aviso in-app → sem duplicar. Sem as envs, a função responde `not-configured` e tudo segue via Realtime. Não funciona no APK (WebView); iPhone só com o PWA instalado (iOS 16.4+). ⚠️ Rodar `migration_push_subscriptions.sql` + envs na Vercel: `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.

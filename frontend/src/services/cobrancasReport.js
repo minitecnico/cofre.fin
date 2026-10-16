@@ -20,7 +20,7 @@ const COLOR = {
 };
 
 /** Telefone → dígitos com DDI Brasil (pra wa.me). '' se vazio/invalido. */
-export function normalizePhone(raw) {
+function normalizePhone(raw) {
   if (!raw) return '';
   let d = String(raw).replace(/\D/g, '');
   if (d.length >= 10 && d.length <= 11) d = `55${d}`;

@@ -60,7 +60,7 @@ export default function Layout() {
       </div>
 
       <BottomNav />
-      {location.pathname !== '/ai' && <FloatingAddButton onAdded={() => setTick((t) => t + 1)} />}
+      <FloatingAddButton onAdded={() => setTick((t) => t + 1)} />
 
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
     </div>

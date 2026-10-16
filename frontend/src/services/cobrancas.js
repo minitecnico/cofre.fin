@@ -34,7 +34,6 @@ export async function notifyPayment(code, chargeIds) {
  *
  *   debtorService   → pessoas que devem (CRUD)
  *   chargeService   → cada dívida individual (CRUD + marcar pago)
- *   settingsService → config do usuário (chave PIX p/ receber)
  *
  * Convenção do projeto: services lançam exceção (throw), não retornam {error}.
  * RLS filtra por user_id; nos inserts é obrigatório passar user_id.
@@ -268,47 +267,6 @@ export const chargeService = {
     const { data, error } = await supabase.rpc('mark_charges_sent', { p_ids: ids });
     if (error) throw error;
     return data || 0;
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────
-// Configurações do usuário (chave PIX)
-// ─────────────────────────────────────────────────────────────────────────
-
-export const settingsService = {
-  /** Retorna a config do usuário ou null se ainda não cadastrou. */
-  async get() {
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return null;
-    return {
-      pixKey: data.pix_key || '',
-      pixKeyType: data.pix_key_type || '',
-      pixName: data.pix_name || '',
-      pixCity: data.pix_city || '',
-    };
-  },
-
-  /** Cria/atualiza (upsert) a config PIX do usuário. */
-  async savePix({ pixKey, pixKeyType, pixName, pixCity }) {
-    const userId = await currentUserId();
-    const { data, error } = await supabase
-      .from('user_settings')
-      .upsert({
-        user_id: userId,
-        pix_key: pixKey || null,
-        pix_key_type: pixKeyType || null,
-        pix_name: pixName || null,
-        pix_city: pixCity || null,
-        updated_at: new Date().toISOString(),
-      })
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
   },
 };
 

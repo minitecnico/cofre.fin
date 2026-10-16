@@ -50,7 +50,6 @@ frontend/
 ├── tailwind.config.js      # paleta accent/ink, sombras soft, gradientes
 ├── postcss.config.js
 ├── public/
-│   ├── _redirects          # SPA fallback p/ Netlify-style
 │   ├── manifest.json       # PWA manifest
 │   ├── favicon.ico
 │   └── icons/              # ícones PWA (72/96/128/144/152/180/192/384/512)

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Bot,
+  LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
   MoreHorizontal, Repeat, Sparkles, FileText, HandCoins, Tag, Settings, X,
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
@@ -19,7 +19,6 @@ const primary = [
 // dá acesso mobile a páginas que antes só existiam na sidebar do desktop).
 const secondary = [
   { to: '/cards', label: 'Cartões', icon: CreditCard },
-  { to: '/ai', label: 'Assistente IA', icon: Bot },
   { to: '/recurring', label: 'Recorrências', icon: Repeat },
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
   { to: '/categories', label: 'Categorias', icon: Tag },

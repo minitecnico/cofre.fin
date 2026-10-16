@@ -293,10 +293,6 @@ export function dismissAlert(alertId) {
   } catch { /* storage indisponível */ }
 }
 
-export function clearDismissed() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignora */ }
-}
-
 export function getNotified() {
   try {
     return new Set(JSON.parse(localStorage.getItem(NOTIFIED_KEY) || '[]'));

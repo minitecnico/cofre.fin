@@ -18,7 +18,7 @@ Só é preciso gerar e reinstalar o APK quando mudar algo **fora** do bundle web
 | O que você muda | Chega no celular sozinho? |
 |---|---|
 | React (telas, componentes, CSS, services, hooks) | **sim**, no próximo deploy |
-| `api/ai-chat.js` | **sim**, no próximo deploy |
+| `api/push-notify.js` | **sim**, no próximo deploy |
 | Supabase (RPCs, schema, RLS) | **sim**, imediatamente |
 | Ícone, splash, nome do app, `appId`, `server.url` | **não** — exige APK novo |
 
@@ -111,11 +111,11 @@ VITE_API_BASE_URL=https://minitecnico-projeto-financas-pessoa.vercel.app
 
 ### Por que `VITE_API_BASE_URL` só importa no APK
 
-Na web, [`ai.js`](frontend/src/services/ai.js) chamava `/api/ai-chat` — caminho
-relativo, mesma origem da Vercel. Dentro do WebView a origem passa a ser
-`https://localhost`, onde esse caminho não existe. Por isso a variável aponta
-para o domínio publicado. **Na web, deixe vazia** (o caminho relativo continua
-sendo o certo).
+Os links compartilhados (PIX `/pix`, extrato `/extrato`, relatório `/r`) são
+montados com o domínio atual (`PUBLIC_APP_URL` em `constants/index.js`). Dentro
+do WebView empacotado a origem passa a ser `https://localhost`, que não abre no
+celular de quem recebe — por isso a variável aponta para o domínio publicado.
+**Na web, deixe vazia.**
 
 > A `anon key` ir dentro do APK não é problema — ela é pública por design, e a
 > segurança real está nas policies de RLS do Postgres. Vale o mesmo raciocínio
@@ -303,7 +303,7 @@ visual, atualize os dois.
 |---|---|---|---|
 | Origem | domínio da Vercel | domínio da Vercel | `https://localhost` |
 | Service worker | ativo | **ativo** — é o que dá offline aqui | desligado (assets já são locais) |
-| `/api/ai-chat` | mesma origem | mesma origem | cross-origin → precisa de `VITE_API_BASE_URL` + CORS |
+| Web Push (aviso de pagamento) | funciona | **não** (WebView não tem Push API) | **não** |
 | Atualizar front | deploy | **deploy** | gerar e instalar APK |
 | Primeira abertura sem internet | — | falha | funciona |
 | Botão "voltar" do Android | — | histórico do React Router | idem |
@@ -311,12 +311,6 @@ visual, atualize os dois.
 A lógica que decide isso está em [`main.jsx`](frontend/src/main.jsx): o service
 worker só é pulado quando `isNativePlatform()` **e** a origem é `localhost` —
 ou seja, apenas no modo empacotado.
-
-O CORS em `api/ai-chat.js` tem uma allowlist fechada (`https://localhost`,
-`capacitor://localhost`, `http://localhost`). No modo remoto ela fica ociosa (a
-chamada é same-origin), mas continua ali para o caso de você voltar ao modo
-empacotado. Não troque por `*`: o endpoint gasta créditos de IA, e o JWT do
-Supabase não deve ser a única barreira.
 
 ---
 
@@ -334,9 +328,9 @@ grep -o "https://[a-z0-9]*\.supabase\.co" frontend/dist/assets/index-*.js
 ```
 Se não retornar nada, o build saiu sem credenciais.
 
-**Chat de IA falha só no APK**
-`VITE_API_BASE_URL` vazia, ou o deploy da Vercel ainda sem o CORS novo. Publique
-a `api/ai-chat.js` atualizada antes de testar.
+**Link de PIX/extrato abre `localhost` no celular de quem recebe**
+`VITE_API_BASE_URL` vazia no build do modo empacotado. Preencha com o domínio
+publicado e gere o APK de novo.
 
 **Inspecionar o WebView**
 Com o celular conectado, abra `chrome://inspect` no Chrome do desktop — dá acesso

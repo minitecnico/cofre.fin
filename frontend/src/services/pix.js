@@ -53,7 +53,7 @@ function crc16(payload) {
  * @param {string} key
  * @param {string} [type] 'cpf' | 'cnpj' | 'email' | 'phone' | 'random'
  */
-export function normalizePixKey(key, type) {
+function normalizePixKey(key, type) {
   const raw = (key || '').trim();
   switch (type) {
     case 'cpf':

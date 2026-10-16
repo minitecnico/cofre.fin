@@ -55,6 +55,3 @@ export const CARD_BRANDS = [
 ];
 
 export const CARD_PRESET_COLORS = ['#820ad1', '#ff7a00', '#1e293b', '#dc2626', '#16a34a', '#0ea5e9', '#f59e0b'];
-
-// ── Assistente IA ───────────────────────────────────────────────────────────
-export const MAX_AI_ATTACHMENTS = 4;
