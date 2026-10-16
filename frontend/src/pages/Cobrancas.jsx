@@ -129,13 +129,11 @@ export default function Cobrancas() {
   const selSum = selectedCharges.reduce((s, x) => s + Number(x.amount), 0);
 
   function handleBulkDelete() {
-    const paidCount = selectedCharges.filter((x) => x.paid).length;
     setConfirmReq({
       title: `Excluir ${selectedCharges.length} cobrança(s)?`,
       message: (
         <>
           Total de <b className="text-ink-900">{formatCurrency(selSum)}</b> de {activeDebtor.name}.
-          {paidCount > 0 && <> Inclui <b className="text-ink-900">{paidCount} já paga(s)</b> — o histórico de pagamento delas será perdido.</>}
           {' '}Não dá pra desfazer.
         </>
       ),
@@ -170,7 +168,6 @@ export default function Cobrancas() {
       message: (
         <>
           <b className="text-ink-900">{chargeLabel(charge)}</b> — {formatCurrency(charge.amount)}.
-          {charge.paid && <> Ela <b className="text-ink-900">já foi paga</b>; o registro do pagamento também será apagado.</>}
           {' '}Não dá pra desfazer.
         </>
       ),
@@ -718,7 +715,6 @@ function DebtorCard({
                 selectedCount={selectedIds.size}
                 onStart={onStartSelect}
                 onPending={() => onSelectOnly(pendingIds)}
-                onAll={() => onSelectOnly(charges.map((x) => x.id))}
                 onNone={() => onSelectOnly([])}
                 onDone={onEndSelect}
               />
@@ -786,15 +782,15 @@ function WalletStat({ label, value, tone = 'text-ink-900' }) {
 
 /**
  * Barra de seleção dentro do card. Fora do modo seleção é só um botão discreto;
- * dentro dele, atalhos inteligentes: "Pendentes" (o caso comum: cobrar/gerar PIX
- * do que falta), "Todas" e "Nenhuma".
+ * dentro dele, atalhos "Todas pendentes" e "Nenhuma". Pagas ficam travadas e
+ * nunca entram na seleção — só o que está em aberto pode ser selecionado.
  */
-function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onStart, onPending, onAll, onNone, onDone }) {
+function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onStart, onPending, onNone, onDone }) {
   if (!selecting) {
     return (
       <div className="px-3 pb-2 flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{total} cobrança(s)</span>
-        <button onClick={onStart} className="inline-flex items-center gap-1 px-2.5 min-h-[36px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors">
+        <button onClick={onStart} disabled={pendingCount === 0} className="inline-flex items-center gap-1 px-2.5 min-h-[36px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors disabled:opacity-40" title={pendingCount === 0 ? 'Tudo pago — nada a selecionar' : 'Selecionar pendentes'}>
           <ListChecks className="w-3.5 h-3.5" /> Selecionar
         </button>
       </div>
@@ -805,9 +801,8 @@ function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onSta
     <div className="px-3 pb-2 flex items-center gap-1.5 overflow-x-auto">
       <span className="text-[11px] font-bold text-ink-900 mr-0.5 whitespace-nowrap">{selectedCount} selec.</span>
       {pendingCount > 0 && (
-        <button onClick={onPending} className={`${chip} bg-accent/20 text-ink-900 hover:bg-accent/30`}>Pendentes ({pendingCount})</button>
+        <button onClick={onPending} className={`${chip} bg-accent/20 text-ink-900 hover:bg-accent/30`}>Todas pendentes ({pendingCount})</button>
       )}
-      <button onClick={onAll} className={`${chip} bg-ink-100 text-ink-700 hover:bg-ink-200`}>Todas</button>
       {selectedCount > 0 && (
         <button onClick={onNone} className={`${chip} bg-ink-100 text-ink-700 hover:bg-ink-200`}>Nenhuma</button>
       )}
@@ -831,7 +826,7 @@ function ChargeBlock({ group, selecting, selected, onToggleSelect, onTogglePaid,
 
   // Parcelamento — bloco com cabeçalho (resumo + seleção/edição do grupo) + parcelas
   const items = group.items;
-  const ids = items.map((x) => x.id);
+  const ids = items.filter((x) => !x.paid).map((x) => x.id); // pagas: travadas
   const w = summarizeCharges(items);
   const n = items[0].installment_total || items.length;
   const selCount = ids.filter((id) => selected.has(id)).length;
@@ -839,7 +834,7 @@ function ChargeBlock({ group, selecting, selected, onToggleSelect, onTogglePaid,
   return (
     <div className="rounded-xl border border-ink-200 overflow-hidden bg-white shadow-soft">
       <div className="px-3 py-2 bg-ink-50 flex items-center gap-2.5">
-        {selecting && (
+        {selecting && ids.length > 0 && (
           <button onClick={() => onToggleSelect(ids)} className="-m-2 p-2 flex-shrink-0" aria-label="Selecionar parcelamento">
             <SelectBox checked={selCount === ids.length} partial={selCount > 0 && selCount < ids.length} />
           </button>
@@ -923,6 +918,20 @@ function ChargeRow({ charge, selecting, selected, onToggleSelect, onTogglePaid, 
     </span>
   );
 
+  // Paga = travada: não seleciona, não edita, não exclui. A única saída é
+  // "desfazer pagamento" (botão verde), que pede confirmação.
+  if (selecting && charge.paid) {
+    return (
+      <div className="w-full p-3 flex items-center gap-2.5 opacity-60" title="Paga — travada">
+        <span className="w-[22px] h-[22px] rounded-md bg-ink-100 flex items-center justify-center flex-shrink-0">
+          <Lock className="w-3 h-3 text-ink-400" />
+        </span>
+        {info}
+        {amount}
+      </div>
+    );
+  }
+
   // Modo seleção: a linha inteira é o alvo do toque (só a caixinha à esquerda).
   if (selecting) {
     return (
@@ -956,12 +965,20 @@ function ChargeRow({ charge, selecting, selected, onToggleSelect, onTogglePaid, 
       </button>
       {info}
       {amount}
-      <button onClick={() => onEdit(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Editar">
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={() => onRemove(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center flex-shrink-0" title="Remover">
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      {charge.paid ? (
+        <span className="w-[60px] flex items-center justify-center flex-shrink-0 text-ink-300" title="Paga — travada">
+          <Lock className="w-3.5 h-3.5" />
+        </span>
+      ) : (
+        <>
+          <button onClick={() => onEdit(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Editar">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onRemove(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center flex-shrink-0" title="Remover">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1305,18 +1322,13 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
   return (
     <Modal isOpen={!!charge} onClose={onClose} title="Editar cobrança">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {charge?.paid && (
-          <p className="flex items-center gap-2 text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2">
-            <Lock className="w-3.5 h-3.5 flex-shrink-0" /> Esta cobrança já foi paga — o valor está travado.
-          </p>
-        )}
         <div>
           <label className="label">Descrição</label>
           <input className="input-field" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required autoFocus />
         </div>
         <div>
           <label className="label">Valor</label>
-          <input className="input-field disabled:opacity-60" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} disabled={charge?.paid} required />
+          <input className="input-field" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required />
         </div>
         <div>
           <label className="label">Vencimento (opcional)</label>
