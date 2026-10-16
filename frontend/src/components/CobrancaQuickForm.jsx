@@ -7,6 +7,7 @@ import Stepper from './Stepper';
 import Select from './Select';
 import { CardSelect } from './CardTag';
 import { MAX_INSTALLMENTS } from '../constants';
+import { debtorCode, sameNameDebtors } from '../utils/charges';
 
 /**
  * Form rápido de Cobrança — usado pelo botão "+" (FAB), lado a lado com a
@@ -98,7 +99,12 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         value={debtorId}
         onChange={setDebtorId}
         options={[
-          ...debtors.map((d) => ({ value: d.id, label: d.name, hint: d.phone || undefined, icon: <Initial name={d.name} /> })),
+          ...debtors.map((d) => ({
+            value: d.id,
+            label: d.name,
+            hint: [debtorCode(d.code), d.phone].filter(Boolean).join(' · ') || undefined,
+            icon: <Initial name={d.name} />,
+          })),
           { value: 'new', label: 'Nova pessoa…', icon: <UserPlus className="w-6 h-6 p-1 rounded-full bg-accent/20 text-ink-900 flex-shrink-0" /> },
         ]}
       />
@@ -109,6 +115,11 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
             <label className="label flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Nome</label>
             <input className="input-field" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ex: João" autoFocus />
           </div>
+          {sameNameDebtors(newName, debtors).length > 0 && (
+            <p className="col-span-2 text-[11px] text-warn font-semibold -mt-1">
+              Já existe {sameNameDebtors(newName, debtors).map((d) => `${d.name} ${debtorCode(d.code)}`.trim()).join(', ')} — se for outra pessoa, tudo bem: o número diferencia.
+            </p>
+          )}
           <div>
             <label className="label">WhatsApp</label>
             <input className="input-field" type="tel" inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="(11) 9…" />

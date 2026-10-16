@@ -6,6 +6,22 @@ import { todayISO } from './format';
  * devedor). Mesma função nos dois lados = os números sempre batem.
  */
 
+/** Número humano do devedor: 7 → "#007". '' antes da migration de códigos. */
+export function debtorCode(code) {
+  return code ? `#${String(code).padStart(3, '0')}` : '';
+}
+
+/**
+ * Outros devedores com o mesmo nome (ignora acento/maiúscula). Usado pra avisar
+ * no cadastro — o número (#) é o que diferencia homônimos.
+ */
+export function sameNameDebtors(name, debtors, exceptId = null) {
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const target = norm(name);
+  if (!target) return [];
+  return debtors.filter((d) => norm(d.name) === target && (d.debtorId ?? d.id) !== exceptId);
+}
+
 /** "Notebook (2/6)" → "Notebook". */
 export function baseDescription(description) {
   return String(description || '').replace(/\s*\(\d+\/\d+\)\s*$/, '');

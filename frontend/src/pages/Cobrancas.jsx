@@ -15,7 +15,7 @@ import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
 import { formatCurrency, formatDate, parseAmount, todayISO } from '../utils/format';
-import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
+import { groupCharges, summarizeCharges, baseDescription, isOverdue, debtorCode, sameNameDebtors } from '../utils/charges';
 import {
   DAY_MS, CHARGE_STALE_DAYS, CHARGE_DUE_SOON_DAYS, CHARGE_NOTIFY_STORAGE_KEY,
   MAX_INSTALLMENTS, PIX_KEY_TYPES,
@@ -209,7 +209,7 @@ export default function Cobrancas() {
               })
             : buildReminderText(d.name, open);
           return {
-            name: d.name,
+            name: nameWithCode(d),
             phone: d.phone,
             openAmount: d.openAmount,
             overdueAmount: d.overdueAmount,
@@ -279,7 +279,7 @@ export default function Cobrancas() {
       .reduce((s, x) => s + Number(x.amount), 0);
     const report = {
       debtors: [{
-        name: debtor.name, phone: debtor.phone,
+        name: nameWithCode(debtor), phone: debtor.phone,
         openAmount: openSum, overdueAmount: overdueSum,
         charges: selected, reminderText,
       }],
@@ -386,8 +386,8 @@ export default function Cobrancas() {
         onRemove={c.removePixKey}
         onSetDefault={c.setDefaultPixKey}
       />
-      <DebtorModal isOpen={debtorModal.isOpen} onClose={debtorModal.close} onSave={c.addDebtor} />
-      <EditDebtorModal debtor={debtorEdit} onClose={() => setDebtorEdit(null)} onSave={c.updateDebtor} />
+      <DebtorModal isOpen={debtorModal.isOpen} onClose={debtorModal.close} onSave={c.addDebtor} debtors={c.summary} />
+      <EditDebtorModal debtor={debtorEdit} onClose={() => setDebtorEdit(null)} onSave={c.updateDebtor} debtors={c.summary} />
       <ShareStatementModal
         debtor={shareTarget}
         charges={shareTarget ? c.chargesByDebtor.get(shareTarget.debtorId) || [] : []}
@@ -529,7 +529,7 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
             <div key={d.debtorId} className="px-3 py-2.5 flex items-center gap-2.5">
               <span className={`w-1.5 h-9 rounded-full flex-shrink-0 ${u.bar}`} />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-sm text-ink-900 truncate">{d.name}</p>
+                <p className="font-semibold text-sm text-ink-900 truncate">{d.name} <CodeTag code={d.code} /></p>
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${u.pill}`}>
                     {d.urgency === 'overdue' ? `${d.overdueCount} vencida(s)` : u.label}
@@ -559,6 +559,29 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
 }
 
 const EMPTY_SET = new Set();
+
+/** "João (#003)" — pra relatório e títulos, onde homônimos precisam se distinguir. */
+function nameWithCode(d) {
+  return d.code ? `${d.name} (${debtorCode(d.code)})` : d.name;
+}
+
+/** Selo discreto com o número do devedor (#003). Nada antes da migration. */
+function CodeTag({ code }) {
+  if (!code) return null;
+  return <span className="font-mono text-[10px] font-bold text-ink-400 align-middle">{debtorCode(code)}</span>;
+}
+
+/** Aviso de nome repetido no cadastro/edição — não bloqueia, só alerta. */
+function SameNameHint({ name, debtors, exceptId }) {
+  const twins = sameNameDebtors(name, debtors, exceptId);
+  if (!twins.length) return null;
+  return (
+    <p className="flex items-start gap-1.5 text-[11px] text-warn font-semibold mt-1.5">
+      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+      Já existe {twins.map((t) => nameWithCode(t)).join(', ')}. Se for outra pessoa, tudo bem — o número diferencia.
+    </p>
+  );
+}
 
 /** Nome curto de uma cobrança: "Notebook · parcela 2/6" ou a descrição. */
 function chargeLabel(charge) {
@@ -645,7 +668,7 @@ function DebtorCard({
             {open ? <ChevronDown className="w-4 h-4 text-ink-600" /> : <ChevronRight className="w-4 h-4 text-ink-600" />}
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-sm text-ink-900 truncate">{debtor.name}</p>
+            <p className="font-bold text-sm text-ink-900 truncate">{debtor.name} <CodeTag code={debtor.code} /></p>
             <div className="flex items-center gap-2 text-xs mt-0.5">
               <span className="font-mono font-bold text-ink-700">{formatCurrency(debtor.openAmount)}</span>
               {hasOverdue && (
@@ -1100,7 +1123,7 @@ function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) 
 }
 
 // ── Modal: adicionar pessoa ────────────────────────────────────
-function DebtorModal({ isOpen, onClose, onSave }) {
+function DebtorModal({ isOpen, onClose, onSave, debtors }) {
   const [form, setForm] = useState({ name: '', phone: '', note: '' });
   const [saving, setSaving] = useState(false);
 
@@ -1123,6 +1146,7 @@ function DebtorModal({ isOpen, onClose, onSave }) {
         <div>
           <label className="label">Nome</label>
           <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: João" required autoFocus />
+          <SameNameHint name={form.name} debtors={debtors} />
         </div>
         <div>
           <label className="label">WhatsApp (com DDD)</label>
@@ -1141,7 +1165,7 @@ function DebtorModal({ isOpen, onClose, onSave }) {
 }
 
 // ── Modal: editar pessoa ───────────────────────────────────────
-function EditDebtorModal({ debtor, onClose, onSave }) {
+function EditDebtorModal({ debtor, onClose, onSave, debtors }) {
   const [form, setForm] = useState({ name: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
@@ -1162,11 +1186,12 @@ function EditDebtorModal({ debtor, onClose, onSave }) {
   }
 
   return (
-    <Modal isOpen={!!debtor} onClose={onClose} title="Editar pessoa">
+    <Modal isOpen={!!debtor} onClose={onClose} title={debtor?.code ? `Editar pessoa ${debtorCode(debtor.code)}` : 'Editar pessoa'}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="label">Nome</label>
           <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required autoFocus />
+          <SameNameHint name={form.name} debtors={debtors} exceptId={debtor?.debtorId} />
         </div>
         <div>
           <label className="label">WhatsApp (com DDD)</label>
@@ -1226,7 +1251,7 @@ function ChargeModal({ debtor, cards, onClose, onSave, onSaveInstallments }) {
   }
 
   return (
-    <Modal isOpen={!!debtor} onClose={onClose} title={debtor ? `Cobrança — ${debtor.name}` : 'Cobrança'}>
+    <Modal isOpen={!!debtor} onClose={onClose} title={debtor ? `Cobrança — ${nameWithCode(debtor)}` : 'Cobrança'}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="label">Descrição</label>

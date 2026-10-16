@@ -99,6 +99,7 @@ export const debtorService = {
     if (error) throw error;
     return (data || []).map((d) => ({
       debtorId: d.debtor_id,
+      code: d.code ?? null,            // nº sequencial humano (#001) — migration_debtors_code
       name: d.name,
       phone: d.phone,
       openAmount: Number(d.open_amount) || 0,
