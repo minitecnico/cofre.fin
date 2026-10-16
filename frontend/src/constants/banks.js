@@ -5,14 +5,16 @@
  * `color` é a cor da marca — usada pra pré-preencher a cor do cartão.
  * `aliases` são formas comuns de escrever o nome; `findBank` casa qualquer uma
  * delas como palavra dentro de um texto livre ("Nubank Roxinho", "Itaú PJ").
+ * `android` é o pacote do app na Play Store — usado no extrato público pra
+ * abrir o app do banco do devedor depois que ele copia o PIX.
  */
 export const BANKS = [
   // Tradicionais
-  { id: 'bancodobrasil', name: 'Banco do Brasil', color: '#003D7A', aliases: ['banco do brasil', 'bb'] },
-  { id: 'caixa', name: 'Caixa', color: '#0066A1', aliases: ['caixa', 'caixa economica', 'cef'] },
-  { id: 'itau', name: 'Itaú', color: '#EC7000', aliases: ['itau', 'personnalite'] },
-  { id: 'bradesco', name: 'Bradesco', color: '#CC092F', aliases: ['bradesco'] },
-  { id: 'santander', name: 'Santander', color: '#EC0000', aliases: ['santander'] },
+  { id: 'bancodobrasil', name: 'Banco do Brasil', color: '#003D7A', aliases: ['banco do brasil', 'bb'], android: 'br.com.bb.android' },
+  { id: 'caixa', name: 'Caixa', color: '#0066A1', aliases: ['caixa', 'caixa economica', 'cef'], android: 'br.com.gabba.Caixa' },
+  { id: 'itau', name: 'Itaú', color: '#EC7000', aliases: ['itau', 'personnalite'], android: 'com.itau' },
+  { id: 'bradesco', name: 'Bradesco', color: '#CC092F', aliases: ['bradesco'], android: 'com.bradesco' },
+  { id: 'santander', name: 'Santander', color: '#EC0000', aliases: ['santander'], android: 'com.santander.app' },
   { id: 'safra', name: 'Safra', color: '#151D43', aliases: ['safra'] },
   { id: 'sicoob', name: 'Sicoob', color: '#003B43', aliases: ['sicoob'] },
   { id: 'sicredi', name: 'Sicredi', color: '#3FA110', aliases: ['sicredi'] },
@@ -26,17 +28,17 @@ export const BANKS = [
   { id: 'xp', name: 'XP', color: '#111111', aliases: ['xp', 'xp investimentos'] },
   { id: 'rico', name: 'Rico', color: '#010042', aliases: ['rico'] },
   // Digitais
-  { id: 'nubank', name: 'Nubank', color: '#820AD1', aliases: ['nubank', 'nu', 'roxinho'] },
-  { id: 'inter', name: 'Inter', color: '#FF7A00', aliases: ['inter', 'banco inter'] },
-  { id: 'c6', name: 'C6 Bank', color: '#121212', aliases: ['c6', 'c6 bank'] },
+  { id: 'nubank', name: 'Nubank', color: '#820AD1', aliases: ['nubank', 'nu', 'roxinho'], android: 'com.nu.production' },
+  { id: 'inter', name: 'Inter', color: '#FF7A00', aliases: ['inter', 'banco inter'], android: 'br.com.intermedium' },
+  { id: 'c6', name: 'C6 Bank', color: '#121212', aliases: ['c6', 'c6 bank'], android: 'com.c6bank.app' },
   { id: 'next', name: 'Next', color: '#00C850', aliases: ['next'] },
-  { id: 'neon', name: 'Neon', color: '#161C3E', aliases: ['neon'] },
+  { id: 'neon', name: 'Neon', color: '#161C3E', aliases: ['neon'], android: 'br.com.neon' },
   { id: 'digio', name: 'Digio', color: '#00275C', aliases: ['digio'] },
   { id: 'bs2', name: 'BS2', color: '#0021AF', aliases: ['bs2'] },
   { id: 'cora', name: 'Cora', color: '#FE3E6D', aliases: ['cora'] },
-  { id: 'picpay', name: 'PicPay', color: '#21C25E', aliases: ['picpay'] },
-  { id: 'mercadopago', name: 'Mercado Pago', color: '#00BCFF', aliases: ['mercado pago', 'mercadopago', 'mercado livre'] },
-  { id: 'pagbank', name: 'PagBank', color: '#42A936', aliases: ['pagbank', 'pagseguro'] },
+  { id: 'picpay', name: 'PicPay', color: '#21C25E', aliases: ['picpay'], android: 'com.picpay' },
+  { id: 'mercadopago', name: 'Mercado Pago', color: '#00BCFF', aliases: ['mercado pago', 'mercadopago', 'mercado livre'], android: 'com.mercadopago.wallet' },
+  { id: 'pagbank', name: 'PagBank', color: '#42A936', aliases: ['pagbank', 'pagseguro'], android: 'br.com.uol.ps.myaccount' },
   { id: 'infinitepay', name: 'InfinitePay', color: '#171527', aliases: ['infinitepay', 'infinite pay'] },
   { id: 'stone', name: 'Stone', color: '#00A868', aliases: ['stone'] },
   { id: 'ton', name: 'Ton', color: '#0DEA4A', aliases: ['ton'] },
@@ -77,3 +79,6 @@ export function findBank(text) {
   const hit = ALIASES.find(({ alias }) => padded.includes(` ${alias} `));
   return hit ? hit.bank : null;
 }
+
+/** Bancos com app Android conhecido (atalho "abrir meu banco" no extrato). */
+export const BANKS_WITH_APP = BANKS.filter((b) => b.android);

@@ -1,24 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, Copy, Check, FileWarning, QrCode, Lock, AlertTriangle, ReceiptText, Minus, KeyRound } from 'lucide-react';
+import {
+  Loader2, Copy, Check, FileWarning, QrCode, Lock, AlertTriangle, ReceiptText, Minus,
+  KeyRound, CalendarDays, ChevronDown, Smartphone,
+} from 'lucide-react';
 import Modal from '../components/Modal';
+import BankLogo from '../components/BankLogo';
 import { resolveDebtorStatement } from '../services/cobrancas';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
-import { formatCurrency, formatDate } from '../utils/format';
+import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
+import { BANKS_WITH_APP } from '../constants/banks';
 
 /**
  * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
  *
  * Quem deve abre o link (sem login) e vê, sempre atualizado: total da dívida,
  * quanto já pagou, quanto falta, parcelas pagas × pendentes e cada dívida.
- * Se o credor tem chave PIX, o devedor escolhe QUAIS parcelas vai pagar agora
- * (padrão: todas as pendentes) e gera o PIX só desse valor.
  * Os números saem de utils/charges — os mesmos da tela do credor.
+ *
+ * Pagamento em 2 passos, pensado no ritmo real (uma parcela de cada dívida
+ * por mês):
+ *   1. toca no MÊS → entram juntas todas as parcelas em aberto daquele mês
+ *      (ou marca parcela a parcela). Nada vem marcado: ele escolhe o que paga.
+ *   2. "Pagar" já copia o PIX copia-e-cola com o valor e oferece abrir o app
+ *      do banco dele.
  */
 export default function DebtorStatement() {
   const { code } = useParams();
   const [data, setData] = useState(undefined); // undefined=loading, null=notfound
+  const [picked, setPicked] = useState(EMPTY);  // parcelas escolhidas (refs de `charges`)
+  const [payOpen, setPayOpen] = useState(false);
+  const [copied, setCopied] = useState(false);  // copiou ao abrir o passo 2
 
   useEffect(() => {
     let alive = true;
@@ -31,19 +44,15 @@ export default function DebtorStatement() {
   const charges = useMemo(() => data?.charges || [], [data]);
   const wallet = useMemo(() => summarizeCharges(charges), [charges]);
   const groups = useMemo(() => groupCharges(charges), [charges]);
+  const months = useMemo(() => groupOpenByMonth(charges), [charges]);
 
-  // Parcelas escolhidas pra pagar agora (referências dos objetos de `charges`).
-  // Começa com todas as pendentes: o caso comum continua a 1 toque.
-  const [picked, setPicked] = useState(EMPTY);
-  const [payOpen, setPayOpen] = useState(false);
-  useEffect(() => { setPicked(new Set(charges.filter((c) => !c.paid))); }, [charges]);
+  const pickedList = useMemo(() => charges.filter((c) => picked.has(c)), [charges, picked]);
+  const pickedTotal = Math.round(pickedList.reduce((s, c) => s + Number(c.amount), 0) * 100) / 100;
+  const payload = useMemo(() => (data?.pix && pickedTotal > 0 ? buildPixPayload({
+    key: data.pix.key, keyType: data.pix.key_type, name: data.pix.name, city: data.pix.city, amount: pickedTotal,
+  }) : ''), [data, pickedTotal]);
 
-  const pickedTotal = useMemo(
-    () => Math.round([...picked].reduce((s, c) => s + Number(c.amount), 0) * 100) / 100,
-    [picked]
-  );
-  const canPick = !!data?.pix;
-
+  /** Liga/desliga um conjunto de parcelas (só as em aberto). */
   function toggle(items) {
     const open = items.filter((c) => !c.paid);
     setPicked((prev) => {
@@ -53,7 +62,15 @@ export default function DebtorStatement() {
       return next;
     });
   }
-  const pickWhere = (fn) => setPicked(new Set(charges.filter((c) => !c.paid && fn(c))));
+
+  // Passo 2: o toque em "Pagar" já copia o código (o clipboard exige um gesto
+  // do usuário — por isso copia aqui, e não ao abrir o modal).
+  async function startPayment() {
+    let ok = false;
+    try { await navigator.clipboard.writeText(payload); ok = true; } catch { /* sem permissão */ }
+    setCopied(ok);
+    setPayOpen(true);
+  }
 
   if (data === undefined) {
     return (
@@ -77,6 +94,7 @@ export default function DebtorStatement() {
   }
 
   const settled = wallet.count > 0 && wallet.openCount === 0;
+  const canPay = !settled && !!data.pix;
 
   return (
     <div className="min-h-screen bg-gradient-app p-4 py-6 flex justify-center">
@@ -89,7 +107,7 @@ export default function DebtorStatement() {
             </div>
             <p className="font-display font-bold text-lg mt-2">Olá, {data.debtor_name}</p>
             {data.owner_name && <p className="text-ink-300 text-xs">Cobrança de {data.owner_name}</p>}
-            <p className="text-ink-300 text-xs mt-4">{settled ? 'Tudo pago' : 'Valor a pagar'}</p>
+            <p className="text-ink-300 text-xs mt-4">{settled ? 'Tudo pago' : 'Total em aberto'}</p>
             <p className="font-display font-bold text-3xl">{formatCurrency(wallet.open)}</p>
           </div>
 
@@ -116,13 +134,45 @@ export default function DebtorStatement() {
           </div>
         </div>
 
-        {/* Atalhos de seleção */}
-        {!settled && canPick && (
-          <div className="flex items-center gap-1.5 flex-wrap px-1">
-            <span className="text-xs font-semibold text-ink-600 mr-1">Escolha o que vai pagar:</span>
-            <Chip onClick={() => pickWhere(() => true)}>Todas</Chip>
-            {wallet.overdueCount > 0 && <Chip onClick={() => pickWhere((c) => isOverdue(c))}>Só vencidas</Chip>}
-            <Chip onClick={() => setPicked(EMPTY)}>Nenhuma</Chip>
+        {/* Passo 1: pagar por mês */}
+        {canPay && months.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-soft p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                <CalendarDays className="w-4 h-4" /> Qual mês você vai pagar?
+              </p>
+              {picked.size > 0 && (
+                <button onClick={() => setPicked(EMPTY)} className="text-[11px] font-bold text-ink-400 hover:text-ink-700 px-2 min-h-[32px]">
+                  Limpar
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {months.map((m) => {
+                const on = m.items.filter((c) => picked.has(c)).length;
+                const full = on === m.items.length;
+                return (
+                  <button
+                    key={m.key}
+                    onClick={() => toggle(m.items)}
+                    aria-pressed={full}
+                    className={`relative text-left rounded-xl border-2 px-3 py-2.5 min-h-[64px] transition-colors ${
+                      full ? 'border-ink-900 bg-ink-900 text-white'
+                        : on > 0 ? 'border-ink-900 bg-white'
+                          : m.overdue ? 'border-red-200 bg-red-50/60 hover:border-negative' : 'border-ink-100 bg-ink-50 hover:border-ink-300'
+                    }`}
+                  >
+                    <span className={`block text-xs font-bold capitalize ${full ? 'text-white' : 'text-ink-900'}`}>{m.label}</span>
+                    <span className={`block font-display font-bold text-base ${full ? 'text-accent' : 'text-ink-900'}`}>{formatCurrency(m.total)}</span>
+                    <span className={`block text-[10px] font-semibold ${full ? 'text-ink-300' : m.overdue ? 'text-negative' : 'text-ink-400'}`}>
+                      {m.items.length} parcela(s){m.overdue ? ' · atrasado' : m.current ? ' · este mês' : ''}
+                    </span>
+                    {full && <Check className="absolute top-2 right-2 w-4 h-4 text-accent" strokeWidth={3} />}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-ink-400">Toque no mês pra juntar todas as parcelas dele. Também dá pra marcar uma a uma lá embaixo.</p>
           </div>
         )}
 
@@ -130,7 +180,7 @@ export default function DebtorStatement() {
         {groups.map((g, gi) => (
           <div key={g.groupId || gi} className="bg-white rounded-2xl shadow-soft overflow-hidden">
             {g.type === 'installment' && (
-              <GroupHeader items={g.items} canPick={canPick} picked={picked} onToggle={() => toggle(g.items)} />
+              <GroupHeader items={g.items} canPick={canPay} picked={picked} onToggle={() => toggle(g.items)} />
             )}
             <div className="divide-y divide-ink-50">
               {g.items.map((ch, i) => (
@@ -138,7 +188,7 @@ export default function DebtorStatement() {
                   key={i}
                   charge={ch}
                   inGroup={g.type === 'installment'}
-                  canPick={canPick}
+                  canPick={canPay}
                   checked={picked.has(ch)}
                   onToggle={() => toggle([ch])}
                 />
@@ -147,32 +197,40 @@ export default function DebtorStatement() {
           </div>
         ))}
 
-        <p className={`text-center text-[11px] text-ink-400 pt-2 ${!settled && canPick ? 'pb-24' : ''}`}>
+        <p className={`text-center text-[11px] text-ink-400 pt-2 ${canPay ? 'pb-24' : ''}`}>
           Atualizado em tempo real · Gerado pelo app Cofre
         </p>
       </div>
 
-      {/* Barra fixa: total escolhido → PIX desse valor */}
-      {!settled && canPick && (
+      {/* Barra fixa: total escolhido → passo 2 */}
+      {canPay && (
         <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
           <div className="w-full max-w-md bg-ink-900 text-white rounded-2xl shadow-soft-xl px-4 py-3 flex items-center gap-3 pointer-events-auto">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] text-ink-400">{picked.size} selecionada(s)</p>
-              <p className="font-display font-bold text-lg leading-tight">{formatCurrency(pickedTotal)}</p>
+              {picked.size ? (
+                <>
+                  <p className="text-[11px] text-ink-400">{picked.size} parcela(s) escolhida(s)</p>
+                  <p className="font-display font-bold text-lg leading-tight">{formatCurrency(pickedTotal)}</p>
+                </>
+              ) : (
+                <p className="text-xs text-ink-300 leading-snug">Escolha o mês ou as parcelas que vai pagar</p>
+              )}
             </div>
             <button
-              onClick={() => setPayOpen(true)}
-              disabled={picked.size === 0}
-              className="inline-flex items-center gap-1.5 px-4 min-h-[44px] rounded-xl bg-accent text-ink-900 font-bold text-sm hover:bg-accent-light transition-colors disabled:opacity-40"
+              onClick={startPayment}
+              disabled={!picked.size}
+              className="inline-flex items-center gap-1.5 px-4 min-h-[44px] rounded-xl bg-accent text-ink-900 font-bold text-sm hover:bg-accent-light transition-colors disabled:opacity-40 flex-shrink-0"
             >
-              <QrCode className="w-4 h-4" /> Pagar via PIX
+              <QrCode className="w-4 h-4" /> Pagar
             </button>
           </div>
         </div>
       )}
 
       <Modal isOpen={payOpen} onClose={() => setPayOpen(false)} title="Pagar via PIX">
-        {payOpen && <PixPayBox pix={data.pix} amount={pickedTotal} items={[...picked]} />}
+        {payOpen && (
+          <PayStep pix={data.pix} amount={pickedTotal} items={pickedList} payload={payload} copiedOnOpen={copied} />
+        )}
       </Modal>
     </div>
   );
@@ -180,11 +238,44 @@ export default function DebtorStatement() {
 
 const EMPTY = new Set();
 
-function Chip({ onClick, children }) {
+/**
+ * Agrupa as parcelas EM ABERTO por mês de vencimento (as sem vencimento num
+ * grupo à parte). Ordem cronológica — o atrasado aparece primeiro.
+ */
+function groupOpenByMonth(charges) {
+  const today = todayISO();
+  const thisMonth = today.slice(0, 7);
+  const map = new Map();
+  for (const c of charges) {
+    if (c.paid) continue;
+    const key = c.due_date ? c.due_date.slice(0, 7) : 'none';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(c);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => (a === 'none') - (b === 'none') || a.localeCompare(b))
+    .map(([key, items]) => ({
+      key,
+      items,
+      label: key === 'none' ? 'Sem vencimento' : monthLabel(key),
+      total: Math.round(items.reduce((s, c) => s + Number(c.amount), 0) * 100) / 100,
+      overdue: items.some((c) => isOverdue(c, today)),
+      current: key === thisMonth,
+    }));
+}
+
+/** '2026-10' → 'out. 2026' (data local, sem shift de fuso). */
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace(' de ', ' ');
+}
+
+function Stat({ label, value, tone = 'text-ink-900' }) {
   return (
-    <button onClick={onClick} className="px-3 min-h-[32px] rounded-full bg-white shadow-soft text-[11px] font-bold text-ink-700 hover:bg-ink-50 transition-colors">
-      {children}
-    </button>
+    <div className="rounded-xl bg-ink-50 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">{label}</p>
+      <p className={`font-display font-bold text-base ${tone}`}>{value}</p>
+    </div>
   );
 }
 
@@ -197,15 +288,6 @@ function PickBox({ checked, partial = false }) {
     }`}>
       <Icon className="w-3.5 h-3.5" strokeWidth={3} />
     </span>
-  );
-}
-
-function Stat({ label, value, tone = 'text-ink-900' }) {
-  return (
-    <div className="rounded-xl bg-ink-50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">{label}</p>
-      <p className={`font-display font-bold text-base ${tone}`}>{value}</p>
-    </div>
   );
 }
 
@@ -223,11 +305,11 @@ function GroupHeader({ items, canPick, picked, onToggle }) {
     >
       {selectable && <PickBox checked={on === open.length} partial={on > 0 && on < open.length} />}
       <div className="min-w-0 flex-1">
-      <p className="text-sm font-bold text-ink-900">{baseDescription(items[0].description)}</p>
-      <p className="text-[11px] text-ink-500">
-        {n}x · {formatCurrency(w.total)} · <b className="text-ink-700">{w.paidCount}/{n} pagas</b>
-        {w.openCount > 0 && <> · faltam {w.openCount} ({formatCurrency(w.open)})</>}
-      </p>
+        <p className="text-sm font-bold text-ink-900">{baseDescription(items[0].description)}</p>
+        <p className="text-[11px] text-ink-500">
+          {n}x · {formatCurrency(w.total)} · <b className="text-ink-700">{w.paidCount}/{n} pagas</b>
+          {w.openCount > 0 && <> · faltam {w.openCount} ({formatCurrency(w.open)})</>}
+        </p>
       </div>
     </Tag>
   );
@@ -236,7 +318,7 @@ function GroupHeader({ items, canPick, picked, onToggle }) {
 function Row({ charge, inGroup, canPick, checked, onToggle }) {
   const overdue = isOverdue(charge);
   const label = inGroup ? `Parcela ${charge.installment_number}/${charge.installment_total}` : charge.description;
-  // Pendente = linha inteira tocável pra escolher; paga = só informativa.
+  // Pendente = linha inteira tocável pra escolher; paga = travada, só informativa.
   const selectable = canPick && !charge.paid;
   const Tag = selectable ? 'button' : 'div';
   return (
@@ -268,38 +350,60 @@ function Row({ charge, inGroup, canPick, checked, onToggle }) {
   );
 }
 
+const IS_ANDROID = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+const LAST_BANK_KEY = 'cofre_extrato_banco'; // último banco escolhido (conveniência do devedor)
+
 /**
- * PIX do valor escolhido: QR + copia-e-cola (já com o valor), gerados no próprio
- * navegador. Também oferece a chave crua, pra quem prefere digitar o valor.
+ * Link que abre o app do banco no Android. Se o app não abrir direto, o
+ * Chrome cai na página dele na Play Store — que tem o botão "Abrir".
  */
-function PixPayBox({ pix, amount, items }) {
+function androidAppLink(pkg) {
+  const store = encodeURIComponent(`https://play.google.com/store/apps/details?id=${pkg}`);
+  return `intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${pkg};S.browser_fallback_url=${store};end`;
+}
+
+/**
+ * Passo 2: código já copiado (com valor) → abrir o app do banco → colar.
+ * QR fica recolhido (útil se for pagar por outro aparelho).
+ */
+function PayStep({ pix, amount, items, payload, copiedOnOpen }) {
+  const [copied, setCopied] = useState(copiedOnOpen ? 'code' : '');
+  const [showQr, setShowQr] = useState(false);
   const [qr, setQr] = useState('');
-  const [copied, setCopied] = useState('');  // 'code' | 'key' | ''
-  const payload = useMemo(() => buildPixPayload({
-    key: pix.key, keyType: pix.key_type, name: pix.name, city: pix.city, amount,
-  }), [pix, amount]);
+  const [lastBank, setLastBank] = useState(() => {
+    try { return localStorage.getItem(LAST_BANK_KEY) || ''; } catch { return ''; }
+  });
 
   useEffect(() => {
+    if (!showQr) return;
     let alive = true;
     pixQrCodeDataUrl(payload).then((url) => alive && setQr(url)).catch(() => alive && setQr(''));
     return () => { alive = false; };
-  }, [payload]);
+  }, [showQr, payload]);
 
   async function copy(what) {
     try {
       await navigator.clipboard.writeText(what === 'code' ? payload : pix.key);
       setCopied(what);
-      setTimeout(() => setCopied(''), 2000);
     } catch { /* ignora */ }
   }
 
+  function rememberBank(id) {
+    setLastBank(id);
+    try { localStorage.setItem(LAST_BANK_KEY, id); } catch { /* ignora */ }
+  }
+
+  // Banco usado da última vez vem primeiro.
+  const banks = [...BANKS_WITH_APP].sort((a, b) => (b.id === lastBank) - (a.id === lastBank));
+
   return (
-    <div className="space-y-4 text-center">
-      <div>
-        <p className="text-xs text-ink-500">{items.length} parcela(s)/cobrança(s) · para {pix.name}</p>
+    <div className="space-y-4">
+      {/* Resumo do que está pagando */}
+      <div className="text-center">
+        <p className="text-xs text-ink-500">{items.length} parcela(s) · para {pix.name}</p>
         <p className="font-display font-bold text-3xl text-ink-900">{formatCurrency(amount)}</p>
       </div>
-      <ul className="text-left text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2 max-h-28 overflow-y-auto space-y-0.5">
+      <ul className="text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2 max-h-24 overflow-y-auto space-y-0.5">
         {items.map((c, i) => (
           <li key={i} className="flex justify-between gap-2">
             <span className="truncate">
@@ -311,25 +415,73 @@ function PixPayBox({ pix, amount, items }) {
           </li>
         ))}
       </ul>
-      {qr ? (
-        <img src={qr} alt="QR Code PIX" className="w-56 h-56 mx-auto rounded-2xl border border-ink-100" />
-      ) : (
-        <div className="w-56 h-56 mx-auto rounded-2xl bg-ink-50 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-ink-400" />
-        </div>
-      )}
-      <p className="text-xs text-ink-500">Escaneie no app do seu banco ou copie o código — o valor já vai preenchido.</p>
-      <button onClick={() => copy('code')} className="btn-primary w-full min-h-[52px] flex items-center justify-center gap-2">
-        {copied === 'code' ? <Check className="w-5 h-5 text-accent" /> : <Copy className="w-5 h-5" />}
-        {copied === 'code' ? 'Código copiado!' : 'Copiar PIX copia e cola'}
-      </button>
-      <button onClick={() => copy('key')} className="btn-ghost w-full min-h-[44px] flex items-center justify-center gap-2">
-        {copied === 'key' ? <Check className="w-4 h-4 text-positive" /> : <KeyRound className="w-4 h-4" />}
-        {copied === 'key' ? 'Chave copiada!' : 'Copiar só a chave PIX'}
-      </button>
-      <p className="text-[10px] text-ink-400 break-all leading-relaxed px-1">
-        Chave ({pix.key_type?.toUpperCase()}): {pix.key}
-      </p>
+
+      {/* 1. código copiado */}
+      <Step n={1} done={copied === 'code'} title={copied === 'code' ? 'Código PIX copiado, já com o valor' : 'Copie o código PIX (já com o valor)'}>
+        <button onClick={() => copy('code')} className={`${copied === 'code' ? 'btn-ghost' : 'btn-primary'} w-full min-h-[48px] flex items-center justify-center gap-2`}>
+          {copied === 'code' ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
+          {copied === 'code' ? 'Copiar de novo' : 'Copiar código PIX'}
+        </button>
+      </Step>
+
+      {/* 2. abrir o banco */}
+      <Step n={2} title="Abra o app do seu banco">
+        {IS_ANDROID ? (
+          <div className="grid grid-cols-4 gap-2">
+            {banks.map((b) => (
+              <a
+                key={b.id}
+                href={androidAppLink(b.android)}
+                onClick={() => rememberBank(b.id)}
+                className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-colors ${b.id === lastBank ? 'bg-accent/15' : 'hover:bg-ink-50'}`}
+              >
+                <BankLogo bankId={b.id} size={36} />
+                <span className="text-[10px] font-semibold text-ink-700 text-center leading-tight line-clamp-1">{b.name}</span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="flex items-start gap-2 text-xs text-ink-500">
+            <Smartphone className="w-4 h-4 flex-shrink-0 mt-px" />
+            Abra o app do seu banco no celular. Se estiver no computador, use o QR Code abaixo.
+          </p>
+        )}
+      </Step>
+
+      {/* 3. colar */}
+      <Step n={3} title="Vá em PIX → Pix Copia e Cola → cole e confirme" />
+
+      {/* Alternativas */}
+      <div className="pt-1 border-t border-ink-100 space-y-1">
+        <button onClick={() => setShowQr((v) => !v)} className="w-full flex items-center justify-between min-h-[44px] text-sm font-semibold text-ink-700">
+          <span className="flex items-center gap-2"><QrCode className="w-4 h-4" /> Mostrar QR Code</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showQr ? 'rotate-180' : ''}`} />
+        </button>
+        {showQr && (
+          qr ? <img src={qr} alt="QR Code PIX" className="w-52 h-52 mx-auto rounded-2xl border border-ink-100 animate-fade-in" />
+            : <div className="w-52 h-52 mx-auto rounded-2xl bg-ink-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-ink-400" /></div>
+        )}
+        <button onClick={() => copy('key')} className="w-full flex items-center gap-2 min-h-[44px] text-sm font-semibold text-ink-700">
+          {copied === 'key' ? <Check className="w-4 h-4 text-positive" /> : <KeyRound className="w-4 h-4" />}
+          {copied === 'key' ? 'Chave copiada — digite o valor no app' : `Copiar só a chave (${pix.key_type?.toUpperCase()})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step({ n, title, done = false, children }) {
+  return (
+    <div className="flex gap-3">
+      <span className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+        done ? 'bg-positive text-white' : 'bg-ink-900 text-white'
+      }`}>
+        {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : n}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm font-semibold text-ink-900 pt-0.5">{title}</p>
+        {children}
+      </div>
     </div>
   );
 }
