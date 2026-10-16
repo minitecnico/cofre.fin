@@ -12,7 +12,7 @@ import { requestPaymentPush } from '../services/push';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
-import { BANKS_WITH_APP } from '../constants/banks';
+import { BANKS_WITH_APP, findBank } from '../constants/banks';
 
 /**
  * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
@@ -427,6 +427,9 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
     try { localStorage.setItem(LAST_BANK_KEY, id); } catch { /* ignora */ }
   }
 
+  // Banco que RECEBE (apelido da chave PIX do credor, ex.: "Nubank").
+  const payeeBank = findBank(pix.label);
+
   // Banco usado da última vez vem primeiro.
   const banks = [...BANKS_WITH_APP].sort((a, b) => (b.id === lastBank) - (a.id === lastBank));
 
@@ -436,6 +439,11 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
       <div className="text-center">
         <p className="text-xs text-ink-500">{items.length} parcela(s) · para {pix.name}</p>
         <p className="font-display font-bold text-3xl text-ink-900">{formatCurrency(amount)}</p>
+        {payeeBank && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 bg-ink-50 rounded-full pl-1 pr-2.5 py-1">
+            <BankLogo bankId={payeeBank.id} size={20} /> Recebe no {payeeBank.name}
+          </p>
+        )}
       </div>
       <ul className="text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2 max-h-24 overflow-y-auto space-y-0.5">
         {items.map((c, i) => (
@@ -503,7 +511,9 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
             : <div className="w-52 h-52 mx-auto rounded-2xl bg-ink-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-ink-400" /></div>
         )}
         <button onClick={() => copy('key')} className="w-full flex items-center gap-2 min-h-[44px] text-sm font-semibold text-ink-700">
-          {copied === 'key' ? <Check className="w-4 h-4 text-positive" /> : <KeyRound className="w-4 h-4" />}
+          {copied === 'key'
+            ? <Check className="w-4 h-4 text-positive" />
+            : <BankLogo bankId={payeeBank?.id} size={18} fallback={<KeyRound className="w-4 h-4" />} />}
           {copied === 'key' ? 'Chave copiada — digite o valor no app' : `Copiar só a chave (${pix.key_type?.toUpperCase()})`}
         </button>
       </div>
