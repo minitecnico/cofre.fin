@@ -32,6 +32,7 @@
     "react-joyride": "^2.9.3",
     "react-router-dom": "^6.23.1",
     "recharts": "^2.12.7",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -62,7 +62,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 **Componentes base:** `Select.jsx` (seletor com ícone/logo, busca automática >7 opções, abre em linha — use no lugar de `<select>`), `ConfirmDialog.jsx` (trava p/ ações destrutivas), `BankLogo.jsx` (logo por `bankId` ou texto livre; lib `@edusites/bancos-brasil` carregada lazy — importada via alias do Vite p/ `src/core.js`, pois o `index.js` dela puxa `vue`).
 
-**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router). Autentica via token Supabase.
+**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router, autentica via token Supabase) e `push-notify.js` (Web Push do aviso de pagamento; pública, valida pelo código do extrato, usa service role).
 
 **Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`.
 
@@ -72,7 +72,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime), `push_subscriptions` (aparelhos inscritos no Web Push). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
 
 **Storage:** bucket privado `reports` (PDFs; signed URL) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
@@ -84,6 +84,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-10-16** — **Web Push** (aviso com o app FECHADO). `services/push.js` inscreve o aparelho (`pushManager.subscribe` com `VAPID_PUBLIC_KEY` de `constants`) e grava em `push_subscriptions` — ao ativar notificações em Cobranças e, silenciosamente, a cada abertura do app se já autorizado. Extrato: após `notify_payment` ok → `POST /api/push-notify {code}` (keepalive). Serverless `api/push-notify.js` (lib `web-push`, service role): acha o aviso pendente ≤2 min sem `pushed_at`, carimba antes de enviar (não reenvia), manda pra todas as inscrições do credor e apaga as mortas (404/410). `sw.js` trata `push`. Mesma `tag` do aviso in-app → sem duplicar. Sem as envs, a função responde `not-configured` e tudo segue via Realtime. Não funciona no APK (WebView); iPhone só com o PWA instalado (iOS 16.4+). ⚠️ Rodar `migration_push_subscriptions.sql` + envs na Vercel: `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
 - **2026-10-16** — **Aviso de pagamento** devedor → credor. No extrato, "Pagar" chama a RPC anon `notify_payment(code, ids)` (valida parcelas do devedor e em aberto, recalcula o valor no servidor, não duplica o mesmo conjunto em 10 min, teto 30/dia). Tabela `payment_notices` (RLS dono, no `supabase_realtime`). App: `usePaymentNoticeAlerts` no `Layout` escuta inserts (Realtime) em qualquer tela → toast + notificação do sistema (`utils/notify.js`, via service worker p/ funcionar no Android; `sw.js` trata o toque → abre /cobrancas) + evento `cofre:payment-notice` que recarrega Cobranças. Em Cobranças: `NoticePanel` com **Ok, visto** (só tira da lista). ⚠️ Aviso é **SÓ notificação** — nunca marca parcela como paga (decisão do usuário); marcar continua manual. `resolve_debtor_statement` passa a devolver o `id` das cobranças. Limite: notificação com o app FECHADO exige Web Push (não implementado). ⚠️ Rodar `migration_payment_notices.sql`.
 - **2026-10-16** — Lista mais enxuta (credor e extrato): dívidas **quitadas por inteiro** vão pra uma seção recolhida "N quitada(s) · R$ X" no fim; dentro de parcelamento em aberto, as **parcelas pagas** ficam recolhidas ("N parcela(s) paga(s)") e só as em aberto aparecem. Componente `PaidDisclosure.jsx`.
 - **2026-10-16** — **Fix:** editar cobrança/parcelamento preenchia o valor como `16.67` (`String(n)`) e o `parseAmount` (pt-BR, ponto = milhar) salvava **1667**. Novo `toAmountInput()` em `format.js` (16.67 → "16,67") + prévia "Vai salvar: R$ …" sob o campo. Regra: nunca `String(numero)` em input lido por `parseAmount`.

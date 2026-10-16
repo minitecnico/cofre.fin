@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
 import PaidDisclosure from '../components/PaidDisclosure';
 import { resolveDebtorStatement, notifyPayment } from '../services/cobrancas';
+import { requestPaymentPush } from '../services/push';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
@@ -77,7 +78,11 @@ export default function DebtorStatement() {
     setPayOpen(true);
     // Avisa o credor (sem travar o fluxo — se falhar, o PIX segue normal).
     const ids = pickedList.map((c) => c.id).filter(Boolean);
-    if (ids.length) notifyPayment(code, ids).then(setNotified).catch(() => {});
+    if (ids.length) {
+      notifyPayment(code, ids)
+        .then((ok) => { setNotified(ok); if (ok) requestPaymentPush(code); })
+        .catch(() => {});
+    }
   }
 
   if (data === undefined) {

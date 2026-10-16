@@ -100,3 +100,19 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// Web Push (enviado por /api/push-notify): mostra a notificação mesmo com o
+// app fechado. A `tag` é a mesma do aviso in-app, então não duplica.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Cofre', {
+      body: data.body || '',
+      tag: data.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-96.png',
+      data: { url: data.url || '/cobrancas' },
+    })
+  );
+});

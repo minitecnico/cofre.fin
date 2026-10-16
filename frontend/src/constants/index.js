@@ -17,6 +17,14 @@ export const DAY_MS = 86400000;
  */
 export const PUBLIC_APP_URL = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '');
 
+// ── Web Push ────────────────────────────────────────────────────────────────
+/**
+ * Chave PÚBLICA VAPID (pode ficar no código). A privada fica só na Vercel
+ * (VAPID_PRIVATE_KEY), usada por /api/push-notify. Trocar o par = trocar as duas.
+ */
+export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
+  || 'BNy15qHq2BLrBpEmXkkdhYSqH230CWyOtbZwILPihNeeAl6bdV_aIMEB12v1firPtdT1SOaaDpL7OHJ9pxpRVYw';
+
 // ── Cobranças ───────────────────────────────────────────────────────────────
 /** Sem lembrete há ≥ N dias → "cobrar de novo". */
 export const CHARGE_STALE_DAYS = 3;

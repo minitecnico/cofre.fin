@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { paymentNoticeService } from '../services/cobrancas';
+import { pushService } from '../services/push';
 import { showSystemNotification } from '../utils/notify';
 import { formatCurrency } from '../utils/format';
 import { debtorCode } from '../utils/charges';
@@ -15,6 +16,12 @@ export const PAYMENT_NOTICE_EVENT = 'cofre:payment-notice';
  * Sem a migration (tabela inexistente) a inscrição simplesmente não recebe nada.
  */
 export function usePaymentNoticeAlerts(onNotice) {
+  // Notificação já autorizada → garante a inscrição de push deste aparelho
+  // (sem perguntar nada). Assim o aviso chega também com o app fechado.
+  useEffect(() => {
+    pushService.enable().catch(() => {});
+  }, []);
+
   useEffect(() => {
     const unsubscribe = paymentNoticeService.subscribe(async (row) => {
       let notice = row;

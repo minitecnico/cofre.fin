@@ -12,6 +12,7 @@ import BankLogo from '../components/BankLogo';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PaidDisclosure from '../components/PaidDisclosure';
 import { showSystemNotification } from '../utils/notify';
+import { pushService } from '../services/push';
 import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
@@ -92,6 +93,8 @@ export default function Cobrancas() {
     if (typeof Notification === 'undefined') return;
     const p = await Notification.requestPermission();
     setNotifyPerm(p);
+    // Inscreve o aparelho no Web Push → avisos chegam com o app fechado.
+    if (p === 'granted') pushService.enable().catch((err) => console.error(err));
     if (p === 'granted') fireDebtorNotification(attention.filter((d) => d.stale));
   }
 
