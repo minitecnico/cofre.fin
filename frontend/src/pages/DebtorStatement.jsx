@@ -448,7 +448,7 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
       {notified && (
         <p className="flex items-center gap-2 text-xs text-positive font-semibold bg-emerald-50 rounded-xl px-3 py-2 animate-fade-in">
           <BellRing className="w-4 h-4 flex-shrink-0" />
-          Avisamos {ownerName || 'quem te cobrou'} que você está pagando. Quando cair, as parcelas aparecem como pagas aqui.
+          Avisamos {ownerName || 'quem te cobrou'} que você está pagando.
         </p>
       )}
 

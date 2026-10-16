@@ -28,7 +28,7 @@ export function usePaymentNoticeAlerts(onNotice) {
       onNotice?.(`💸 ${text} — confira em Cobranças`);
       showSystemNotification({
         title: 'Aviso de pagamento',
-        body: `${text}. Confira no banco e confirme no app.`,
+        body: `${text}.`,
         tag: `cofre-pagamento-${notice.id}`,
         url: '/cobrancas',
       });

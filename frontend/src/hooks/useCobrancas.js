@@ -53,11 +53,6 @@ export function useCobrancas() {
     return () => window.removeEventListener(PAYMENT_NOTICE_EVENT, load);
   }, [load]);
 
-  const confirmNotice = useCallback(async (id) => {
-    await paymentNoticeService.confirm(id);
-    await load();
-  }, [load]);
-
   const dismissNotice = useCallback(async (id) => {
     await paymentNoticeService.dismiss(id);
     await load();
@@ -172,7 +167,7 @@ export function useCobrancas() {
   } : null), [activePixKey]);
 
   return {
-    summary, charges, chargesByDebtor, pixKeys, cards, notices, confirmNotice, dismissNotice, activePixKey, pix, totals, loading, error,
+    summary, charges, chargesByDebtor, pixKeys, cards, notices, dismissNotice, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
     shareDebtorLink,

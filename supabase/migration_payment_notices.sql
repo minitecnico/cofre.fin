@@ -2,18 +2,15 @@
 -- Migration: Cobranças — aviso de pagamento do devedor → credor
 -- ============================================================================
 -- Quando o devedor toca em "Pagar" no extrato público (/extrato/:code), o app
--- registra um AVISO com as parcelas escolhidas. O credor é notificado em tempo
--- real (Supabase Realtime) e confirma o recebimento com 1 toque — o que marca
--- aquelas parcelas como pagas. O PIX estático não avisa sozinho quando cai,
--- então o aviso é "ele gerou o PIX", não "o dinheiro caiu": quem confirma é o
--- credor, olhando o banco.
+-- registra um AVISO com as parcelas escolhidas e o credor é NOTIFICADO em tempo
+-- real (Supabase Realtime). O aviso é só notificação: não altera nenhuma
+-- parcela — marcar como pago continua sendo manual, pelo credor.
 --
---   payment_notices          → avisos (pending | confirmed | dismissed)
+--   payment_notices          → avisos (pending = novo · dismissed = visto)
 --   notify_payment()         → anon, via share_code. Valida as parcelas e
 --                              recalcula o valor no servidor (não confia no front).
 --                              Anti-spam: mesmo conjunto em 10 min não duplica;
 --                              teto de 30 avisos/dia por devedor.
---   confirm_payment_notice() → dono: marca as parcelas pagas + fecha o aviso.
 --   resolve_debtor_statement → recriada devolvendo o `id` de cada cobrança
 --                              (necessário pro aviso; ids são uuid e o anon não
 --                              consegue fazer nada com eles fora destas RPCs).
@@ -101,32 +98,9 @@ end;
 $$;
 grant execute on function public.notify_payment(text, uuid[]) to anon, authenticated;
 
--- ── RPC do credor: confirmar recebimento ────────────────────────────────────
+-- Aviso é SÓ notificação: não existe RPC que marque parcelas como pagas a
+-- partir dele. Remove a versão anterior desta migration, se já foi aplicada.
 drop function if exists public.confirm_payment_notice(uuid);
-create or replace function public.confirm_payment_notice(p_id uuid)
-returns integer
-language plpgsql
-security invoker
-volatile
-as $$
-declare
-  v_ids uuid[];
-  v_count integer;
-begin
-  select charge_ids into v_ids
-    from public.payment_notices
-   where id = p_id and user_id = auth.uid() and status = 'pending';
-  if v_ids is null then return 0; end if;
-
-  update public.charges
-     set paid = true, paid_at = now()
-   where id = any(v_ids) and user_id = auth.uid() and not paid;
-  get diagnostics v_count = row_count;
-
-  update public.payment_notices set status = 'confirmed' where id = p_id;
-  return v_count;
-end;
-$$;
 
 -- ── Extrato público: agora com o id de cada cobrança ────────────────────────
 drop function if exists public.resolve_debtor_statement(text);

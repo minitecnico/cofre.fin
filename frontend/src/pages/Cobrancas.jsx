@@ -191,22 +191,6 @@ export default function Cobrancas() {
     });
   }
 
-  // ── Avisos de pagamento (devedor gerou o PIX no extrato) ─────────────
-  function handleConfirmNotice(notice) {
-    const n = notice.charge_ids.length;
-    setConfirmReq({
-      title: 'Confirmar recebimento?',
-      message: (
-        <>
-          Confira no seu banco se o PIX de <b className="text-ink-900">{formatCurrency(notice.amount)}</b> de{' '}
-          <b className="text-ink-900">{notice.debtor?.name || 'devedor'}</b> caiu. As {n} parcela(s) serão marcadas como pagas (e travadas).
-        </>
-      ),
-      confirmLabel: 'Recebi',
-      onConfirm: () => c.confirmNotice(notice.id),
-    });
-  }
-
   // Monta o payload do relatório e gera PDF (download ou compartilhar)
   const handlePdf = useCallback(async (share) => {
     setPdfBusy(true);
@@ -330,7 +314,6 @@ export default function Cobrancas() {
         <NoticePanel
           notices={c.notices}
           charges={c.charges}
-          onConfirm={handleConfirmNotice}
           onDismiss={(n) => c.dismissNotice(n.id)}
         />
       )}
@@ -594,10 +577,10 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
 
 /**
  * Avisos de pagamento: o devedor tocou em "Pagar" no extrato e gerou o PIX.
- * O PIX estático não avisa quando cai — por isso o credor confirma olhando o
- * banco, e "Recebi" marca as parcelas do aviso como pagas.
+ * É SÓ notificação — não mexe em nenhuma parcela; marcar como pago continua
+ * manual. "Ok, visto" tira o aviso da lista.
  */
-function NoticePanel({ notices, charges, onConfirm, onDismiss }) {
+function NoticePanel({ notices, charges, onDismiss }) {
   const byId = new Map(charges.map((x) => [x.id, x]));
   return (
     <div className="card-flat overflow-hidden border-l-4 border-positive animate-slide-up">
@@ -607,7 +590,7 @@ function NoticePanel({ notices, charges, onConfirm, onDismiss }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-bold text-sm text-ink-900">Avisos de pagamento</p>
-          <p className="text-[11px] text-ink-500">Confira no seu banco e confirme o que caiu.</p>
+          <p className="text-[11px] text-ink-500">Quem gerou PIX pelo extrato pra te pagar.</p>
         </div>
       </div>
       <div className="divide-y divide-ink-100 border-t border-ink-100">
@@ -627,14 +610,9 @@ function NoticePanel({ notices, charges, onConfirm, onDismiss }) {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-1.5">
-                <button onClick={() => onConfirm(n)} className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-positive text-white font-bold text-xs hover:opacity-90 transition-opacity">
-                  <Check className="w-3.5 h-3.5" /> Recebi
-                </button>
-                <button onClick={() => onDismiss(n)} className="inline-flex items-center px-3 min-h-[36px] rounded-lg text-ink-500 font-bold text-xs hover:bg-ink-100 transition-colors">
-                  Ignorar
-                </button>
-              </div>
+              <button onClick={() => onDismiss(n)} className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
+                <Check className="w-3.5 h-3.5" /> Ok, visto
+              </button>
             </div>
           );
         })}

@@ -438,7 +438,7 @@ export const pixLinkService = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
-// Avisos de pagamento (devedor gerou o PIX no extrato → credor confirma)
+// Avisos de pagamento (devedor gerou o PIX no extrato → credor é notificado)
 // ─────────────────────────────────────────────────────────────────────────
 
 export const paymentNoticeService = {
@@ -453,14 +453,7 @@ export const paymentNoticeService = {
     return data || [];
   },
 
-  /** Recebi: marca as parcelas do aviso como pagas e fecha o aviso. Retorna quantas marcou. */
-  async confirm(id) {
-    const { data, error } = await supabase.rpc('confirm_payment_notice', { p_id: id });
-    if (error) throw error;
-    return data || 0;
-  },
-
-  /** Ignorar: fecha o aviso sem mexer nas parcelas. */
+  /** "Ok, visto": tira o aviso da lista. Não mexe em nenhuma parcela. */
   async dismiss(id) {
     const { error } = await supabase.from('payment_notices').update({ status: 'dismissed' }).eq('id', id);
     if (error) throw error;
