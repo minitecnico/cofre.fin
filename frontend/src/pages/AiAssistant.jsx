@@ -7,8 +7,7 @@ import { cardService, dashboardService, loanService, transactionService } from '
 import { sendAiMessage } from '../services/ai';
 import { downloadOriginal, downloadText, extractDocument, formatFileSize } from '../services/aiDocuments';
 import { useMonth } from '../context/MonthContext';
-
-const MAX_ATTACHMENTS = 4;
+import { MAX_AI_ATTACHMENTS } from '../constants';
 
 function safeFilename(value) {
   return String(value || 'resposta')
@@ -270,7 +269,7 @@ export default function AiAssistant() {
   }
 
   async function handleFiles(files) {
-    const availableSlots = MAX_ATTACHMENTS - attachments.length;
+    const availableSlots = MAX_AI_ATTACHMENTS - attachments.length;
     if (availableSlots <= 0) return;
 
     const selected = Array.from(files || []).slice(0, availableSlots);
@@ -544,7 +543,7 @@ export default function AiAssistant() {
                   event.target.value = '';
                 }}
               />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={attachments.length >= MAX_ATTACHMENTS} className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-950 disabled:opacity-40 transition-colors">
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={attachments.length >= MAX_AI_ATTACHMENTS} className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-950 disabled:opacity-40 transition-colors">
                 <Paperclip className="w-3.5 h-3.5" /> Anexar documento
               </button>
               <span className="hidden sm:inline text-[10px] text-ink-400">PDF, Word, Excel, CSV ou TXT · até 8 MB</span>

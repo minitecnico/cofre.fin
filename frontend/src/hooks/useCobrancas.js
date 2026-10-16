@@ -92,6 +92,14 @@ export function useCobrancas() {
     await load();
   }, [load]);
 
+  const updateChargeGroup = useCallback(async (groupId, items, patch) => {
+    await chargeService.updateGroup(groupId, items, patch);
+    await load();
+  }, [load]);
+
+  // Link do extrato público — não recarrega (o código não aparece na lista).
+  const shareDebtorLink = useCallback((id, opts) => debtorService.shareLink(id, opts), []);
+
   const setChargePaid = useCallback(async (id, paid) => {
     await chargeService.setPaid(id, paid);
     await load();
@@ -146,7 +154,8 @@ export function useCobrancas() {
     summary, charges, chargesByDebtor, pixKeys, cards, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
-    addCharge, addInstallments, updateCharge, setChargePaid, removeCharge, removeCharges, markCharged,
+    shareDebtorLink,
+    addCharge, addInstallments, updateCharge, updateChargeGroup, setChargePaid, removeCharge, removeCharges, markCharged,
     addPixKey, removePixKey, setDefaultPixKey,
   };
 }

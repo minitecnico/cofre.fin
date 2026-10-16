@@ -1,9 +1,12 @@
 import { CreditCard } from 'lucide-react';
+import Select from './Select';
+import BankLogo from './BankLogo';
 
 /**
  * Tarja do cartão de crédito: faixa colorida (cor do cartão) + nome. Comunica
  * de relance em qual cartão a despesa/cobrança foi feita, sem hover. Mesmo
- * padrão visual da lista de transações.
+ * padrão visual da lista de transações. Se o nome do cartão indica um banco
+ * conhecido ("Nubank", "Itaú Click"), a logo entra no lugar do ícone genérico.
  */
 export function CardTag({ card, className = '' }) {
   if (!card?.name) return null;
@@ -13,8 +16,19 @@ export function CardTag({ card, className = '' }) {
       style={{ backgroundColor: card.color || '#1e293b' }}
       title={`Cartão: ${card.name}`}
     >
-      <CreditCard className="w-2.5 h-2.5" /> {card.name}
+      <BankLogo name={card.name} size={12} fallback={<CreditCard className="w-2.5 h-2.5" />} /> {card.name}
     </span>
+  );
+}
+
+/** Ícone de uma opção de cartão: logo do banco, ou bolinha na cor do cartão. */
+function CardOptionIcon({ card }) {
+  return (
+    <BankLogo
+      name={card.name}
+      size={22}
+      fallback={<span className="w-[22px] h-[22px] rounded-md flex-shrink-0" style={{ backgroundColor: card.color || '#1e293b' }} />}
+    />
   );
 }
 
@@ -24,17 +38,9 @@ export function CardTag({ card, className = '' }) {
  */
 export function CardSelect({ cards, value, onChange, label = 'Cartão (opcional)' }) {
   if (!cards?.length) return null;
-  return (
-    <div>
-      <label className="label flex items-center gap-1.5">
-        <CreditCard className="w-3.5 h-3.5" /> {label}
-      </label>
-      <select className="input-field" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Nenhum</option>
-        {cards.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
-    </div>
-  );
+  const options = [
+    { value: '', label: 'Nenhum', icon: <CreditCard className="w-[22px] h-[22px] p-0.5 text-ink-300 flex-shrink-0" /> },
+    ...cards.map((c) => ({ value: c.id, label: c.name, icon: <CardOptionIcon card={c} /> })),
+  ];
+  return <Select label={label} icon={CreditCard} value={value} onChange={onChange} options={options} />;
 }

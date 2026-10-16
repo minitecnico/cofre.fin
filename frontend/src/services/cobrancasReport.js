@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatCurrency, formatDate } from '../utils/format';
+import { formatCurrency, formatDate, todayISO } from '../utils/format';
 
 /**
  * Relatório de cobranças (PDF) + mensagens de WhatsApp.
@@ -66,11 +66,6 @@ export function buildReminderText(debtorName, charges, opts = {}) {
   return lines.join('\n');
 }
 
-function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 /**
  * Gera o PDF do relatório de cobranças.
  * Cada devedor com telefone vira um LINK CLICÁVEL (wa.me) no PDF.
@@ -99,7 +94,7 @@ export function generateChargesPdf(report) {
   doc.setTextColor(...COLOR.ink400);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Gerado em ${formatDate(todayIso(), 'long')}`, pageW - M, 42, { align: 'right' });
+  doc.text(`Gerado em ${formatDate(todayISO(), 'long')}`, pageW - M, 42, { align: 'right' });
 
   let y = 120;
 
@@ -146,7 +141,7 @@ export function generateChargesPdf(report) {
     const body = (d.charges || []).map((c) => [
       c.description,
       c.due_date ? formatDate(c.due_date, 'long') : '—',
-      c.paid ? 'Pago' : (c.due_date && c.due_date < todayIso() ? 'Vencido' : 'Pendente'),
+      c.paid ? 'Pago' : (c.due_date && c.due_date < todayISO() ? 'Vencido' : 'Pendente'),
       formatCurrency(c.amount),
     ]);
     autoTable(doc, {
@@ -171,5 +166,5 @@ export function generateChargesPdf(report) {
     doc.text(`Cofre · Cobranças · pág. ${i}/${total}`, pageW / 2, doc.internal.pageSize.getHeight() - 20, { align: 'center' });
   }
 
-  return { blob: doc.output('blob'), filename: `cobrancas-cofre-${todayIso()}.pdf` };
+  return { blob: doc.output('blob'), filename: `cobrancas-cofre-${todayISO()}.pdf` };
 }

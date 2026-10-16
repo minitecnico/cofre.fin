@@ -3,6 +3,17 @@ import { currentUserId } from './index';
 import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
 import { buildPixPayload, pixQrCodeDataUrl } from './pix';
 import { randomLinkCode } from '../utils/randomCode';
+import { PUBLIC_APP_URL } from '../constants';
+
+/**
+ * Extrato público de um devedor (rota /extrato/:code, sem login).
+ * RPC SECURITY DEFINER: devolve só o extrato daquele código exato.
+ */
+export async function resolveDebtorStatement(code) {
+  const { data, error } = await supabase.rpc('resolve_debtor_statement', { p_code: code });
+  if (error) throw error;
+  return data || null;
+}
 
 /**
  * Services de Cobranças.
@@ -23,7 +34,7 @@ import { randomLinkCode } from '../utils/randomCode';
 // ─────────────────────────────────────────────────────────────────────────
 
 export const debtorService = {
-  /** Lista devedores (mais recentes primeiro). */
+  /** Lista devedores (ordem alfabética). */
   async list() {
     const { data, error } = await supabase
       .from('debtors')
@@ -53,6 +64,25 @@ export const debtorService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Link público do extrato do devedor (<dominio>/extrato/<code>), ao vivo.
+   * Gera o código na 1ª vez; depois reaproveita o mesmo (o link já enviado
+   * continua valendo). `rotate: true` troca o código e invalida o link antigo.
+   */
+  async shareLink(id, { rotate = false } = {}) {
+    let code = null;
+    if (!rotate) {
+      const { data, error } = await supabase.from('debtors').select('share_code').eq('id', id).single();
+      if (error) throw error;
+      code = data.share_code;
+    }
+    if (!code) {
+      code = randomLinkCode();
+      await this.update(id, { share_code: code });
+    }
+    return `${PUBLIC_APP_URL}/extrato/${code}`;
   },
 
   /** Remove o devedor (cascade apaga as cobranças dele). */
@@ -165,6 +195,38 @@ export const chargeService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Edita um parcelamento inteiro de uma vez.
+   *   description   → novo nome base; cada parcela vira "Nome (i/N)"
+   *   cardId        → cartão de todas as parcelas ('' / null = nenhum)
+   *   pendingAmount → novo valor de cada parcela AINDA NÃO PAGA (pagas ficam
+   *                   travadas — o que já foi recebido não muda)
+   */
+  async updateGroup(groupId, items, { description, cardId, pendingAmount }) {
+    const { error } = await supabase
+      .from('charges')
+      .update({ credit_card_id: cardId || null })
+      .eq('installment_group_id', groupId);
+    if (error) throw error;
+
+    if (pendingAmount > 0) {
+      const { error: amtErr } = await supabase
+        .from('charges')
+        .update({ amount: pendingAmount })
+        .eq('installment_group_id', groupId)
+        .eq('paid', false);
+      if (amtErr) throw amtErr;
+    }
+
+    // A descrição embute "(i/N)" e difere por parcela → uma atualização por linha.
+    const results = await Promise.all(items.map((c) => supabase
+      .from('charges')
+      .update({ description: `${description} (${c.installment_number}/${c.installment_total})` })
+      .eq('id', c.id)));
+    const failed = results.find((r) => r.error);
+    if (failed) throw failed.error;
   },
 
   /** Marca como paga/pendente, gravando o momento do pagamento. */
@@ -355,7 +417,7 @@ export const pixLinkService = {
     if (insErr) throw insErr;
 
     return {
-      shortUrl: `${window.location.origin}/pix/${code}`,
+      shortUrl: `${PUBLIC_APP_URL}/pix/${code}`,
       payload,
       qrUrl,
       code,

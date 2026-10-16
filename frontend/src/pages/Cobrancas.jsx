@@ -1,33 +1,41 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Users, Plus, Trash2, MessageCircle, QrCode, FileText, Download,
+  Users, Plus, Trash2, MessageCircle, QrCode, FileText,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
   AlertTriangle, Wallet, Share2, CreditCard, Pencil, Star, Link2, X,
-  Bell, BellRing, Clock, Send,
+  Bell, BellRing, Clock, Send, Lock, Minus, ListChecks, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
+import Select from '../components/Select';
+import BankLogo from '../components/BankLogo';
+import ConfirmDialog from '../components/ConfirmDialog';
 import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { useCobrancas } from '../hooks/useCobrancas';
-import { formatCurrency, formatDate, parseAmount } from '../utils/format';
+import { formatCurrency, formatDate, parseAmount, todayISO } from '../utils/format';
+import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
+import {
+  DAY_MS, CHARGE_STALE_DAYS, CHARGE_DUE_SOON_DAYS, CHARGE_NOTIFY_STORAGE_KEY,
+  MAX_INSTALLMENTS, PIX_KEY_TYPES,
+} from '../constants';
+import { BANKS } from '../constants/banks';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { pixLinkService } from '../services/cobrancas';
-import {
-  buildReminderText, waLink, generateChargesPdf, normalizePhone,
-} from '../services/cobrancasReport';
+import { buildReminderText, waLink, generateChargesPdf } from '../services/cobrancasReport';
 import { downloadPdf, shareReportFile } from '../services/reports';
 
 /**
- * Página de Cobranças.
+ * Página de Cobranças — a "carteira do credor".
  *
  * Controla quem deve ao usuário (emprestou cartão/dinheiro). Permite:
- *   - cadastrar pessoas e suas dívidas (valor, descrição, vencimento)
- *   - marcar como pago, ver vencidas
- *   - configurar a chave PIX p/ receber → gera QR / copia-e-cola
- *   - cobrar via WhatsApp (mensagem pronta, com PIX)
- *   - exportar relatório em PDF com links clicáveis
+ *   - cadastrar pessoas e suas dívidas (valor, descrição, vencimento, parcelas)
+ *   - ver por pessoa: total da dívida, pago, a pagar, parcelas pagas × faltando
+ *   - enviar ao devedor um extrato público e ao vivo (/extrato/:code)
+ *   - marcar como pago — pagamento já feito fica TRAVADO (desfazer pede confirmação)
+ *   - editar pessoa, cobrança avulsa ou parcelamento inteiro
+ *   - PIX (QR / copia-e-cola / link), cobrar via WhatsApp, relatório PDF
  */
 export default function Cobrancas() {
   const c = useCobrancas();
@@ -37,8 +45,13 @@ export default function Cobrancas() {
   const [qrTarget, setQrTarget] = useState(null);     // { name, openAmount, phone } p/ modal QR
   const [chargeTarget, setChargeTarget] = useState(null); // devedor p/ nova cobrança
   const [editTarget, setEditTarget] = useState(null);     // cobrança em edição
+  const [groupTarget, setGroupTarget] = useState(null);   // parcelamento em edição
+  const [debtorEdit, setDebtorEdit] = useState(null);     // pessoa em edição
+  const [shareTarget, setShareTarget] = useState(null);   // pessoa p/ enviar extrato
+  const [confirmReq, setConfirmReq] = useState(null);     // diálogo de confirmação (trava)
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [sel, setSel] = useState({ debtorId: null, ids: EMPTY_SET }); // seleção (1 devedor por vez)
+  // Seleção: uma pessoa por vez. debtorId != null = modo seleção ativo nela.
+  const [sel, setSel] = useState({ debtorId: null, ids: EMPTY_SET });
 
   const pixReady = c.pix?.pixKey && c.pix?.pixName && c.pix?.pixCity;
 
@@ -86,31 +99,28 @@ export default function Cobrancas() {
     if (notifyPerm !== 'granted') return;
     const stale = attention.filter((d) => d.stale && d.urgency === 'overdue');
     if (!stale.length) return;
-    const key = 'cofre_cobr_notif';
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     try {
-      if (localStorage.getItem(key) === today) return;
-      localStorage.setItem(key, today);
+      if (localStorage.getItem(CHARGE_NOTIFY_STORAGE_KEY) === today) return;
+      localStorage.setItem(CHARGE_NOTIFY_STORAGE_KEY, today);
     } catch { return; }
     fireDebtorNotification(stale);
   }, [notifyPerm, attention, fireDebtorNotification]);
 
-  // ── Seleção (uma pessoa por vez; barra flutuante age sobre ela) ──
-  function toggleSelect(debtorId, id) {
-    setSel((prev) => {
-      if (prev.debtorId !== debtorId) return { debtorId, ids: new Set([id]) };
-      const ids = new Set(prev.ids);
-      if (ids.has(id)) ids.delete(id); else ids.add(id);
-      return ids.size ? { debtorId, ids } : { debtorId: null, ids: EMPTY_SET };
-    });
-  }
-  function toggleAll(debtorId, chargeIds) {
-    setSel((prev) => {
-      const allOn = prev.debtorId === debtorId && prev.ids.size === chargeIds.length;
-      return allOn ? { debtorId: null, ids: EMPTY_SET } : { debtorId, ids: new Set(chargeIds) };
-    });
-  }
+  // ── Seleção ─────────────────────────────────────────────────────────
+  // O modo seleção é explícito (botão "Selecionar"): fora dele a linha só tem
+  // o botão de pago, sem duas caixinhas lado a lado competindo pelo toque.
+  const startSelect = (debtorId) => setSel({ debtorId, ids: EMPTY_SET });
+  const selectOnly = (debtorId, ids) => setSel({ debtorId, ids: new Set(ids) });
   const clearSel = () => setSel({ debtorId: null, ids: EMPTY_SET });
+  function toggleSelect(debtorId, ids) {
+    setSel((prev) => {
+      const next = new Set(prev.debtorId === debtorId ? prev.ids : []);
+      const allOn = ids.every((id) => next.has(id));
+      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+      return { debtorId, ids: next };
+    });
+  }
 
   const activeDebtor = sel.debtorId ? c.summary.find((d) => d.debtorId === sel.debtorId) : null;
   const selectedCharges = activeDebtor
@@ -118,9 +128,69 @@ export default function Cobrancas() {
     : [];
   const selSum = selectedCharges.reduce((s, x) => s + Number(x.amount), 0);
 
-  async function handleBulkDelete() {
-    await c.removeCharges([...sel.ids]);
-    clearSel();
+  function handleBulkDelete() {
+    const paidCount = selectedCharges.filter((x) => x.paid).length;
+    setConfirmReq({
+      title: `Excluir ${selectedCharges.length} cobrança(s)?`,
+      message: (
+        <>
+          Total de <b className="text-ink-900">{formatCurrency(selSum)}</b> de {activeDebtor.name}.
+          {paidCount > 0 && <> Inclui <b className="text-ink-900">{paidCount} já paga(s)</b> — o histórico de pagamento delas será perdido.</>}
+          {' '}Não dá pra desfazer.
+        </>
+      ),
+      confirmLabel: 'Excluir',
+      tone: 'danger',
+      onConfirm: async () => { await c.removeCharges([...sel.ids]); clearSel(); },
+    });
+  }
+
+  // ── Trava de pagamento ──────────────────────────────────────────────
+  // Marcar como pago é imediato. Já PAGO fica travado: desfazer exige
+  // confirmação explícita, pra um toque sem querer não "reabrir" a dívida.
+  function handleTogglePaid(charge) {
+    if (!charge.paid) { c.setChargePaid(charge.id, true); return; }
+    setConfirmReq({
+      title: 'Desfazer pagamento?',
+      message: (
+        <>
+          <b className="text-ink-900">{chargeLabel(charge)}</b> ({formatCurrency(charge.amount)}) foi marcada como paga
+          {charge.paid_at ? <> em <b className="text-ink-900">{formatDate(charge.paid_at, 'long')}</b></> : null}.
+          {' '}Ela volta a contar como valor a receber.
+        </>
+      ),
+      confirmLabel: 'Desfazer pagamento',
+      onConfirm: () => c.setChargePaid(charge.id, false),
+    });
+  }
+
+  function handleRemoveCharge(charge) {
+    setConfirmReq({
+      title: 'Excluir cobrança?',
+      message: (
+        <>
+          <b className="text-ink-900">{chargeLabel(charge)}</b> — {formatCurrency(charge.amount)}.
+          {charge.paid && <> Ela <b className="text-ink-900">já foi paga</b>; o registro do pagamento também será apagado.</>}
+          {' '}Não dá pra desfazer.
+        </>
+      ),
+      confirmLabel: 'Excluir',
+      tone: 'danger',
+      onConfirm: () => c.removeCharge(charge.id),
+    });
+  }
+
+  function handleRemoveDebtor(debtor) {
+    const count = (c.chargesByDebtor.get(debtor.debtorId) || []).length;
+    setConfirmReq({
+      title: `Remover ${debtor.name}?`,
+      message: count
+        ? <>Apaga a pessoa e <b className="text-ink-900">todas as {count} cobrança(s)</b> dela, inclusive o histórico de pagamentos. Não dá pra desfazer.</>
+        : 'A pessoa será removida. Não dá pra desfazer.',
+      confirmLabel: 'Remover',
+      tone: 'danger',
+      onConfirm: () => c.removeDebtor(debtor.debtorId),
+    });
   }
 
   // Monta o payload do relatório e gera PDF (download ou compartilhar)
@@ -185,35 +255,36 @@ export default function Cobrancas() {
 
   // Gera PIX (QR + link) só das parcelas/cobranças selecionadas → abre o modal.
   // Leva os ids junto pra marcar como cobrado quando o link for enviado.
-  function handleGenPixForCharges(debtor, selectedCharges) {
-    const sum = selectedCharges.reduce((s, x) => s + Number(x.amount), 0);
+  function handleGenPixForCharges(debtor, selected) {
+    const open = selected.filter((x) => !x.paid);
     setQrTarget({
-      name: debtor.name, phone: debtor.phone, openAmount: sum,
-      chargeIds: selectedCharges.filter((x) => !x.paid).map((x) => x.id),
+      name: debtor.name, phone: debtor.phone,
+      openAmount: open.reduce((s, x) => s + Number(x.amount), 0),
+      chargeIds: open.map((x) => x.id),
     });
   }
 
   // Relatório PDF só das cobranças selecionadas de um devedor
-  function handleReportCharges(debtor, selectedCharges) {
-    const open = selectedCharges.filter((x) => !x.paid);
+  function handleReportCharges(debtor, selected) {
+    const open = selected.filter((x) => !x.paid);
+    const openSum = open.reduce((s, x) => s + Number(x.amount), 0);
     const reminderText = pixReady
       ? buildReminderText(debtor.name, open, {
           pixPayload: buildPixPayload({
             key: c.pix.pixKey, keyType: c.pix.pixKeyType, name: c.pix.pixName, city: c.pix.pixCity,
-            amount: selectedCharges.reduce((s, x) => s + Number(x.amount), 0),
+            amount: openSum,
           }),
           ownerName: c.pix.pixName,
         })
       : buildReminderText(debtor.name, open);
-    const openSum = open.reduce((s, x) => s + Number(x.amount), 0);
     const overdueSum = open
-      .filter((x) => x.due_date && x.due_date < new Date().toISOString().slice(0, 10))
+      .filter((x) => isOverdue(x))
       .reduce((s, x) => s + Number(x.amount), 0);
     const report = {
       debtors: [{
         name: debtor.name, phone: debtor.phone,
         openAmount: openSum, overdueAmount: overdueSum,
-        charges: selectedCharges, reminderText,
+        charges: selected, reminderText,
       }],
       totalOpen: openSum,
       totalOverdue: overdueSum,
@@ -291,13 +362,19 @@ export default function Cobrancas() {
                 ...d,
                 chargeIds: (c.chargesByDebtor.get(d.debtorId) || []).filter((x) => !x.paid).map((x) => x.id),
               })}
-              onSetPaid={c.setChargePaid}
+              onShare={() => setShareTarget(d)}
+              onEditDebtor={() => setDebtorEdit(d)}
+              onRemoveDebtor={() => handleRemoveDebtor(d)}
+              onTogglePaid={handleTogglePaid}
               onEditCharge={setEditTarget}
-              onRemoveCharge={c.removeCharge}
-              onRemoveDebtor={() => c.removeDebtor(d.debtorId)}
+              onEditGroup={setGroupTarget}
+              onRemoveCharge={handleRemoveCharge}
+              selecting={sel.debtorId === d.debtorId}
               selectedIds={sel.debtorId === d.debtorId ? sel.ids : EMPTY_SET}
-              onToggleSelect={(id) => toggleSelect(d.debtorId, id)}
-              onToggleAll={(ids) => toggleAll(d.debtorId, ids)}
+              onStartSelect={() => startSelect(d.debtorId)}
+              onSelectOnly={(ids) => selectOnly(d.debtorId, ids)}
+              onToggleSelect={(ids) => toggleSelect(d.debtorId, ids)}
+              onEndSelect={clearSel}
             />
           ))}
         </div>
@@ -313,6 +390,13 @@ export default function Cobrancas() {
         onSetDefault={c.setDefaultPixKey}
       />
       <DebtorModal isOpen={debtorModal.isOpen} onClose={debtorModal.close} onSave={c.addDebtor} />
+      <EditDebtorModal debtor={debtorEdit} onClose={() => setDebtorEdit(null)} onSave={c.updateDebtor} />
+      <ShareStatementModal
+        debtor={shareTarget}
+        charges={shareTarget ? c.chargesByDebtor.get(shareTarget.debtorId) || [] : []}
+        getLink={c.shareDebtorLink}
+        onClose={() => setShareTarget(null)}
+      />
 
       {/* Cadastrar cobrança direto (escolhe/cria a pessoa) */}
       <Modal isOpen={addChargeModal.isOpen} onClose={addChargeModal.close} title="Nova cobrança">
@@ -334,6 +418,12 @@ export default function Cobrancas() {
         onClose={() => setEditTarget(null)}
         onSave={c.updateCharge}
       />
+      <EditGroupModal
+        group={groupTarget}
+        cards={c.cards}
+        onClose={() => setGroupTarget(null)}
+        onSave={c.updateChargeGroup}
+      />
       <PixQrModal
         target={qrTarget}
         pixKey={c.activePixKey}
@@ -342,6 +432,7 @@ export default function Cobrancas() {
         onConfigure={() => { setQrTarget(null); pixModal.open(); }}
         onSent={(ids) => c.markCharged(ids)}
       />
+      <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
 
       {/* Barra de seleção FLUTUANTE — sempre visível, sem rolar a tela */}
       {sel.ids.size > 0 && activeDebtor && (
@@ -354,8 +445,8 @@ export default function Cobrancas() {
               <p className="text-[10px] text-ink-400 truncate">{activeDebtor.name}</p>
             </div>
             <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
-              {pixReady && (
-                <button onClick={() => handleGenPixForCharges(activeDebtor, selectedCharges)} className="inline-flex items-center gap-1 px-2.5 py-2 min-h-[40px] rounded-xl bg-accent text-ink-900 font-bold text-xs hover:bg-accent-light transition-colors" title="Gerar PIX das selecionadas">
+              {pixReady && selectedCharges.some((x) => !x.paid) && (
+                <button onClick={() => handleGenPixForCharges(activeDebtor, selectedCharges)} className="inline-flex items-center gap-1 px-2.5 py-2 min-h-[40px] rounded-xl bg-accent text-ink-900 font-bold text-xs hover:bg-accent-light transition-colors" title="Gerar PIX das pendentes selecionadas">
                   <QrCode className="w-4 h-4" /> PIX
                 </button>
               )}
@@ -365,7 +456,7 @@ export default function Cobrancas() {
               <button onClick={handleBulkDelete} className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-negative text-white hover:opacity-90 transition-opacity" title="Excluir selecionadas">
                 <Trash2 className="w-4 h-4" />
               </button>
-              <button onClick={clearSel} className="inline-flex items-center justify-center w-10 h-10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors" title="Limpar seleção">
+              <button onClick={clearSel} className="inline-flex items-center justify-center w-10 h-10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors" title="Sair da seleção">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -472,17 +563,21 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
 
 const EMPTY_SET = new Set();
 
+/** Nome curto de uma cobrança: "Notebook · parcela 2/6" ou a descrição. */
+function chargeLabel(charge) {
+  return charge.installment_total > 1
+    ? `${baseDescription(charge.description)} · parcela ${charge.installment_number}/${charge.installment_total}`
+    : charge.description;
+}
+
 // ── Status de cobrança / lembretes ─────────────────────────────
 // Esquema de cores e textos pra sinalizar o que já foi cobrado (evita cobrar
 // a mesma pessoa 2-3x) e o que precisa de atenção (vencido / vencendo).
-const DAY = 86400000;
-const STALE_DAYS = 3; // sem lembrete há ≥3 dias → "cobrar de novo"
-
 function daysSince(iso) {
   if (!iso) return null;
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return null;
-  return Math.floor((Date.now() - t) / DAY);
+  return Math.floor((Date.now() - t) / DAY_MS);
 }
 
 /** Texto curto do último lembrete enviado, ou null se nunca cobrado. */
@@ -498,7 +593,7 @@ function reminderLabel(iso) {
 function reminderTone(iso) {
   const d = daysSince(iso);
   if (d == null) return 'bg-ink-100 text-ink-500';
-  if (d < STALE_DAYS) return 'bg-emerald-50 text-positive';
+  if (d < CHARGE_STALE_DAYS) return 'bg-emerald-50 text-positive';
   return 'bg-amber-50 text-warn';
 }
 
@@ -512,11 +607,11 @@ function debtorStatus(d) {
   let urgency = 'open';
   if (d.overdueCount > 0) urgency = 'overdue';
   else if (d.nextDue) {
-    const diff = Math.ceil((new Date(`${d.nextDue}T00:00:00`).getTime() - Date.now()) / DAY);
-    if (diff <= 3) urgency = 'due-soon';
+    const diff = Math.ceil((new Date(`${d.nextDue}T00:00:00`).getTime() - Date.now()) / DAY_MS);
+    if (diff <= CHARGE_DUE_SOON_DAYS) urgency = 'due-soon';
   }
   const since = daysSince(d.lastChargedAt);
-  const recently = since != null && since < STALE_DAYS;
+  const recently = since != null && since < CHARGE_STALE_DAYS;
   const stale = (urgency === 'overdue' || urgency === 'due-soon') && !recently;
   return { urgency, stale, since };
 }
@@ -528,14 +623,19 @@ const URGENCY = {
   settled:    { bar: 'bg-positive',  pill: 'bg-emerald-50 text-positive', label: 'Quitado' },
 };
 
-function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPaid, onEditCharge, onRemoveCharge, onRemoveDebtor, selectedIds = EMPTY_SET, onToggleSelect, onToggleAll }) {
+function DebtorCard({
+  debtor, charges, onAddCharge, onCharge, onShowQr, onShare, onEditDebtor, onRemoveDebtor,
+  onTogglePaid, onEditCharge, onEditGroup, onRemoveCharge,
+  selecting, selectedIds = EMPTY_SET, onStartSelect, onSelectOnly, onToggleSelect, onEndSelect,
+}) {
   const [open, setOpen] = useState(false);
   const hasOverdue = debtor.overdueCount > 0;
-  const allSelected = charges.length > 0 && selectedIds.size === charges.length;
   const st = debtorStatus(debtor);
-  const u = URGENCY[st.urgency];
   const chargedToday = st.since === 0;        // já cobrado hoje
   const hasDebt = debtor.openCount > 0;
+  const wallet = useMemo(() => summarizeCharges(charges), [charges]);
+  const groups = useMemo(() => groupCharges(charges), [charges]);
+  const pendingIds = charges.filter((x) => !x.paid).map((x) => x.id);
 
   return (
     <div className={`card-flat overflow-hidden border-l-4 ${
@@ -586,37 +686,55 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
         <button onClick={onShowQr} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
           <QrCode className="w-3.5 h-3.5" /> PIX QR
         </button>
+        <button onClick={onShare} disabled={!charges.length} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors disabled:opacity-40" title="Enviar extrato ao devedor">
+          <Share2 className="w-3.5 h-3.5" /> Extrato
+        </button>
         <button onClick={onAddCharge} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
           <Plus className="w-3.5 h-3.5" /> Cobrança
         </button>
-        <button onClick={onRemoveDebtor} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg text-ink-400 hover:text-negative hover:bg-red-50 font-bold text-xs transition-colors ml-auto" title="Remover pessoa">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="ml-auto flex gap-0.5">
+          <button onClick={onEditDebtor} className="inline-flex items-center justify-center w-9 min-h-[36px] rounded-lg text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors" title="Editar pessoa">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onRemoveDebtor} className="inline-flex items-center justify-center w-9 min-h-[36px] rounded-lg text-ink-400 hover:text-negative hover:bg-red-50 transition-colors" title="Remover pessoa">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Lista de cobranças (expandida) */}
+      {/* Carteira + lista de cobranças (expandida) */}
       {open && (
         <div className="border-t border-ink-100 animate-slide-up">
           {charges.length === 0 ? (
             <p className="p-3 text-xs text-ink-400 text-center">Sem cobranças. Use “Cobrança” pra adicionar.</p>
           ) : (
             <>
-              {/* Selecionar todas */}
-              <button onClick={() => onToggleAll(charges.map((c) => c.id))} className="w-full px-3 py-2 flex items-center gap-2 text-[11px] font-semibold text-ink-500 hover:bg-ink-50 transition-colors">
-                <SelectBox checked={allSelected} />
-                {allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
-              </button>
+              <WalletSummary wallet={wallet} />
+
+              <SelectionToolbar
+                selecting={selecting}
+                total={charges.length}
+                pendingCount={pendingIds.length}
+                selectedCount={selectedIds.size}
+                onStart={onStartSelect}
+                onPending={() => onSelectOnly(pendingIds)}
+                onAll={() => onSelectOnly(charges.map((x) => x.id))}
+                onNone={() => onSelectOnly([])}
+                onDone={onEndSelect}
+              />
 
               {/* Cada cobrança é um bloco. Parcelamento vira um bloco agrupado. */}
-              <div className="p-3 space-y-2">
-                {groupCharges(charges).map((g) => (
+              <div className="px-3 pb-3 space-y-2">
+                {groups.map((g) => (
                   <ChargeBlock
                     key={g.groupId || g.items[0].id}
                     group={g}
+                    selecting={selecting}
                     selected={selectedIds}
                     onToggleSelect={onToggleSelect}
-                    onSetPaid={onSetPaid}
+                    onTogglePaid={onTogglePaid}
                     onEdit={onEditCharge}
+                    onEditGroup={onEditGroup}
                     onRemove={onRemoveCharge}
                   />
                 ))}
@@ -630,165 +748,236 @@ function DebtorCard({ debtor, charges, onAddCharge, onCharge, onShowQr, onSetPai
 }
 
 /**
- * Agrupa as cobranças em blocos: cada avulsa é um bloco; parcelas do mesmo
- * installment_group_id viram UM bloco agrupado.
+ * Carteira do devedor: total da dívida, pago, a pagar e progresso. Os mesmos
+ * números aparecem no extrato público que ele recebe (utils/charges).
  */
-function groupCharges(charges) {
-  const groups = [];
-  const byGroup = new Map();
-  for (const c of charges) {
-    if (c.installment_group_id) {
-      let g = byGroup.get(c.installment_group_id);
-      if (!g) {
-        g = { type: 'installment', groupId: c.installment_group_id, items: [] };
-        byGroup.set(c.installment_group_id, g);
-        groups.push(g);
-      }
-      g.items.push(c);
-    } else {
-      groups.push({ type: 'single', items: [c] });
-    }
+function WalletSummary({ wallet }) {
+  return (
+    <div className="p-3 space-y-2.5">
+      <div className="grid grid-cols-3 gap-2">
+        <WalletStat label="Total da dívida" value={wallet.total} />
+        <WalletStat label="Pago" value={wallet.paid} tone="text-positive" />
+        <WalletStat label="A pagar" value={wallet.open} tone={wallet.overdue > 0 ? 'text-negative' : 'text-ink-900'} />
+      </div>
+      <div>
+        <div className="h-1.5 rounded-full bg-ink-100 overflow-hidden">
+          <div className="h-full rounded-full bg-positive transition-all duration-500" style={{ width: `${wallet.progress}%` }} />
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-1.5 text-[11px] text-ink-500">
+          <span className="truncate">
+            <b className="text-ink-800">{wallet.paidCount}</b> de {wallet.count} pagas · faltam <b className="text-ink-800">{wallet.openCount}</b>
+            {wallet.overdueCount > 0 && <span className="text-negative font-semibold"> · {wallet.overdueCount} vencida(s)</span>}
+          </span>
+          <span className="font-bold text-ink-800 flex-shrink-0">{wallet.progress}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WalletStat({ label, value, tone = 'text-ink-900' }) {
+  return (
+    <div className="rounded-xl bg-ink-50 px-2.5 py-2 min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 leading-tight">{label}</p>
+      <p className={`font-display font-bold text-[13px] sm:text-sm truncate ${tone}`}>{formatCurrency(value)}</p>
+    </div>
+  );
+}
+
+/**
+ * Barra de seleção dentro do card. Fora do modo seleção é só um botão discreto;
+ * dentro dele, atalhos inteligentes: "Pendentes" (o caso comum: cobrar/gerar PIX
+ * do que falta), "Todas" e "Nenhuma".
+ */
+function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onStart, onPending, onAll, onNone, onDone }) {
+  if (!selecting) {
+    return (
+      <div className="px-3 pb-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{total} cobrança(s)</span>
+        <button onClick={onStart} className="inline-flex items-center gap-1 px-2.5 min-h-[36px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors">
+          <ListChecks className="w-3.5 h-3.5" /> Selecionar
+        </button>
+      </div>
+    );
   }
-  for (const g of groups) {
-    if (g.type === 'installment') g.items.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
-  }
-  // Pagas afundam: blocos totalmente quitados vão pro fim, abertos ficam no topo.
-  // Mantém a ordem relativa original dentro de cada grupo (sort estável). Assim,
-  // o usuário sempre vê em cima o que ainda falta receber e, ao desmarcar, a
-  // cobrança volta pra cima (relatório geral = desmarcar as pagas).
-  const isDone = (g) => g.items.every((c) => c.paid);
-  return groups
-    .map((g, i) => [g, i])
-    .sort((a, b) => (isDone(a[0]) - isDone(b[0])) || (a[1] - b[1]))
-    .map(([g]) => g);
+  const chip = 'px-2.5 min-h-[32px] rounded-full text-[11px] font-bold transition-colors whitespace-nowrap';
+  return (
+    <div className="px-3 pb-2 flex items-center gap-1.5 overflow-x-auto">
+      <span className="text-[11px] font-bold text-ink-900 mr-0.5 whitespace-nowrap">{selectedCount} selec.</span>
+      {pendingCount > 0 && (
+        <button onClick={onPending} className={`${chip} bg-accent/20 text-ink-900 hover:bg-accent/30`}>Pendentes ({pendingCount})</button>
+      )}
+      <button onClick={onAll} className={`${chip} bg-ink-100 text-ink-700 hover:bg-ink-200`}>Todas</button>
+      {selectedCount > 0 && (
+        <button onClick={onNone} className={`${chip} bg-ink-100 text-ink-700 hover:bg-ink-200`}>Nenhuma</button>
+      )}
+      <button onClick={onDone} className={`${chip} ml-auto text-ink-500 hover:text-ink-900 hover:bg-ink-100`}>Concluir</button>
+    </div>
+  );
 }
 
 /** Bloco de uma cobrança (avulsa) ou de um parcelamento (agrupado). */
-function ChargeBlock({ group, selected, onToggleSelect, onSetPaid, onEdit, onRemove }) {
+function ChargeBlock({ group, selecting, selected, onToggleSelect, onTogglePaid, onEdit, onEditGroup, onRemove }) {
+  const rowProps = { selecting, onTogglePaid, onEdit, onRemove };
+
   if (group.type === 'single') {
     const ch = group.items[0];
     return (
       <div className="rounded-xl border border-ink-200 overflow-hidden bg-white shadow-soft">
-        <ChargeRow
-          charge={ch}
-          selected={selected.has(ch.id)}
-          onToggleSelect={() => onToggleSelect(ch.id)}
-          onSetPaid={onSetPaid}
-          onEdit={onEdit}
-          onRemove={onRemove}
-        />
+        <ChargeRow charge={ch} selected={selected.has(ch.id)} onToggleSelect={() => onToggleSelect([ch.id])} {...rowProps} />
       </div>
     );
   }
 
-  // Parcelamento — bloco com cabeçalho + parcelas
+  // Parcelamento — bloco com cabeçalho (resumo + seleção/edição do grupo) + parcelas
   const items = group.items;
-  const base = items[0].description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
-  const total = items.reduce((s, c) => s + Number(c.amount), 0);
+  const ids = items.map((x) => x.id);
+  const w = summarizeCharges(items);
   const n = items[0].installment_total || items.length;
-  const paidCount = items.filter((c) => c.paid).length;
+  const selCount = ids.filter((id) => selected.has(id)).length;
 
   return (
     <div className="rounded-xl border border-ink-200 overflow-hidden bg-white shadow-soft">
-      <div className="px-3 py-2 bg-ink-50 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-ink-900 truncate">{base}</p>
-          <p className="text-[11px] text-ink-500">{n}x · {formatCurrency(total)} · {paidCount}/{n} pagas</p>
+      <div className="px-3 py-2 bg-ink-50 flex items-center gap-2.5">
+        {selecting && (
+          <button onClick={() => onToggleSelect(ids)} className="-m-2 p-2 flex-shrink-0" aria-label="Selecionar parcelamento">
+            <SelectBox checked={selCount === ids.length} partial={selCount > 0 && selCount < ids.length} />
+          </button>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-ink-900 truncate">{baseDescription(items[0].description)}</p>
+          <p className="text-[11px] text-ink-500">
+            {n}x · {formatCurrency(w.total)} · <b className="text-ink-700">{w.paidCount}/{n} pagas</b>
+            {w.openCount > 0 && <> · faltam {w.openCount} ({formatCurrency(w.open)})</>}
+          </p>
         </div>
         {items[0].credit_card
           ? <CardTag card={items[0].credit_card} className="flex-shrink-0" />
           : <CreditCard className="w-4 h-4 text-ink-400 flex-shrink-0" />}
+        {!selecting && (
+          <button onClick={() => onEditGroup(group)} className="w-8 h-8 -mr-1 rounded-lg text-ink-400 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Editar parcelamento">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="divide-y divide-ink-50">
-        {items.map((c) => (
-          <ChargeRow
-            key={c.id}
-            charge={c}
-            selected={selected.has(c.id)}
-            onToggleSelect={() => onToggleSelect(c.id)}
-            onSetPaid={onSetPaid}
-            onEdit={onEdit}
-            onRemove={onRemove}
-          />
+        {items.map((ch) => (
+          <ChargeRow key={ch.id} charge={ch} selected={selected.has(ch.id)} onToggleSelect={() => onToggleSelect([ch.id])} {...rowProps} />
         ))}
       </div>
     </div>
   );
 }
 
-/** Caixinha de seleção (visual). */
-function SelectBox({ checked }) {
+/** Caixinha de seleção (visual). `partial` = parte do grupo selecionada. */
+function SelectBox({ checked, partial = false }) {
+  const on = checked || partial;
+  const Icon = partial && !checked ? Minus : Check;
   return (
-    <span className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
-      checked ? 'bg-ink-900 text-white' : 'border-2 border-ink-300 text-transparent'
+    <span className={`w-[22px] h-[22px] rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
+      on ? 'bg-ink-900 text-white' : 'border-2 border-ink-300 text-transparent'
     }`}>
-      <Check className="w-3 h-3" strokeWidth={3} />
+      <Icon className="w-3.5 h-3.5" strokeWidth={3} />
     </span>
   );
 }
 
-function ChargeRow({ charge, selected, onToggleSelect, onSetPaid, onEdit, onRemove }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const overdue = !charge.paid && charge.due_date && charge.due_date < today;
+function ChargeRow({ charge, selecting, selected, onToggleSelect, onTogglePaid, onEdit, onRemove }) {
+  const overdue = isOverdue(charge);
   // Em parcelamento o nome base fica no cabeçalho do bloco; a linha mostra a parcela.
   const label = charge.installment_total > 1
     ? `Parcela ${charge.installment_number}/${charge.installment_total}`
     : charge.description;
-  return (
-    <div className={`p-3 flex items-center gap-2.5 ${selected ? 'bg-accent/5' : ''}`}>
-      {/* Checkbox de seleção */}
-      <button onClick={onToggleSelect} className="flex-shrink-0" title="Selecionar" aria-label="Selecionar cobrança">
-        <SelectBox checked={selected} />
-      </button>
-      {/* Toggle pago */}
-      <button
-        onClick={() => onSetPaid(charge.id, !charge.paid)}
-        className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-          charge.paid ? 'bg-positive text-white' : 'border-2 border-ink-300 text-transparent hover:border-positive'
-        }`}
-        title={charge.paid ? 'Marcar como pendente' : 'Marcar como pago'}
-      >
-        <Check className="w-3.5 h-3.5" strokeWidth={3} />
-      </button>
-      <div className="min-w-0 flex-1">
-        <p className={`text-sm font-medium truncate ${charge.paid ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
-          {label}
-        </p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {charge.due_date && (
-            <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
-              {overdue ? 'Venceu ' : 'Vence '}{formatDate(charge.due_date, 'long')}
-            </p>
-          )}
-          {/* Tarja do cartão (só em avulsas; no parcelamento ela fica no cabeçalho) */}
-          {charge.installment_total <= 1 && charge.credit_card && (
-            <CardTag card={charge.credit_card} />
-          )}
-          {/* Sinaliza que esta cobrança já foi cobrada (evita cobrar 2-3x) */}
-          {!charge.paid && charge.last_charged_at && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(charge.last_charged_at)}`}>
-              <Clock className="w-2.5 h-2.5" /> {reminderLabel(charge.last_charged_at)}
-            </span>
-          )}
-        </div>
+
+  const info = (
+    <div className="min-w-0 flex-1">
+      <p className={`text-sm font-medium truncate ${charge.paid ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
+        {label}
+      </p>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {charge.paid ? (
+          <p className="inline-flex items-center gap-1 text-xs text-positive font-semibold">
+            <Lock className="w-3 h-3" /> Pago{charge.paid_at ? ` em ${formatDate(charge.paid_at, 'long')}` : ''}
+          </p>
+        ) : charge.due_date && (
+          <p className={`text-xs ${overdue ? 'text-negative font-semibold' : 'text-ink-400'}`}>
+            {overdue ? 'Venceu ' : 'Vence '}{formatDate(charge.due_date, 'long')}
+          </p>
+        )}
+        {/* Tarja do cartão (só em avulsas; no parcelamento ela fica no cabeçalho) */}
+        {!(charge.installment_total > 1) && charge.credit_card && (
+          <CardTag card={charge.credit_card} />
+        )}
+        {/* Sinaliza que esta cobrança já foi cobrada (evita cobrar 2-3x) */}
+        {!charge.paid && charge.last_charged_at && (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(charge.last_charged_at)}`}>
+            <Clock className="w-2.5 h-2.5" /> {reminderLabel(charge.last_charged_at)}
+          </span>
+        )}
       </div>
-      <span className={`font-mono font-bold text-sm ${charge.paid ? 'text-ink-400' : 'text-ink-900'}`}>
-        {formatCurrency(charge.amount)}
-      </span>
+    </div>
+  );
+  const amount = (
+    <span className={`font-mono font-bold text-sm flex-shrink-0 ${charge.paid ? 'text-ink-400' : 'text-ink-900'}`}>
+      {formatCurrency(charge.amount)}
+    </span>
+  );
+
+  // Modo seleção: a linha inteira é o alvo do toque (só a caixinha à esquerda).
+  if (selecting) {
+    return (
+      <button
+        type="button"
+        onClick={onToggleSelect}
+        className={`w-full p-3 flex items-center gap-2.5 text-left transition-colors ${selected ? 'bg-accent/10' : 'hover:bg-ink-50'}`}
+        aria-pressed={selected}
+      >
+        <SelectBox checked={selected} />
+        {info}
+        {amount}
+      </button>
+    );
+  }
+
+  return (
+    <div className="p-3 flex items-center gap-2.5">
+      {/* Pago/pendente. Já pago = travado (o clique pede confirmação). */}
+      <button
+        onClick={() => onTogglePaid(charge)}
+        className="-m-2 p-2 flex-shrink-0"
+        title={charge.paid ? 'Pago (travado) — toque pra desfazer' : 'Marcar como pago'}
+        aria-label={charge.paid ? 'Desfazer pagamento' : 'Marcar como pago'}
+      >
+        <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+          charge.paid ? 'bg-positive text-white' : 'border-2 border-ink-300 text-transparent hover:border-positive'
+        }`}>
+          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+        </span>
+      </button>
+      {info}
+      {amount}
       <button onClick={() => onEdit(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Editar">
         <Pencil className="w-3.5 h-3.5" />
       </button>
-      <button onClick={() => onRemove(charge.id)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center flex-shrink-0" title="Remover">
+      <button onClick={() => onRemove(charge)} className="w-7 h-7 rounded-lg text-ink-300 hover:text-negative hover:bg-red-50 flex items-center justify-center flex-shrink-0" title="Remover">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
   );
 }
 
+// ── Opções de banco (logo) p/ o seletor da chave PIX ──────────
+const BANK_OPTIONS = [
+  ...BANKS.map((b) => ({ value: b.id, label: b.name, icon: <BankLogo bankId={b.id} size={22} /> })),
+  { value: 'other', label: 'Outro (digitar nome)', icon: <KeyRound className="w-[22px] h-[22px] p-0.5 text-ink-400 flex-shrink-0" /> },
+];
+
 // ── Modal: chaves PIX (múltiplas) ──────────────────────────────
+const EMPTY_PIX_FORM = { bankId: '', label: '', keyType: 'cpf', key: '', name: '', city: '' };
+
 function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ label: '', keyType: 'cpf', key: '', name: '', city: '' });
+  const [form, setForm] = useState(EMPTY_PIX_FORM);
   const [saving, setSaving] = useState(false);
 
   // Abre o form automaticamente se não há nenhuma chave
@@ -796,13 +985,20 @@ function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) 
     if (isOpen) setAdding(keys.length === 0);
   }, [isOpen, keys.length]);
 
+  // Escolher um banco preenche o apelido com o nome dele; "Outro" deixa digitar.
+  function pickBank(bankId) {
+    const bank = BANKS.find((b) => b.id === bankId);
+    setForm((f) => ({ ...f, bankId, label: bank ? bank.name : '' }));
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
     if (!form.key.trim() || !form.name.trim() || !form.city.trim()) return;
     setSaving(true);
     try {
-      await onAdd({ ...form });
-      setForm({ label: '', keyType: 'cpf', key: '', name: '', city: '' });
+      const { bankId, ...payload } = form;
+      await onAdd(payload);
+      setForm(EMPTY_PIX_FORM);
       setAdding(keys.length === 0); // mantém aberto só se ainda for a única
     } finally {
       setSaving(false);
@@ -816,7 +1012,12 @@ function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) 
         {keys.length > 0 && (
           <div className="space-y-2">
             {keys.map((k) => (
-              <div key={k.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-ink-50">
+              <div key={k.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-ink-50">
+                <BankLogo
+                  name={k.label}
+                  size={32}
+                  fallback={<span className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0"><KeyRound className="w-4 h-4 text-ink-400" /></span>}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="font-bold text-sm text-ink-900 truncate">{k.label || k.name}</p>
@@ -840,22 +1041,14 @@ function PixKeysModal({ isOpen, onClose, keys, onAdd, onRemove, onSetDefault }) 
         {/* Form de nova chave */}
         {adding ? (
           <form onSubmit={handleAdd} className="space-y-3 pt-1 border-t border-ink-100">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
+            <Select label="Banco" value={form.bankId} onChange={pickBank} options={BANK_OPTIONS} placeholder="Escolha o banco" />
+            {form.bankId === 'other' && (
+              <div className="animate-slide-up">
                 <label className="label">Apelido</label>
-                <input className="input-field" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="Ex: Nubank" />
+                <input className="input-field" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="Ex: Conta PJ" autoFocus />
               </div>
-              <div>
-                <label className="label">Tipo</label>
-                <select className="input-field" value={form.keyType} onChange={(e) => setForm((f) => ({ ...f, keyType: e.target.value }))}>
-                  <option value="cpf">CPF</option>
-                  <option value="cnpj">CNPJ</option>
-                  <option value="email">E-mail</option>
-                  <option value="phone">Telefone</option>
-                  <option value="random">Aleatória</option>
-                </select>
-              </div>
-            </div>
+            )}
+            <Select label="Tipo" value={form.keyType} onChange={(keyType) => setForm((f) => ({ ...f, keyType }))} options={PIX_KEY_TYPES} />
             <div>
               <label className="label">Chave PIX</label>
               <input className="input-field" value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="sua chave" required />
@@ -924,6 +1117,46 @@ function DebtorModal({ isOpen, onClose, onSave }) {
         </div>
         <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />} Adicionar
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Modal: editar pessoa ───────────────────────────────────────
+function EditDebtorModal({ debtor, onClose, onSave }) {
+  const [form, setForm] = useState({ name: '', phone: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (debtor) setForm({ name: debtor.name || '', phone: debtor.phone || '' });
+  }, [debtor]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(debtor.debtorId, { name: form.name.trim(), phone: form.phone.trim() || null });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={!!debtor} onClose={onClose} title="Editar pessoa">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="label">Nome</label>
+          <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required autoFocus />
+        </div>
+        <div>
+          <label className="label">WhatsApp (com DDD)</label>
+          <input className="input-field" type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="(11) 91234-5678" />
+        </div>
+        <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} Salvar
         </button>
       </form>
     </Modal>
@@ -1007,7 +1240,7 @@ function ChargeModal({ debtor, cards, onClose, onSave, onSaveInstallments }) {
           <div className="space-y-2 animate-slide-up">
             <div>
               <label className="label">Número de parcelas</label>
-              <Stepper value={count} min={2} max={48} onChange={setCount} suffix="x" />
+              <Stepper value={count} min={2} max={MAX_INSTALLMENTS} onChange={setCount} suffix="x" />
             </div>
             {perParcel > 0 && (
               <p className="text-xs text-ink-500">
@@ -1072,13 +1305,18 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
   return (
     <Modal isOpen={!!charge} onClose={onClose} title="Editar cobrança">
       <form onSubmit={handleSubmit} className="space-y-3">
+        {charge?.paid && (
+          <p className="flex items-center gap-2 text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" /> Esta cobrança já foi paga — o valor está travado.
+          </p>
+        )}
         <div>
           <label className="label">Descrição</label>
           <input className="input-field" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required autoFocus />
         </div>
         <div>
           <label className="label">Valor</label>
-          <input className="input-field" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required />
+          <input className="input-field disabled:opacity-60" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} disabled={charge?.paid} required />
         </div>
         <div>
           <label className="label">Vencimento (opcional)</label>
@@ -1087,13 +1325,170 @@ function EditChargeModal({ charge, cards, onClose, onSave }) {
         <CardSelect cards={cards} value={cardId} onChange={setCardId} />
         {charge?.installment_total > 1 && (
           <p className="text-[11px] text-ink-400">
-            Parcela {charge.installment_number}/{charge.installment_total} — editar afeta só esta parcela.
+            Parcela {charge.installment_number}/{charge.installment_total} — editar afeta só esta parcela. Pra mudar todas, use o lápis do cabeçalho do parcelamento.
           </p>
         )}
         <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} Salvar
         </button>
       </form>
+    </Modal>
+  );
+}
+
+// ── Modal: editar parcelamento inteiro ─────────────────────────
+function EditGroupModal({ group, cards, onClose, onSave }) {
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [cardId, setCardId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const items = group?.items || [];
+  const pending = items.filter((x) => !x.paid);
+  const paidCount = items.length - pending.length;
+
+  useEffect(() => {
+    if (!group) return;
+    setDescription(baseDescription(group.items[0].description));
+    const firstPending = group.items.find((x) => !x.paid);
+    setAmount(firstPending ? String(firstPending.amount) : '');
+    setCardId(group.items[0].credit_card_id || '');
+  }, [group]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!description.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(group.groupId, items, {
+        description: description.trim(),
+        cardId,
+        pendingAmount: pending.length ? parseAmount(amount) : 0,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={!!group} onClose={onClose} title="Editar parcelamento">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="label">Descrição</label>
+          <input className="input-field" value={description} onChange={(e) => setDescription(e.target.value)} required autoFocus />
+        </div>
+        {pending.length > 0 && (
+          <div>
+            <label className="label">Valor de cada parcela pendente</label>
+            <input className="input-field" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          </div>
+        )}
+        <CardSelect cards={cards} value={cardId} onChange={setCardId} />
+        <p className="flex items-start gap-2 text-[11px] text-ink-500">
+          <Lock className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+          <span>
+            Vale pras {items.length} parcelas.
+            {paidCount > 0 && ` As ${paidCount} já pagas mantêm o valor original (travadas).`}
+            {' '}Vencimentos se ajustam por parcela, no lápis de cada uma.
+          </span>
+        </p>
+        <button type="submit" disabled={saving} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} Salvar parcelamento
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Modal: enviar extrato (link público ao vivo) ───────────────
+function ShareStatementModal({ debtor, charges, getLink, onClose }) {
+  const [link, setLink] = useState('');
+  const [state, setState] = useState('idle'); // idle | loading | error
+  const [copied, setCopied] = useState(false);
+  const wallet = useMemo(() => summarizeCharges(charges), [charges]);
+
+  const load = useCallback(async (rotate = false) => {
+    if (!debtor) return;
+    setState('loading');
+    try {
+      setLink(await getLink(debtor.debtorId, { rotate }));
+      setState('idle');
+    } catch (err) {
+      console.error(err);
+      setState('error');
+    }
+  }, [debtor, getLink]);
+
+  useEffect(() => {
+    if (!debtor) return;
+    setLink(''); setCopied(false);
+    load();
+  }, [debtor, load]);
+
+  const message = debtor
+    ? `Oi, ${debtor.name}! Segue seu extrato atualizado: ${formatCurrency(wallet.open)} a pagar`
+      + ` (${wallet.paidCount} de ${wallet.count} já pagas). Lá dá pra ver tudo e pagar via PIX: ${link}`
+    : '';
+
+  async function copy() {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
+  }
+
+  async function share() {
+    try { await navigator.share({ title: 'Extrato de cobrança', text: message }); } catch { /* cancelado */ }
+  }
+
+  return (
+    <Modal isOpen={!!debtor} onClose={onClose} title="Enviar extrato">
+      <div className="space-y-4">
+        <p className="text-sm text-ink-600">
+          {debtor?.name} recebe um link que mostra <b className="text-ink-900">sempre atualizado</b> o total da dívida,
+          o que já pagou, o que falta e as parcelas — com PIX pra pagar.
+        </p>
+
+        <div className="grid grid-cols-3 gap-2">
+          <WalletStat label="Total da dívida" value={wallet.total} />
+          <WalletStat label="Pago" value={wallet.paid} tone="text-positive" />
+          <WalletStat label="A pagar" value={wallet.open} />
+        </div>
+
+        {state === 'error' ? (
+          <p className="text-sm text-negative font-medium">
+            Não foi possível gerar o link. Confira se a migration <code>migration_cobrancas_extrato.sql</code> foi aplicada no Supabase.
+          </p>
+        ) : !link ? (
+          <div className="h-12 rounded-xl bg-ink-50 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-ink-400" />
+          </div>
+        ) : (
+          <div className="space-y-2 animate-slide-up">
+            <div className="flex items-center gap-2 bg-ink-50 rounded-xl p-2">
+              <span className="text-xs text-ink-600 truncate flex-1 ml-1">{link}</span>
+              <a href={link} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-lg bg-white text-ink-700 hover:bg-ink-100 flex items-center justify-center flex-shrink-0" title="Abrir extrato">
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <button onClick={copy} className="px-2.5 py-1.5 rounded-lg bg-white text-ink-700 font-bold text-xs hover:bg-ink-100 flex items-center gap-1 flex-shrink-0">
+                {copied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1 min-h-[48px] flex items-center justify-center gap-2">
+                <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp
+              </a>
+              {typeof navigator !== 'undefined' && navigator.share && (
+                <button onClick={share} className="btn-ghost min-h-[48px] w-12 px-0 flex items-center justify-center" title="Compartilhar">
+                  <Share2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button onClick={() => load(true)} disabled={state === 'loading'} className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold text-ink-400 hover:text-ink-700 py-1.5 disabled:opacity-50">
+              <RefreshCw className={`w-3 h-3 ${state === 'loading' ? 'animate-spin' : ''}`} /> Gerar novo link (o anterior para de funcionar)
+            </button>
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -1166,7 +1561,9 @@ function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure, onSent }) 
           <div>
             <p className="text-xs text-ink-500">{target?.name} — valor</p>
             <p className="font-display font-bold text-2xl text-ink-900">{formatCurrency(amount)}</p>
-            <p className="text-[11px] text-ink-400 mt-0.5">Recebendo em: {pixKey?.label || pixKey?.name}</p>
+            <p className="text-[11px] text-ink-400 mt-0.5 inline-flex items-center gap-1.5">
+              Recebendo em: <BankLogo name={pixKey?.label} size={14} /> {pixKey?.label || pixKey?.name}
+            </p>
           </div>
           {dataUrl ? (
             <img src={dataUrl} alt="QR Code PIX" className="w-56 h-56 mx-auto rounded-2xl border border-ink-100" />

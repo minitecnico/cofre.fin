@@ -16,8 +16,8 @@
   "dependencies": {
     "@capacitor/android": "^7.6.8",
     "@capacitor/core": "^7.6.8",
+    "@edusites/bancos-brasil": "^1.2.0",
     "@supabase/supabase-js": "^2.45.0",
-    "date-fns": "^3.6.0",
     "dinero.js": "^2.0.2",
     "financial": "^0.2.4",
     "jspdf": "^4.2.1",

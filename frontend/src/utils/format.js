@@ -59,6 +59,16 @@ export function formatDate(date, pattern = 'short') {
   return d.toLocaleDateString('pt-BR');
 }
 
+/**
+ * Data de hoje em 'YYYY-MM-DD' no fuso LOCAL.
+ * `new Date().toISOString().slice(0, 10)` usa UTC: no Brasil, depois das 21h já
+ * devolve o dia seguinte (e uma cobrança que vence hoje aparece "vencida").
+ */
+export function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function formatPercent(value) {
   return `${Math.round(value)}%`;
 }

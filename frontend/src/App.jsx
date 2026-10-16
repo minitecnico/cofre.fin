@@ -21,6 +21,8 @@ import PixPay from './pages/PixPay';
 // Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
 const Reports = lazy(() => import('./pages/Reports'));
 const Cobrancas = lazy(() => import('./pages/Cobrancas'));
+// Lazy: página pública do devedor (puxa o gerador de QR) — fora do bundle do app.
+const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
 
 export default function App() {
   return (
@@ -32,6 +34,14 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/r/:code" element={<RedirectLink />} />
             <Route path="/pix/:code" element={<PixPay />} />
+            <Route
+              path="/extrato/:code"
+              element={
+                <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                  <DebtorStatement />
+                </Suspense>
+              }
+            />
 
             <Route
               element={

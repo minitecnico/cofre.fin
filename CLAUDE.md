@@ -27,7 +27,6 @@ Estas quatro regras valem para qualquer alteração de código. Versão completa
 | Estilo | Tailwind CSS | ^3.4 |
 | Ícones | lucide-react | ^0.383 |
 | Gráficos | Recharts | ^2.12 |
-| Datas | date-fns | ^3.6 |
 | Planilhas | xlsx (SheetJS) | ^0.18 |
 | Backend | @supabase/supabase-js | ^2.45 |
 | Deploy | Vercel | — |
@@ -74,7 +73,6 @@ frontend/
     │   │                       # recurringService, dashboardService
     │   ├── goals.js            # weeklyChallengeService, goalService, noteService
     │   ├── alerts.js           # service puro: gera lista de alertas
-    │   ├── backup.js           # export/import JSON completo do usuário
     │   └── importExport.js     # CSV/XLSX
     ├── components/
     │   ├── Layout.jsx              # Sidebar + Header + Outlet + BottomNav + FAB
@@ -107,9 +105,13 @@ frontend/
     │   ├── Goals.jsx               # desafio 52 semanas + metas + notas
     │   ├── ImportExport.jsx
     │   └── Settings.jsx
+    ├── constants/
+    │   ├── index.js                # constantes do app (prazos, PIX, cartões, PUBLIC_APP_URL)
+    │   └── banks.js                # catálogo de bancos BR + findBank() (logos)
     ├── utils/
-    │   └── format.js               # formatCurrency, formatDate, parseAmount,
-    │                               # generateInstallmentDates, splitInstallmentAmount
+    │   ├── format.js               # formatCurrency, formatDate, parseAmount, todayISO,
+    │   │                           # generateInstallmentDates, splitInstallmentAmount
+    │   └── charges.js              # carteira de cobranças (credor e extrato público)
     └── styles/
         └── index.css               # @tailwind + @layer components (card-flat, btn-*, etc)
 

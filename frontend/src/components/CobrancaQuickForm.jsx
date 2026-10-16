@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Minus, Loader2, CreditCard, UserPlus, HandCoins } from 'lucide-react';
+import { Plus, Loader2, CreditCard, UserPlus, HandCoins } from 'lucide-react';
 import { debtorService, chargeService } from '../services/cobrancas';
 import { cardService } from '../services/index';
 import { formatCurrency, parseAmount } from '../utils/format';
 import Stepper from './Stepper';
+import Select from './Select';
 import { CardSelect } from './CardTag';
+import { MAX_INSTALLMENTS } from '../constants';
 
 /**
  * Form rápido de Cobrança — usado pelo botão "+" (FAB), lado a lado com a
@@ -90,13 +92,16 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       {/* Devedor */}
-      <div>
-        <label className="label flex items-center gap-1.5"><HandCoins className="w-3.5 h-3.5" /> Quem te deve</label>
-        <select className="input-field" value={debtorId} onChange={(e) => setDebtorId(e.target.value)}>
-          {debtors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          <option value="new">+ Nova pessoa…</option>
-        </select>
-      </div>
+      <Select
+        label="Quem te deve"
+        icon={HandCoins}
+        value={debtorId}
+        onChange={setDebtorId}
+        options={[
+          ...debtors.map((d) => ({ value: d.id, label: d.name, hint: d.phone || undefined, icon: <Initial name={d.name} /> })),
+          { value: 'new', label: 'Nova pessoa…', icon: <UserPlus className="w-6 h-6 p-1 rounded-full bg-accent/20 text-ink-900 flex-shrink-0" /> },
+        ]}
+      />
 
       {debtorId === 'new' && (
         <div className="grid grid-cols-2 gap-2 animate-slide-up">
@@ -141,7 +146,7 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         <div className="space-y-2 animate-slide-up">
           <div>
             <label className="label">Número de parcelas</label>
-            <Stepper value={count} min={2} max={48} onChange={setCount} suffix="x" />
+            <Stepper value={count} min={2} max={MAX_INSTALLMENTS} onChange={setCount} suffix="x" />
           </div>
           {perParcel > 0 && (
             <p className="text-xs text-ink-500">{count}x de aprox. <span className="font-bold text-ink-800">{formatCurrency(perParcel)}</span> — uma por mês.</p>
@@ -166,5 +171,14 @@ export default function CobrancaQuickForm({ onSaved, onCancel }) {
         </button>
       </div>
     </form>
+  );
+}
+
+/** Avatar com a inicial do nome (opções do seletor de pessoa). */
+function Initial({ name }) {
+  return (
+    <span className="w-6 h-6 rounded-full bg-ink-100 text-ink-700 text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+      {String(name || '?').trim().charAt(0).toUpperCase()}
+    </span>
   );
 }

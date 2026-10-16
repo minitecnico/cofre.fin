@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import { transactionService, dashboardService, currentUserId } from './index';
 import { formatCurrency, formatDate } from '../utils/format';
 import { randomLinkCode } from '../utils/randomCode';
+import { PUBLIC_APP_URL } from '../constants';
 
 /**
  * Service de Relatórios.
@@ -428,7 +429,7 @@ export async function uploadReportAndGetLink({ blob, month }, expiresInSec = 60 
     const { error: linkErr } = await supabase
       .from('report_links')
       .insert({ code, user_id: userId, url: data.signedUrl });
-    if (!linkErr) shortUrl = `${window.location.origin}/r/${code}`;
+    if (!linkErr) shortUrl = `${PUBLIC_APP_URL}/r/${code}`;
   } catch { /* se falhar, usa a URL longa mesmo */ }
 
   return {

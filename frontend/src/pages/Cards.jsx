@@ -1,20 +1,18 @@
 import { useEffect, useState } from 'react';
-import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, Sparkles, ChevronLeft, ChevronRight, Landmark } from 'lucide-react';
 import { cardService } from '../services';
 import { formatCurrency, formatPercent, formatDate } from '../utils/format';
 import Modal from '../components/Modal';
+import Select from '../components/Select';
+import BankLogo from '../components/BankLogo';
 import { useDisclosure } from '../hooks/useDisclosure';
+import { CARD_BRANDS, CARD_PRESET_COLORS } from '../constants';
+import { BANKS, findBank } from '../constants/banks';
 
-const BRAND_OPTIONS = [
-  { value: 'visa', label: 'Visa' },
-  { value: 'mastercard', label: 'Mastercard' },
-  { value: 'elo', label: 'Elo' },
-  { value: 'amex', label: 'American Express' },
-  { value: 'hipercard', label: 'Hipercard' },
-  { value: 'other', label: 'Outro' },
+const BANK_OPTIONS = [
+  { value: '', label: 'Outro / não listado', icon: <Landmark className="w-[22px] h-[22px] p-0.5 text-ink-300 flex-shrink-0" /> },
+  ...BANKS.map((b) => ({ value: b.id, label: b.name, icon: <BankLogo bankId={b.id} size={22} /> })),
 ];
-
-const PRESET_COLORS = ['#820ad1', '#ff7a00', '#1e293b', '#dc2626', '#16a34a', '#0ea5e9', '#f59e0b'];
 
 function CardForm({ initial, onSaved, onCancel }) {
   const isEdit = !!initial;
@@ -25,8 +23,23 @@ function CardForm({ initial, onSaved, onCancel }) {
     limit: initial?.card_limit || '',
     closingDay: initial?.closing_day || 25,
     dueDay: initial?.due_day || 5,
-    color: initial?.color || PRESET_COLORS[0],
+    color: initial?.color || CARD_PRESET_COLORS[0],
   });
+  const [bankId, setBankId] = useState(() => findBank(initial?.name)?.id || '');
+
+  // Escolher o banco já preenche o nome (se vazio ou ainda for o nome de outro
+  // banco) e a cor da marca — o usuário só ajusta se quiser.
+  function pickBank(id) {
+    const bank = BANKS.find((b) => b.id === id);
+    setBankId(id);
+    if (!bank) return;
+    setForm((f) => ({
+      ...f,
+      name: !f.name.trim() || findBank(f.name) ? bank.name : f.name,
+      color: bank.color,
+    }));
+  }
+  const colors = CARD_PRESET_COLORS.includes(form.color) ? CARD_PRESET_COLORS : [...CARD_PRESET_COLORS, form.color];
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -53,6 +66,8 @@ function CardForm({ initial, onSaved, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <Select label="Banco emissor" icon={Landmark} value={bankId} onChange={pickBank} options={BANK_OPTIONS} placeholder="Escolha o banco" />
+
       <div>
         <label className="label">Nome do cartão</label>
         <input
@@ -67,18 +82,7 @@ function CardForm({ initial, onSaved, onCancel }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="label">Bandeira</label>
-          <select
-            value={form.brand}
-            onChange={(e) => setForm({ ...form, brand: e.target.value })}
-            className="input-field"
-          >
-            {BRAND_OPTIONS.map((b) => (
-              <option key={b.value} value={b.value}>{b.label}</option>
-            ))}
-          </select>
-        </div>
+        <Select label="Bandeira" value={form.brand} onChange={(brand) => setForm({ ...form, brand })} options={CARD_BRANDS} />
         <div>
           <label className="label">Últimos 4 dígitos</label>
           <input
@@ -142,7 +146,7 @@ function CardForm({ initial, onSaved, onCancel }) {
       <div>
         <label className="label">Cor</label>
         <div className="flex gap-2 flex-wrap">
-          {PRESET_COLORS.map((c) => (
+          {colors.map((c) => (
             <button
               key={c}
               type="button"
@@ -217,9 +221,12 @@ function CardItem({ summary, onEdit, onDelete, onOpen }) {
         {/* Header: bandeira + nome + número | ações discretas */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">
-              {card.brand}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <BankLogo name={card.name} size={16} />
+              <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">
+                {card.brand}
+              </p>
+            </div>
             <h3 className="font-display text-lg md:text-xl font-bold mt-0.5 truncate tracking-tight">
               {card.name}
             </h3>

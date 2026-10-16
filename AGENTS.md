@@ -18,6 +18,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/reset-password` | `ResetPassword.jsx` | recuperação de senha | pública |
 | `/r/:code` | `RedirectLink.jsx` | encurtador: resolve código → redireciona pro PDF | pública |
 | `/pix/:code` | `PixPay.jsx` | página de pagamento PIX (QR + copia-e-cola + valor) | pública |
+| `/extrato/:code` | `DebtorStatement.jsx` (lazy) | extrato do DEVEDOR, ao vivo: total, pago, a pagar, parcelas, PIX do saldo | pública |
 | `/` | `Dashboard.jsx` | KPIs do mês, gráficos, comparação, alertas | Sidebar + BottomNav |
 | `/incomes` | `TransactionListPage.jsx` (type=income) | lista/CRUD receitas | Sidebar + BottomNav |
 | `/expenses` | `TransactionListPage.jsx` (type=expense) | lista/CRUD despesas, swipe-to-delete | Sidebar + BottomNav |
@@ -25,14 +26,13 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/cards` | `Cards.jsx` | cartões, faturas, ciclos, limite inteligente | Sidebar + BottomNav |
 | `/cobrancas` | `Cobrancas.jsx` (lazy) | quem te deve, PIX/QR, WhatsApp, PDF, **parcelamento** | Sidebar + "Mais" |
 | `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | Sidebar + "Mais" |
-| `/empregos` | `Empregos.jsx` | buscador de vagas (multi-fonte), filtros, favoritos | Sidebar + "Mais" |
 | `/reports` | `Reports.jsx` (lazy) | relatório mensal PDF, link Storage, envio WhatsApp | Sidebar + "Mais" |
 | `/categories` | `Categories.jsx` | CRUD categorias | Sidebar + "Mais" |
 | `/ai` | `AiAssistant.jsx` | assistente IA (chat, análise de documentos, lançamentos por voz) | Sidebar + BottomNav |
 | `/import-export` | `ImportExport.jsx` | CSV/XLSX import/export, backup JSON | via Settings |
 | `/settings` | `Settings.jsx` | conta, senha, preferências | Sidebar + "Mais" |
 
-**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cartões, IA) + botão **"Mais"** (folha com Cobranças, Recorrências, Objetivos, Vagas, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
+**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cartões, IA) + botão **"Mais"** (folha com Cobranças, Recorrências, Objetivos, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
 
 ---
 
@@ -47,19 +47,24 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 - **Relatórios:** `services/reports.js` → PDF (jsPDF+autotable) com KPIs/categorias/lançamentos. 3 formas de enviar: baixar, **Web Share** (anexo, mobile), **link curto** pra WhatsApp. Link: PDF no Storage `reports` (signed URL ~90d) + código curto em `report_links` → compartilha `<dominio>/r/<code>` (rota pública resolve via RPC `resolve_report_link` e redireciona).
 - **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago; **editar** via `EditChargeModal`; **cartão opcional** via `charges.credit_card_id` → tarja colorida `CardTag` + `CardSelect` em `components/CardTag.jsx`, cartões via `cardService.listSimple`). **Múltiplas chaves PIX** (`pixKeyService` → tabela `pix_keys`, com padrão). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Link de pagamento** (`pixLinkService.createPaymentLink`): gera QR PNG → bucket público `pix-qr` → `pix_links` → compartilha `<dominio>/pix/<code>` (página `PixPay` pública resolve via RPC `resolve_pix_link`). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg + link). Relatório PDF com links clicáveis (`cobrancasReport.js`).
 - **Assistente IA:** `services/ai.js` chama `/api/ai-chat` (serverless, auth via token Supabase). Análise de documentos (`aiDocuments.js`: mammoth p/ DOCX, pdfjs p/ PDF). Lançamentos por voz/chat.
-- **Buscador de Vagas:** `services/jobs.js` (`jobService.search` chama `/api/jobs`; `savedJobService` p/ favoritos). Engine no **serverless** `frontend/api/jobs.js` (mesmo molde do ai-chat: auth Supabase + proxy — resolve CORS e esconde chaves). Providers **plugáveis** num array (`{ name, search }`), rodam **em paralelo** com timeout 8s e dedup por `title|company|location`; falha de 1 não derruba a busca. Fontes grátis sem chave: **GitHub Vagas BR** (issues dos repos `frontendbr/vagas`, `backend-br/vagas`, etc. — vagas brasileiras em PT; `GITHUB_TOKEN` opcional sobe rate limit 60→5000/h), **Remotive**, **Arbeitnow**. Provider **Adzuna BR** já implementado mas **inerte** até existir `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` (tier grátis) — `enabled()` pula o provider sem chave. Cobre vagas BR não-tech. **Jobicy**, **Himalayas** e **The Muse** (remoto/global, grátis, sem chave — `THEMUSE_API_KEY` opcional só sobe rate limit) sempre ativos. **Jooble** (agregador BR de vários boards, inclui estilo TrabalhaBrasil/Catho) implementado mas inerte até `JOOBLE_API_KEY` (grátis). Sites BR sem API (TrabalhaBrasil/Catho/Vagas.com/Gupy) **não** dá pra integrar direto — só via agregadores (Jooble/Adzuna). JSearch fica plugável p/ depois. Cache "5 min" via `useJobSearch` (sessionStorage TTL, no lugar de React Query); buscas recentes também no sessionStorage. Favoritos em `saved_jobs`. ⚠️ Rodar `migration_jobs.sql`.
-- **Import/Export:** `services/importExport.js` (CSV/XLSX), `services/backup.js` (JSON completo).
+- **Import/Export:** `services/importExport.js` (CSV/XLSX).
 - **PWA:** `manifest.json`, install prompt (`useInstallPrompt`). Sem service worker de cache.
 
 ---
 
 ## Mapa de código
 
-**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, settingsService), `cobrancasReport.js`, `pix.js`, `ai.js`, `aiDocuments.js`, `jobs.js` (jobService, savedJobService), `importExport.js`, `backup.js`, `supabase.js` (singleton).
+**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, settingsService), `cobrancasReport.js`, `pix.js`, `ai.js`, `aiDocuments.js`, `importExport.js`, `supabase.js` (singleton).
 
-**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router), `jobs.js` (engine de busca de vagas, providers plugáveis). Ambos autenticam via token Supabase.
+**Constantes** (`frontend/src/constants/`): `index.js` (prazos de cobrança, `PUBLIC_APP_URL` dos links públicos, tipos de chave PIX, bandeiras/cores de cartão, limites) e `banks.js` (catálogo de 41 bancos BR + `findBank(texto)`). Número mágico novo vai pra cá.
 
-**Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`, `useJobSearch` (cache TTL), `useSavedJobs`.
+**Utils de domínio:** `utils/charges.js` (`groupCharges`, `summarizeCharges`, `isOverdue`) — usado pela tela do credor E pelo extrato público (números sempre batem).
+
+**Componentes base:** `Select.jsx` (seletor com ícone/logo, busca automática >7 opções, abre em linha — use no lugar de `<select>`), `ConfirmDialog.jsx` (trava p/ ações destrutivas), `BankLogo.jsx` (logo por `bankId` ou texto livre; lib `@edusites/bancos-brasil` carregada lazy — importada via alias do Vite p/ `src/core.js`, pois o `index.js` dela puxa `vue`).
+
+**Serverless** (`frontend/api/`): `ai-chat.js` (proxy IA 9Router). Autentica via token Supabase.
+
+**Hooks** (`frontend/src/hooks/`): `useDashboard`, `useTransactions`, `useAlerts`, `useCobrancas`, `useAutoRecurring`, `useDisclosure`, `useInstallPrompt`.
 
 **Regra de arquitetura:** componentes NÃO importam `supabase` direto — sempre via service. Lógica de domínio pesada vai em RPC SQL. Páginas consomem hooks.
 
@@ -67,17 +72,19 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `saved_jobs` (vagas favoritadas). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento). `debtors.share_code` = código do extrato público. Todas com RLS `auth.uid() = user_id`.
 
 **Storage:** bucket privado `reports` (PDFs; signed URL) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
-**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_monthly_history`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `get_balance_forecast`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_report_link` + `resolve_pix_link` (SECURITY DEFINER, pública/anon).
+**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_monthly_history`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `get_balance_forecast`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_report_link` + `resolve_pix_link` + `resolve_debtor_statement` (SECURITY DEFINER, pública/anon).
 
 **Migrations** (`supabase/`, rodar em ordem; idempotentes): `schema.sql` + `migration_*.sql`. Aplicar via Dashboard SQL Editor ou `supabase db query --linked -f <arquivo>` (CLI logada). Projeto: `cofre` ref `lnkrplyghpukmovpzkea`.
 
 ---
 
 ## Changelog (alimentar a cada mudança)
+
+- **2026-10-16** — Cobranças viram **carteira do credor**. (1) Por pessoa: total da dívida, pago, a pagar, barra de progresso, pagas × faltando (`WalletSummary`, `utils/charges.js`); cabeçalho do parcelamento mostra `k/N pagas · faltam X`. (2) **Extrato público ao vivo** `/extrato/:code` (`DebtorStatement.jsx`): botão "Extrato" no card → `ShareStatementModal` (copiar, WhatsApp, compartilhar, gerar novo link = revoga o antigo). `debtorService.shareLink` grava `debtors.share_code` (CSPRNG); RPC `resolve_debtor_statement` (anon) devolve só nome, cobranças e chave PIX padrão — sem telefone/cartão/ids. (3) **Trava de pagamento:** parcela paga mostra cadeado + "Pago em dd/mm"; desfazer pede confirmação (`ConfirmDialog`); excluir cobrança/pessoa/seleção também confirma; valor de cobrança paga fica travado na edição. (4) **Seleção** só em modo explícito ("Selecionar") com atalhos Pendentes/Todas/Nenhuma, linha inteira tocável, checkbox de grupo tri-state; fora do modo a linha tem só o botão de pago. (5) **Editar** pessoa (`EditDebtorModal`) e parcelamento inteiro (`EditGroupModal` → `chargeService.updateGroup`: nome, cartão, valor das pendentes; pagas intactas). (6) `Select.jsx` substitui `<select>` em cobranças, chaves PIX e cartões. (7) **Logos de bancos** (`@edusites/bancos-brasil`, 41 bancos): tarja do cartão, face do cartão, chaves PIX, seletor "Banco emissor" no form de cartão (preenche nome + cor). (8) `constants/` criado; `PUBLIC_APP_URL` corrige links /pix, /r e /extrato gerados no APK (antes saíam `https://localhost`). (9) `todayISO()` local em `format.js` (cobranças usavam UTC → "vencida" errado após 21h). (10) Limpeza: removidos `AiTools.jsx`, `JobFilters.jsx`, `services/backup.js` (sem uso), `migration_jobs.sql` (feature removida), dep `date-fns` (zero imports), código morto em `importExport.js`. ⚠️ Rodar `migration_cobrancas_extrato.sql` (só o extrato depende dela).
 
 - **2026-06-09** — Cobranças: **cartão de crédito por cobrança**. Migration `migration_cobrancas_card.sql` (add `charges.credit_card_id` FK → `credit_cards`, `on delete set null` + índice). `chargeService` (create/createInstallments/update) aceita `cardId`/`credit_card_id` e faz join `credit_card:credit_cards(id,name,color)`. Novo `cardService.listSimple` (lista enxuta sem RPC de summary). UI: `components/CardTag.jsx` (`CardTag` tarja colorida + `CardSelect`), seletor em `ChargeModal`/`EditChargeModal`/`CobrancaQuickForm`, tarja no `ChargeRow` (avulsas) e no cabeçalho do bloco de parcelamento. ⚠️ Rodar a migration ANTES do deploy (front passa a enviar `credit_card_id`).
 - **2026-06-09** — **Recorte Brasil** no buscador. (1) Normalização Brasil↔Brazil (`normLoc`/`toApiLocation`): APIs querem "Brazil"(z), usuário digita "Brasil"(s) — antes o filtro de local nunca casava. (2) Gate `isBrazilJob` LIGADO por padrão (`filters.brazilOnly !== false`): mantém vaga BR explícita + remota global (anywhere/worldwide/latam), descarta presa a outro país ("USA Only", "Berlin"). Toggle "🇧🇷 Só Brasil" visível no `JobFilters` (default on, desligável). The Muse/Jooble agora focam Brazil quando sem `location`. Recent searches antigos (sem flag) caem no default = BR.
