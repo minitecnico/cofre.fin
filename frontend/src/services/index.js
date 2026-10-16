@@ -23,7 +23,27 @@ export async function currentUserId() {
 export async function resolveReportLink(code) {
   const { data, error } = await supabase.rpc('resolve_report_link', { p_code: code });
   if (error) throw error;
-  return data || null;
+  return isOwnReportUrl(data) ? data : null;
+}
+
+/**
+ * Só aceita a URL assinada de um PDF do bucket `reports` DESTE projeto Supabase.
+ *
+ * Segurança: a URL vem da tabela report_links, onde qualquer usuário logado
+ * grava o que quiser nas próprias linhas. Sem essa checagem, /r/:code viraria
+ * redirect aberto — e com `javascript:` rodaria script na origem do app
+ * (roubando a sessão do localStorage de quem abrisse o link).
+ */
+function isOwnReportUrl(value) {
+  try {
+    const target = new URL(value);
+    const supabaseOrigin = new URL(import.meta.env.VITE_SUPABASE_URL).origin;
+    return target.protocol === 'https:'
+      && target.origin === supabaseOrigin
+      && target.pathname.startsWith('/storage/v1/object/sign/reports/');
+  } catch {
+    return false;
+  }
 }
 
 /**
