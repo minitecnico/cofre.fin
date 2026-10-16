@@ -30,6 +30,8 @@ export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 export const CHARGE_STALE_DAYS = 3;
 /** Vence em ≤ N dias → entra como "vence em breve". */
 export const CHARGE_DUE_SOON_DAYS = 3;
+/** Validade do link público do extrato (/extrato/:code), em dias. */
+export const SHARE_LINK_DAYS = 90;
 /** Teto de parcelas numa cobrança parcelada. */
 export const MAX_INSTALLMENTS = 48;
 /** localStorage: último dia em que a notificação de cobranças disparou. */

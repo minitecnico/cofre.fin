@@ -1575,6 +1575,7 @@ function EditGroupModal({ group, cards, onClose, onSave }) {
 // ── Modal: enviar extrato (link público ao vivo) ───────────────
 function ShareStatementModal({ debtor, charges, getLink, onClose }) {
   const [link, setLink] = useState('');
+  const [expiresAt, setExpiresAt] = useState(null); // validade do link (SHARE_LINK_DAYS)
   const [state, setState] = useState('idle'); // idle | loading | error
   const [copied, setCopied] = useState(false);
   const wallet = useMemo(() => summarizeCharges(charges), [charges]);
@@ -1583,7 +1584,9 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
     if (!debtor) return;
     setState('loading');
     try {
-      setLink(await getLink(debtor.debtorId, { rotate }));
+      const res = await getLink(debtor.debtorId, { rotate });
+      setLink(res.url);
+      setExpiresAt(res.expiresAt);
       setState('idle');
     } catch (err) {
       console.error(err);
@@ -1600,6 +1603,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
   const message = debtor
     ? `Oi, ${debtor.name}! Segue seu extrato atualizado: ${formatCurrency(wallet.open)} a pagar`
       + ` (${wallet.paidCount} de ${wallet.count} já pagas). Lá dá pra ver tudo e pagar via PIX: ${link}`
+      + (expiresAt ? ` (link válido até ${formatDate(new Date(expiresAt), 'long')})` : '')
     : '';
 
   async function copy() {
@@ -1626,7 +1630,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
 
         {state === 'error' ? (
           <p className="text-sm text-negative font-medium">
-            Não foi possível gerar o link. Confira se a migration <code>migration_cobrancas_extrato.sql</code> foi aplicada no Supabase.
+            Não foi possível gerar o link. Confira se a migration <code>migration_extrato_expiry.sql</code> foi aplicada no Supabase.
           </p>
         ) : !link ? (
           <div className="h-12 rounded-xl bg-ink-50 flex items-center justify-center">
@@ -1644,6 +1648,12 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
                 {copied ? 'Copiado' : 'Copiar'}
               </button>
             </div>
+            {expiresAt && (
+              <p className="flex items-center gap-1.5 text-[11px] text-ink-500 px-1">
+                <Clock className="w-3 h-3 flex-shrink-0" />
+                Válido até <b className="text-ink-700">{formatDate(new Date(expiresAt), 'long')}</b> — e para de mostrar o extrato quando tudo for pago.
+              </p>
+            )}
             <div className="flex gap-2">
               <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1 min-h-[48px] flex items-center justify-center gap-2">
                 <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp

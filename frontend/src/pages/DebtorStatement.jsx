@@ -94,15 +94,28 @@ export default function DebtorStatement() {
     );
   }
 
-  if (!data) {
+  // Link inexistente ou vencido (SHARE_LINK_DAYS): o banco não devolve dados.
+  if (!data || data.status === 'expired') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-app p-6 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-ink-100 flex items-center justify-center mb-3">
-          <FileWarning className="w-7 h-7 text-ink-500" />
-        </div>
-        <p className="font-display font-bold text-lg text-ink-900">Extrato não encontrado</p>
-        <p className="text-sm text-ink-500 mt-1">Este link não existe mais. Peça um novo a quem te enviou.</p>
-      </div>
+      <StatusScreen
+        icon={<FileWarning className="w-7 h-7 text-ink-500" />}
+        title={data ? 'Link expirado' : 'Extrato não encontrado'}
+        text={data
+          ? 'Por segurança, este link tem validade. Peça um novo a quem te enviou.'
+          : 'Este link não existe mais. Peça um novo a quem te enviou.'}
+      />
+    );
+  }
+
+  // Dívida quitada: o link deixa de mostrar o extrato.
+  if (data.status === 'settled') {
+    return (
+      <StatusScreen
+        icon={<Check className="w-7 h-7 text-positive" strokeWidth={3} />}
+        tone="bg-emerald-50"
+        title={`Tudo pago, ${data.debtor_name}! 🎉`}
+        text="Não há nenhuma cobrança em aberto. Obrigado!"
+      />
     );
   }
 
@@ -247,6 +260,17 @@ export default function DebtorStatement() {
 }
 
 const EMPTY = new Set();
+
+/** Tela simples de status (link expirado / não encontrado / quitado). */
+function StatusScreen({ icon, title, text, tone = 'bg-ink-100' }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-app p-6 text-center">
+      <div className={`w-14 h-14 rounded-2xl ${tone} flex items-center justify-center mb-3`}>{icon}</div>
+      <p className="font-display font-bold text-lg text-ink-900">{title}</p>
+      <p className="text-sm text-ink-500 mt-1 max-w-xs">{text}</p>
+    </div>
+  );
+}
 
 /**
  * Agrupa as parcelas EM ABERTO por mês de vencimento (as sem vencimento num

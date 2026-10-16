@@ -3,7 +3,7 @@ import { currentUserId } from './index';
 import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
 import { buildPixPayload, pixQrCodeDataUrl } from './pix';
 import { randomLinkCode } from '../utils/randomCode';
-import { PUBLIC_APP_URL } from '../constants';
+import { PUBLIC_APP_URL, SHARE_LINK_DAYS, DAY_MS } from '../constants';
 
 /**
  * Extrato público de um devedor (rota /extrato/:code, sem login).
@@ -78,21 +78,28 @@ export const debtorService = {
 
   /**
    * Link público do extrato do devedor (<dominio>/extrato/<code>), ao vivo.
-   * Gera o código na 1ª vez; depois reaproveita o mesmo (o link já enviado
-   * continua valendo). `rotate: true` troca o código e invalida o link antigo.
+   * Vale SHARE_LINK_DAYS dias. Enquanto válido, reaproveita o mesmo (o link já
+   * enviado continua funcionando); vencido, gera outro sozinho. `rotate: true`
+   * troca o código na hora e invalida o anterior.
+   * @returns {Promise<{ url: string, expiresAt: string }>}
    */
   async shareLink(id, { rotate = false } = {}) {
-    let code = null;
-    if (!rotate) {
-      const { data, error } = await supabase.from('debtors').select('share_code').eq('id', id).single();
-      if (error) throw error;
-      code = data.share_code;
-    }
-    if (!code) {
+    const { data, error } = await supabase
+      .from('debtors')
+      .select('share_code, share_expires_at')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+
+    let code = data.share_code;
+    let expiresAt = data.share_expires_at;
+    const expired = !expiresAt || new Date(expiresAt).getTime() <= Date.now();
+    if (rotate || !code || expired) {
       code = randomLinkCode();
-      await this.update(id, { share_code: code });
+      expiresAt = new Date(Date.now() + SHARE_LINK_DAYS * DAY_MS).toISOString();
+      await this.update(id, { share_code: code, share_expires_at: expiresAt });
     }
-    return `${PUBLIC_APP_URL}/extrato/${code}`;
+    return { url: `${PUBLIC_APP_URL}/extrato/${code}`, expiresAt };
   },
 
   /** Remove o devedor (cascade apaga as cobranças dele). */
