@@ -329,22 +329,22 @@ export default function Cobrancas() {
       )}
 
       {/* Resumo de totais */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <SummaryTile label="A receber" value={formatCurrency(c.totals.open)} icon={Wallet} tone="neutral" />
         <SummaryTile label="Vencido" value={formatCurrency(c.totals.overdue)} icon={AlertTriangle} tone={c.totals.overdue > 0 ? 'negative' : 'neutral'} />
-        <SummaryTile label="Já recebido" value={formatCurrency(c.totals.paid)} icon={CheckCircle2} tone="positive" />
+        <SummaryTile label="Já recebido" value={formatCurrency(c.totals.paid)} icon={CheckCircle2} tone="positive" className="col-span-2 sm:col-span-1" />
       </div>
 
       {/* Barra de ações: PIX + PDF */}
-      <div className="flex flex-wrap gap-2">
-        <button onClick={pixModal.open} className="btn-ghost min-h-[44px] flex items-center gap-2 flex-1 justify-center">
+      <div className="grid grid-cols-[1fr_1fr_auto] sm:flex gap-2">
+        <button onClick={pixModal.open} className={TOOL_BTN}>
           <KeyRound className="w-4 h-4" />
           {c.pixKeys.length ? `Chaves PIX (${c.pixKeys.length})` : 'Cadastrar PIX'}
         </button>
-        <button onClick={() => handlePdf(false)} disabled={pdfBusy || c.summary.length === 0} className="btn-ghost min-h-[44px] flex items-center gap-2 flex-1 justify-center disabled:opacity-50">
+        <button onClick={() => handlePdf(false)} disabled={pdfBusy || c.summary.length === 0} className={TOOL_BTN}>
           {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Relatório PDF
         </button>
-        <button onClick={() => handlePdf(true)} disabled={pdfBusy || c.summary.length === 0} className="btn-ghost min-h-[44px] w-12 flex items-center justify-center disabled:opacity-50" title="Compartilhar PDF">
+        <button onClick={() => handlePdf(true)} disabled={pdfBusy || c.summary.length === 0} className={`${TOOL_BTN} w-11 px-0`} title="Compartilhar PDF" aria-label="Compartilhar PDF">
           <Share2 className="w-4 h-4" />
         </button>
       </div>
@@ -488,10 +488,10 @@ export default function Cobrancas() {
 // Subcomponentes
 // ───────────────────────────────────────────────────────────────
 
-function SummaryTile({ label, value, icon: Icon, tone }) {
+function SummaryTile({ label, value, icon: Icon, tone, className = '' }) {
   const toneClass = { positive: 'text-positive', negative: 'text-negative', neutral: 'text-ink-900' }[tone] || 'text-ink-900';
   return (
-    <div className="card-flat p-3">
+    <div className={`card-flat p-3 md:p-4 ${className}`}>
       <div className="flex items-center gap-1.5 text-ink-500">
         <Icon className="w-3.5 h-3.5" strokeWidth={2.25} />
         <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
@@ -635,6 +635,9 @@ function timeAgo(iso) {
 
 const EMPTY_SET = new Set();
 
+/** Botão da barra de ferramentas (PIX / PDF / compartilhar). */
+const TOOL_BTN = 'inline-flex items-center justify-center gap-2 px-4 min-h-[44px] rounded-full bg-white border border-hairline-light shadow-soft text-sm font-semibold text-ink-700 hover:text-ink-900 hover:bg-ink-50 transition-colors whitespace-nowrap disabled:opacity-50';
+
 /** "João (#003)" — pra relatório e títulos, onde homônimos precisam se distinguir. */
 function nameWithCode(d) {
   return d.code ? `${d.name} (${debtorCode(d.code)})` : d.name;
@@ -742,62 +745,68 @@ function DebtorCard({
     <div className={`card-flat overflow-hidden border-l-4 ${
       hasDebt ? (st.urgency === 'overdue' ? 'border-negative' : st.urgency === 'due-soon' ? 'border-warn' : 'border-ink-200') : 'border-positive'
     }`}>
-      {/* Cabeçalho do devedor */}
-      <div className="p-3 flex items-center gap-3">
-        <button onClick={() => setOpen((v) => !v)} className="flex-1 flex items-center gap-3 text-left min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-ink-100 flex items-center justify-center flex-shrink-0">
+      {/* Linha do devedor: identidade + valor (toca pra expandir) | ações.
+          Mobile: empilha; md+: tudo numa linha, ações alinhadas à direita. */}
+      <div className="p-3 md:px-4 flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex items-center gap-3 text-left min-w-0 flex-1"
+        >
+          <span className="w-9 h-9 rounded-xl bg-ink-100 flex items-center justify-center flex-shrink-0">
             {open ? <ChevronDown className="w-4 h-4 text-ink-600" /> : <ChevronRight className="w-4 h-4 text-ink-600" />}
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold text-sm text-ink-900 truncate">{debtor.name} <CodeTag code={debtor.code} /></p>
-            <div className="flex items-center gap-2 text-xs mt-0.5">
-              <span className="font-mono font-bold text-ink-700">{formatCurrency(debtor.openAmount)}</span>
-              {hasOverdue && (
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-1.5 min-w-0">
+              <span className="font-bold text-sm md:text-[15px] text-ink-900 truncate">{debtor.name}</span>
+              <CodeTag code={debtor.code} />
+            </span>
+            <span className="flex items-center gap-x-2 gap-y-1 flex-wrap mt-1 text-xs">
+              {hasOverdue ? (
                 <span className="inline-flex items-center gap-1 text-negative font-semibold">
                   <AlertTriangle className="w-3 h-3" /> {debtor.overdueCount} vencida(s)
                 </span>
+              ) : debtor.nextDue ? (
+                <span className="text-ink-400">vence {formatDate(debtor.nextDue, 'short')}</span>
+              ) : !hasDebt ? (
+                <span className="text-positive font-semibold">Tudo pago</span>
+              ) : null}
+              {/* Selo do último lembrete — sinaliza o que já foi cobrado */}
+              {hasDebt && (
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(debtor.lastChargedAt)}`}>
+                  <Clock className="w-2.5 h-2.5" /> {reminderLabel(debtor.lastChargedAt) || 'Nunca cobrado'}
+                </span>
               )}
-              {debtor.nextDue && !hasOverdue && (
-                <span className="text-ink-400">vence {formatDate(debtor.nextDue, 'long')}</span>
-              )}
-            </div>
-            {/* Selo do último lembrete — sinaliza o que já foi cobrado */}
-            {hasDebt && (
-              <span className={`inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reminderTone(debtor.lastChargedAt)}`}>
-                <Clock className="w-2.5 h-2.5" /> {reminderLabel(debtor.lastChargedAt) || 'Nunca cobrado'}
-              </span>
-            )}
-          </div>
+            </span>
+          </span>
+          <span className="text-right flex-shrink-0 pl-1">
+            <span className={`block font-display font-bold text-base md:text-lg leading-tight ${hasDebt ? 'text-ink-900' : 'text-positive'}`}>
+              {formatCurrency(debtor.openAmount)}
+            </span>
+            <span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-400 mt-0.5">
+              {hasDebt ? `a receber · ${wallet.progress}% pago` : 'quitado'}
+            </span>
+          </span>
         </button>
-      </div>
 
-      {/* Ações rápidas */}
-      <div className="px-3 pb-3 flex flex-wrap gap-1.5">
-        <button
-          onClick={onCharge}
-          disabled={!hasDebt}
-          className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg font-bold text-xs transition-colors disabled:opacity-40 ${
-            chargedToday ? 'bg-ink-100 text-ink-500' : 'bg-positive/10 text-positive hover:bg-positive/20'
-          }`}
-          title={chargedToday ? 'Já cobrado hoje' : 'Cobrar pelo WhatsApp'}
-        >
-          {chargedToday ? <Check className="w-3.5 h-3.5" /> : <MessageCircle className="w-3.5 h-3.5" />}
-          {chargedToday ? 'Cobrado hoje' : 'Cobrar'}
-        </button>
-        <button onClick={onShowQr} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
-          <QrCode className="w-3.5 h-3.5" /> PIX QR
-        </button>
-        <button onClick={onShare} disabled={!charges.length} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors disabled:opacity-40" title="Enviar extrato ao devedor">
-          <Share2 className="w-3.5 h-3.5" /> Extrato
-        </button>
-        <button onClick={onAddCharge} className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
-          <Plus className="w-3.5 h-3.5" /> Cobrança
-        </button>
-        <div className="ml-auto flex gap-0.5">
-          <button onClick={onEditDebtor} className="inline-flex items-center justify-center w-9 min-h-[36px] rounded-lg text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors" title="Editar pessoa">
+        <div className="flex items-center gap-1.5 md:flex-shrink-0 md:pl-4 md:border-l md:border-ink-100">
+          <ActionButton
+            onClick={onCharge}
+            disabled={!hasDebt}
+            icon={chargedToday ? Check : MessageCircle}
+            tone={chargedToday ? 'muted' : 'positive'}
+            title={chargedToday ? 'Já cobrado hoje' : 'Cobrar pelo WhatsApp'}
+          >
+            {chargedToday ? 'Cobrado' : 'Cobrar'}
+          </ActionButton>
+          <ActionButton onClick={onShowQr} icon={QrCode} title="Gerar PIX">PIX</ActionButton>
+          <ActionButton onClick={onShare} disabled={!charges.length} icon={Share2} title="Enviar extrato ao devedor">Extrato</ActionButton>
+          <ActionButton onClick={onAddCharge} icon={Plus} title="Nova cobrança pra esta pessoa">Cobrança</ActionButton>
+          <span className="w-px h-6 bg-ink-100 mx-0.5 flex-shrink-0" aria-hidden />
+          <button onClick={onEditDebtor} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors flex-shrink-0" title="Editar pessoa" aria-label="Editar pessoa">
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          <button onClick={onRemoveDebtor} className="inline-flex items-center justify-center w-9 min-h-[36px] rounded-lg text-ink-400 hover:text-negative hover:bg-red-50 transition-colors" title="Remover pessoa">
+          <button onClick={onRemoveDebtor} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-ink-400 hover:text-negative hover:bg-red-50 transition-colors flex-shrink-0" title="Remover pessoa" aria-label="Remover pessoa">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -825,15 +834,17 @@ function DebtorCard({
 
               {/* Cada cobrança é um bloco. Parcelamento vira um bloco agrupado.
                   Quitadas por inteiro ficam recolhidas no fim (lista enxuta). */}
-              <div className="px-3 pb-3 space-y-2">
-                {openGroups.map((g) => <ChargeBlock key={g.groupId || g.items[0].id} group={g} {...blockProps} />)}
+              <div className="px-3 md:px-4 pb-3 md:pb-4 space-y-2">
+                <div className="grid gap-2 xl:grid-cols-2 items-start">
+                  {openGroups.map((g) => <ChargeBlock key={g.groupId || g.items[0].id} group={g} {...blockProps} />)}
+                </div>
                 <PaidDisclosure
                   count={doneGroups.length}
                   total={doneGroups.reduce((s, g) => s + summarizeCharges(g.items).paid, 0)}
                   label={`${doneGroups.length} quitada(s)`}
                   className="rounded-xl border border-ink-200 bg-white overflow-hidden"
                 >
-                  <div className="p-2 pt-0 space-y-2">
+                  <div className="p-2 pt-0 grid gap-2 xl:grid-cols-2 items-start">
                     {doneGroups.map((g) => <ChargeBlock key={g.groupId || g.items[0].id} group={g} {...blockProps} />)}
                   </div>
                 </PaidDisclosure>
@@ -847,12 +858,34 @@ function DebtorCard({
 }
 
 /**
+ * Botão de ação do card. Mobile: ocupa a largura (ícone sobre o texto, alvo
+ * de 44px); sm+: pílula compacta com ícone ao lado.
+ */
+function ActionButton({ onClick, disabled, icon: Icon, tone = 'neutral', title, children }) {
+  const tones = {
+    neutral: 'bg-ink-100 text-ink-700 hover:bg-ink-200',
+    positive: 'bg-positive/10 text-positive hover:bg-positive/20',
+    muted: 'bg-ink-100 text-ink-500',
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`flex-1 sm:flex-none inline-flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 px-2 sm:px-3 min-h-[44px] sm:min-h-[36px] rounded-lg font-bold text-[10px] sm:text-xs whitespace-nowrap transition-colors disabled:opacity-40 ${tones[tone]}`}
+    >
+      <Icon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> {children}
+    </button>
+  );
+}
+
+/**
  * Carteira do devedor: total da dívida, pago, a pagar e progresso. Os mesmos
  * números aparecem no extrato público que ele recebe (utils/charges).
  */
 function WalletSummary({ wallet }) {
   return (
-    <div className="p-3 space-y-2.5">
+    <div className="p-3 md:px-4 space-y-2.5 md:space-y-0 md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:gap-6 md:items-center">
       <div className="grid grid-cols-3 gap-2">
         <WalletStat label="Total da dívida" value={wallet.total} />
         <WalletStat label="Pago" value={wallet.paid} tone="text-positive" />
@@ -891,7 +924,7 @@ function WalletStat({ label, value, tone = 'text-ink-900' }) {
 function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onStart, onPending, onNone, onDone }) {
   if (!selecting) {
     return (
-      <div className="px-3 pb-2 flex items-center justify-between gap-2">
+      <div className="px-3 md:px-4 pb-2 flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{total} cobrança(s)</span>
         <button onClick={onStart} disabled={pendingCount === 0} className="inline-flex items-center gap-1 px-2.5 min-h-[36px] rounded-lg text-ink-600 font-bold text-xs hover:bg-ink-100 transition-colors disabled:opacity-40" title={pendingCount === 0 ? 'Tudo pago — nada a selecionar' : 'Selecionar pendentes'}>
           <ListChecks className="w-3.5 h-3.5" /> Selecionar
@@ -901,7 +934,7 @@ function SelectionToolbar({ selecting, total, pendingCount, selectedCount, onSta
   }
   const chip = 'px-2.5 min-h-[32px] rounded-full text-[11px] font-bold transition-colors whitespace-nowrap';
   return (
-    <div className="px-3 pb-2 flex items-center gap-1.5 overflow-x-auto">
+    <div className="px-3 md:px-4 pb-2 flex items-center gap-1.5 overflow-x-auto">
       <span className="text-[11px] font-bold text-ink-900 mr-0.5 whitespace-nowrap">{selectedCount} selec.</span>
       {pendingCount > 0 && (
         <button onClick={onPending} className={`${chip} bg-accent/20 text-ink-900 hover:bg-accent/30`}>Todas pendentes ({pendingCount})</button>
