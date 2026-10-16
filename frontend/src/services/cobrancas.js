@@ -67,7 +67,7 @@ export const debtorService = {
   },
 
   /**
-   * Link público do extrato do devedor (<dominio>/e/<code>), ao vivo.
+   * Link público do extrato do devedor (<dominio>/extrato/<code>), ao vivo.
    * Gera o código na 1ª vez; depois reaproveita o mesmo (o link já enviado
    * continua valendo). `rotate: true` troca o código e invalida o link antigo.
    */
@@ -82,7 +82,7 @@ export const debtorService = {
       code = randomLinkCode();
       await this.update(id, { share_code: code });
     }
-    return `${PUBLIC_APP_URL}/e/${code}`;
+    return `${PUBLIC_APP_URL}/extrato/${code}`;
   },
 
   /** Remove o devedor (cascade apaga as cobranças dele). */
@@ -368,7 +368,7 @@ export const pixLinkService = {
    *   1. monta o copia-e-cola (payload EMV) com a chave escolhida
    *   2. gera o QR como imagem PNG e sobe pro bucket público `pix-qr`
    *   3. grava em `pix_links` com um código curto
-   *   4. devolve a URL curta (<dominio>/p/<code>) pra compartilhar
+   *   4. devolve a URL curta (<dominio>/pix/<code>) pra compartilhar
    *
    * @param {Object} args
    * @param {Object} args.pixKey  linha de pix_keys ({ key, key_type, name, city })
@@ -417,7 +417,7 @@ export const pixLinkService = {
     if (insErr) throw insErr;
 
     return {
-      shortUrl: `${PUBLIC_APP_URL}/p/${code}`,
+      shortUrl: `${PUBLIC_APP_URL}/pix/${code}`,
       payload,
       qrUrl,
       code,

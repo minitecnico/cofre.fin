@@ -1589,7 +1589,7 @@ function PixQrModal({ target, pixKey, pixReady, onClose, onConfigure, onSent }) 
             {copied ? 'Copiado!' : 'Copiar código PIX'}
           </button>
 
-          {/* Link de pagamento (página pública /p/:code) */}
+          {/* Link de pagamento (página pública /pix/:code) */}
           {!link ? (
             <button onClick={genLink} disabled={linkLoading} className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-60">
               {linkLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Link2 className="w-5 h-5" />}

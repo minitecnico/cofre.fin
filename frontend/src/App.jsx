@@ -33,21 +33,15 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/r/:code" element={<RedirectLink />} />
-            {/* Links públicos: /p e /e são as formas curtas; /pix e /extrato seguem
-                valendo pros links já enviados. */}
-            <Route path="/p/:code" element={<PixPay />} />
             <Route path="/pix/:code" element={<PixPay />} />
-            {['/e/:code', '/extrato/:code'].map((path) => (
-              <Route
-                key={path}
-                path={path}
-                element={
-                  <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
-                    <DebtorStatement />
-                  </Suspense>
-                }
-              />
-            ))}
+            <Route
+              path="/extrato/:code"
+              element={
+                <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                  <DebtorStatement />
+                </Suspense>
+              }
+            />
 
             <Route
               element={

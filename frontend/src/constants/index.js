@@ -11,16 +11,11 @@ export const DAY_MS = 86400000;
 
 // ── Links públicos ──────────────────────────────────────────────────────────
 /**
- * Domínio usado nos links compartilhados (/p, /e, /r).
- *   1. VITE_PUBLIC_APP_URL — domínio curto "de vitrine" (ex.: cofre-fin.vercel.app).
- *      Assim o link sai curto mesmo abrindo o app por outro endereço.
- *   2. VITE_API_BASE_URL — domínio publicado. No APK (Capacitor) a origem é
- *      https://localhost, que não abre no celular de quem recebe.
- *   3. a origem atual.
+ * Domínio usado nos links compartilhados (/pix, /extrato, /r).
+ * No APK (Capacitor) a origem é https://localhost, que não abre no celular de
+ * quem recebe — por isso o domínio publicado (VITE_API_BASE_URL) tem prioridade.
  */
-export const PUBLIC_APP_URL = (
-  import.meta.env.VITE_PUBLIC_APP_URL || import.meta.env.VITE_API_BASE_URL || window.location.origin
-).replace(/\/+$/, '');
+export const PUBLIC_APP_URL = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '');
 
 // ── Cobranças ───────────────────────────────────────────────────────────────
 /** Sem lembrete há ≥ N dias → "cobrar de novo". */
