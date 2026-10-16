@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { debtorService, chargeService, pixKeyService } from '../services/cobrancas';
+import { debtorService, chargeService, pixKeyService, paymentNoticeService } from '../services/cobrancas';
+import { PAYMENT_NOTICE_EVENT } from './usePaymentNoticeAlerts';
 import { cardService } from '../services/index';
 
 /**
@@ -16,22 +17,26 @@ export function useCobrancas() {
   const [charges, setCharges] = useState([]);     // todas as cobranças
   const [pixKeys, setPixKeys] = useState([]);     // chaves PIX cadastradas
   const [cards, setCards] = useState([]);         // cartões (p/ tarja/seletor)
+  const [notices, setNotices] = useState([]);     // avisos de pagamento pendentes
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const [sum, chg, keys, crd] = await Promise.all([
+      const [sum, chg, keys, crd, ntc] = await Promise.all([
         debtorService.summary(),
         chargeService.list(),
         pixKeyService.list(),
         cardService.listSimple(),
+        // Avisos são opcionais: sem a migration, a página funciona sem eles.
+        paymentNoticeService.listPending().catch(() => []),
       ]);
       setSummary(sum);
       setCharges(chg);
       setPixKeys(keys);
       setCards(crd);
+      setNotices(ntc);
     } catch (err) {
       console.error(err);
       setError('Não foi possível carregar as cobranças.');
@@ -41,6 +46,22 @@ export function useCobrancas() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Aviso novo chegou (Realtime, ouvido no Layout) → recarrega a página.
+  useEffect(() => {
+    window.addEventListener(PAYMENT_NOTICE_EVENT, load);
+    return () => window.removeEventListener(PAYMENT_NOTICE_EVENT, load);
+  }, [load]);
+
+  const confirmNotice = useCallback(async (id) => {
+    await paymentNoticeService.confirm(id);
+    await load();
+  }, [load]);
+
+  const dismissNotice = useCallback(async (id) => {
+    await paymentNoticeService.dismiss(id);
+    await load();
+  }, [load]);
 
   // Agrupa cobranças por devedor
   const chargesByDebtor = useMemo(() => {
@@ -151,7 +172,7 @@ export function useCobrancas() {
   } : null), [activePixKey]);
 
   return {
-    summary, charges, chargesByDebtor, pixKeys, cards, activePixKey, pix, totals, loading, error,
+    summary, charges, chargesByDebtor, pixKeys, cards, notices, confirmNotice, dismissNotice, activePixKey, pix, totals, loading, error,
     reload: load,
     addDebtor, updateDebtor, removeDebtor,
     shareDebtorLink,

@@ -16,6 +16,17 @@ export async function resolveDebtorStatement(code) {
 }
 
 /**
+ * Devedor avisa (pelo extrato público) que gerou o PIX destas parcelas.
+ * RPC anon: valida as parcelas e recalcula o valor no servidor.
+ * @returns {Promise<boolean>} true = credor avisado
+ */
+export async function notifyPayment(code, chargeIds) {
+  const { data, error } = await supabase.rpc('notify_payment', { p_code: code, p_charge_ids: chargeIds });
+  if (error) throw error;
+  return !!data;
+}
+
+/**
  * Services de Cobranças.
  *
  * Domínio: o usuário empresta cartão/dinheiro pra terceiros e precisa controlar
@@ -423,5 +434,58 @@ export const pixLinkService = {
       qrUrl,
       code,
     };
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Avisos de pagamento (devedor gerou o PIX no extrato → credor confirma)
+// ─────────────────────────────────────────────────────────────────────────
+
+export const paymentNoticeService = {
+  /** Avisos ainda não resolvidos, mais recentes primeiro. */
+  async listPending() {
+    const { data, error } = await supabase
+      .from('payment_notices')
+      .select('*, debtor:debtors ( id, name, code )')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  /** Recebi: marca as parcelas do aviso como pagas e fecha o aviso. Retorna quantas marcou. */
+  async confirm(id) {
+    const { data, error } = await supabase.rpc('confirm_payment_notice', { p_id: id });
+    if (error) throw error;
+    return data || 0;
+  },
+
+  /** Ignorar: fecha o aviso sem mexer nas parcelas. */
+  async dismiss(id) {
+    const { error } = await supabase.from('payment_notices').update({ status: 'dismissed' }).eq('id', id);
+    if (error) throw error;
+  },
+
+  /** Busca 1 aviso com o devedor embutido (o evento do Realtime traz só a linha crua). */
+  async get(id) {
+    const { data, error } = await supabase
+      .from('payment_notices')
+      .select('*, debtor:debtors ( id, name, code )')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Escuta novos avisos em tempo real (o RLS do Realtime entrega só os do
+   * usuário logado). Retorna a função que cancela a inscrição.
+   */
+  subscribe(onInsert) {
+    const channel = supabase
+      .channel('payment_notices_inserts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_notices' }, (payload) => onInsert(payload.new))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   },
 };

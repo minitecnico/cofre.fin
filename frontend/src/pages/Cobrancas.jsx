@@ -3,7 +3,7 @@ import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
   AlertTriangle, Wallet, Share2, CreditCard, Pencil, Star, Link2, X,
-  Bell, BellRing, Clock, Send, Lock, Minus, ListChecks, ExternalLink, RefreshCw,
+  Bell, BellRing, Clock, Send, Lock, Minus, ListChecks, ExternalLink, RefreshCw, HandCoins,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
@@ -11,6 +11,7 @@ import Select from '../components/Select';
 import BankLogo from '../components/BankLogo';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PaidDisclosure from '../components/PaidDisclosure';
+import { showSystemNotification } from '../utils/notify';
 import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
@@ -79,13 +80,12 @@ export default function Cobrancas() {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !list.length) return;
     const total = list.reduce((s, d) => s + (d.overdueAmount || d.openAmount), 0);
     const n = list.length;
-    try {
-      new Notification('Cobranças pendentes', {
-        body: `${n} ${n === 1 ? 'pessoa' : 'pessoas'} pra cobrar · ${formatCurrency(total)} em aberto`,
-        icon: '/icons/icon-192.png',
-        tag: 'cofre-cobrancas',
-      });
-    } catch { /* ignora */ }
+    showSystemNotification({
+      title: 'Cobranças pendentes',
+      body: `${n} ${n === 1 ? 'pessoa' : 'pessoas'} pra cobrar · ${formatCurrency(total)} em aberto`,
+      tag: 'cofre-cobrancas',
+      url: '/cobrancas',
+    });
   }, []);
 
   async function enableNotifications() {
@@ -188,6 +188,22 @@ export default function Cobrancas() {
       confirmLabel: 'Remover',
       tone: 'danger',
       onConfirm: () => c.removeDebtor(debtor.debtorId),
+    });
+  }
+
+  // ── Avisos de pagamento (devedor gerou o PIX no extrato) ─────────────
+  function handleConfirmNotice(notice) {
+    const n = notice.charge_ids.length;
+    setConfirmReq({
+      title: 'Confirmar recebimento?',
+      message: (
+        <>
+          Confira no seu banco se o PIX de <b className="text-ink-900">{formatCurrency(notice.amount)}</b> de{' '}
+          <b className="text-ink-900">{notice.debtor?.name || 'devedor'}</b> caiu. As {n} parcela(s) serão marcadas como pagas (e travadas).
+        </>
+      ),
+      confirmLabel: 'Recebi',
+      onConfirm: () => c.confirmNotice(notice.id),
     });
   }
 
@@ -308,6 +324,23 @@ export default function Cobrancas() {
           </button>
         </div>
       </div>
+
+      {/* Avisos de pagamento: devedor gerou PIX no extrato → confirmar */}
+      {c.notices.length > 0 && (
+        <NoticePanel
+          notices={c.notices}
+          charges={c.charges}
+          onConfirm={handleConfirmNotice}
+          onDismiss={(n) => c.dismissNotice(n.id)}
+        />
+      )}
+      {notifyPerm === 'default' && (
+        <button onClick={enableNotifications} className="w-full card-flat px-3 py-2.5 flex items-center gap-2.5 text-left hover:bg-ink-50 transition-colors">
+          <Bell className="w-4 h-4 text-ink-600 flex-shrink-0" />
+          <span className="flex-1 text-xs text-ink-600">Ative as notificações pra saber na hora quando alguém gerar um PIX pra te pagar.</span>
+          <span className="text-xs font-bold text-ink-900 flex-shrink-0">Ativar</span>
+        </button>
+      )}
 
       {/* Resumo de totais */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -557,6 +590,66 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Avisos de pagamento: o devedor tocou em "Pagar" no extrato e gerou o PIX.
+ * O PIX estático não avisa quando cai — por isso o credor confirma olhando o
+ * banco, e "Recebi" marca as parcelas do aviso como pagas.
+ */
+function NoticePanel({ notices, charges, onConfirm, onDismiss }) {
+  const byId = new Map(charges.map((x) => [x.id, x]));
+  return (
+    <div className="card-flat overflow-hidden border-l-4 border-positive animate-slide-up">
+      <div className="p-3 flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+          <HandCoins className="w-[18px] h-[18px] text-positive" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-sm text-ink-900">Avisos de pagamento</p>
+          <p className="text-[11px] text-ink-500">Confira no seu banco e confirme o que caiu.</p>
+        </div>
+      </div>
+      <div className="divide-y divide-ink-100 border-t border-ink-100">
+        {notices.map((n) => {
+          const items = n.charge_ids.map((id) => byId.get(id)).filter(Boolean);
+          return (
+            <div key={n.id} className="px-3 py-2.5 space-y-2">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-ink-900">
+                    <b>{n.debtor?.name || 'Devedor'}</b> <CodeTag code={n.debtor?.code} /> gerou um PIX de{' '}
+                    <b className="font-mono">{formatCurrency(n.amount)}</b>
+                  </p>
+                  <p className="text-[11px] text-ink-500 truncate">
+                    {timeAgo(n.created_at)} · {n.charge_ids.length} parcela(s)
+                    {items.length > 0 && <> · {items.map((x) => chargeLabel(x)).join(', ')}</>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={() => onConfirm(n)} className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-positive text-white font-bold text-xs hover:opacity-90 transition-opacity">
+                  <Check className="w-3.5 h-3.5" /> Recebi
+                </button>
+                <button onClick={() => onDismiss(n)} className="inline-flex items-center px-3 min-h-[36px] rounded-lg text-ink-500 font-bold text-xs hover:bg-ink-100 transition-colors">
+                  Ignorar
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** "agora" · "há 5 min" · "há 2 h" · "há 3 d". */
+function timeAgo(iso) {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!(min >= 1)) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.floor(min / 60)} h`;
+  return `há ${Math.floor(min / 1440)} d`;
 }
 
 const EMPTY_SET = new Set();

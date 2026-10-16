@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Loader2, Copy, Check, FileWarning, QrCode, Lock, AlertTriangle, ReceiptText, Minus,
-  KeyRound, CalendarDays, ChevronDown, Smartphone,
+  KeyRound, CalendarDays, ChevronDown, Smartphone, BellRing,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
 import PaidDisclosure from '../components/PaidDisclosure';
-import { resolveDebtorStatement } from '../services/cobrancas';
+import { resolveDebtorStatement, notifyPayment } from '../services/cobrancas';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
@@ -33,6 +33,7 @@ export default function DebtorStatement() {
   const [picked, setPicked] = useState(EMPTY);  // parcelas escolhidas (refs de `charges`)
   const [payOpen, setPayOpen] = useState(false);
   const [copied, setCopied] = useState(false);  // copiou ao abrir o passo 2
+  const [notified, setNotified] = useState(false); // credor avisado deste pagamento
 
   useEffect(() => {
     let alive = true;
@@ -72,7 +73,11 @@ export default function DebtorStatement() {
     let ok = false;
     try { await navigator.clipboard.writeText(payload); ok = true; } catch { /* sem permissão */ }
     setCopied(ok);
+    setNotified(false);
     setPayOpen(true);
+    // Avisa o credor (sem travar o fluxo — se falhar, o PIX segue normal).
+    const ids = pickedList.map((c) => c.id).filter(Boolean);
+    if (ids.length) notifyPayment(code, ids).then(setNotified).catch(() => {});
   }
 
   if (data === undefined) {
@@ -228,7 +233,8 @@ export default function DebtorStatement() {
 
       <Modal isOpen={payOpen} onClose={() => setPayOpen(false)} title="Pagar via PIX">
         {payOpen && (
-          <PayStep pix={data.pix} amount={pickedTotal} items={pickedList} payload={payload} copiedOnOpen={copied} />
+          <PayStep pix={data.pix} amount={pickedTotal} items={pickedList} payload={payload} copiedOnOpen={copied}
+            notified={notified} ownerName={data.owner_name} />
         )}
       </Modal>
     </div>
@@ -389,7 +395,7 @@ function androidAppLink(pkg) {
  * Passo 2: código já copiado (com valor) → abrir o app do banco → colar.
  * QR fica recolhido (útil se for pagar por outro aparelho).
  */
-function PayStep({ pix, amount, items, payload, copiedOnOpen }) {
+function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName }) {
   const [copied, setCopied] = useState(copiedOnOpen ? 'code' : '');
   const [showQr, setShowQr] = useState(false);
   const [qr, setQr] = useState('');
@@ -438,6 +444,13 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen }) {
           </li>
         ))}
       </ul>
+
+      {notified && (
+        <p className="flex items-center gap-2 text-xs text-positive font-semibold bg-emerald-50 rounded-xl px-3 py-2 animate-fade-in">
+          <BellRing className="w-4 h-4 flex-shrink-0" />
+          Avisamos {ownerName || 'quem te cobrou'} que você está pagando. Quando cair, as parcelas aparecem como pagas aqui.
+        </p>
+      )}
 
       {/* 1. código copiado */}
       <Step n={1} done={copied === 'code'} title={copied === 'code' ? 'Código PIX copiado, já com o valor' : 'Copie o código PIX (já com o valor)'}>

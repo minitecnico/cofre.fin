@@ -86,3 +86,17 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Toque numa notificação (ex.: aviso de pagamento): foca uma aba do app já
+// aberta e navega pra URL da notificação; sem aba aberta, abre uma nova.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const win = wins.find((w) => w.url.startsWith(self.location.origin));
+      if (win) return win.focus().then(() => win.navigate(target)).catch(() => self.clients.openWindow(target));
+      return self.clients.openWindow(target);
+    })
+  );
+});

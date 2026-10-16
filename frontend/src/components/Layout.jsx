@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import Sidebar from './Sidebar';
 import MobileHeader from './MobileHeader';
@@ -7,6 +7,7 @@ import BottomNav from './BottomNav';
 import FloatingAddButton from './FloatingAddButton';
 import Toast from './Toast';
 import { useAutoRecurring } from '../hooks/useAutoRecurring';
+import { usePaymentNoticeAlerts } from '../hooks/usePaymentNoticeAlerts';
 import { TourProvider } from '../context/TourContext';
 
 export default function Layout() {
@@ -15,6 +16,9 @@ export default function Layout() {
   const [toastMessage, setToastMessage] = useState(null);
   const location = useLocation();
   const reduceMotion = useReducedMotion();
+
+  // Devedor gerou PIX no extrato → toast (+ notificação do sistema no hook).
+  usePaymentNoticeAlerts(useCallback((msg) => setToastMessage(msg), []));
 
   // Quando o hook detecta novas recorrências geradas, mostra toast e força refresh
   useEffect(() => {
