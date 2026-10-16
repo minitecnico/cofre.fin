@@ -6,10 +6,10 @@ export default function MobileHeader() {
   const { logout } = useAuth();
 
   /*
-   * O padding-top com safe-area existe por causa do APK: no Android 15 o app
-   * desenha edge-to-edge, então sem isso o nome, o sino e o botão sair ficam por
-   * baixo do relógio e da bateria. O espaço vai DENTRO do header para o gradiente
-   * escuro preencher também a faixa da barra de status.
+   * O padding-top com safe-area existe por causa do app instalado na tela
+   * inicial: com `viewport-fit=cover` e a barra de status translúcida (iPhone),
+   * o conteúdo é desenhado por baixo do relógio e da bateria. O espaço vai
+   * DENTRO do header para o gradiente escuro preencher também essa faixa.
    * No navegador o env() resolve para 0 e o espaçamento volta a ser o py-3 original.
    */
   return (

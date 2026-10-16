@@ -4,8 +4,8 @@ import { VAPID_PUBLIC_KEY } from '../constants';
 
 /**
  * Web Push: inscreve ESTE aparelho pra receber notificação com o app fechado.
- * O envio é feito por /api/push-notify (servidor). No APK (WebView) e em
- * navegadores sem PushManager não há suporte — o aviso continua no app.
+ * O envio é feito por /api/push-notify (servidor). Em navegadores sem
+ * PushManager não há suporte — o aviso continua no app.
  */
 export const pushService = {
   supported() {

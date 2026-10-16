@@ -10,12 +10,8 @@
 export const DAY_MS = 86400000;
 
 // ── Links públicos ──────────────────────────────────────────────────────────
-/**
- * Domínio usado nos links compartilhados (/pix, /extrato, /r).
- * No APK (Capacitor) a origem é https://localhost, que não abre no celular de
- * quem recebe — por isso o domínio publicado (VITE_API_BASE_URL) tem prioridade.
- */
-export const PUBLIC_APP_URL = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '');
+/** Domínio usado nos links compartilhados (/pix, /extrato, /r). */
+export const PUBLIC_APP_URL = window.location.origin;
 
 // ── Web Push ────────────────────────────────────────────────────────────────
 /**

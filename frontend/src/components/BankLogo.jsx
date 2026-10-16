@@ -3,7 +3,7 @@ import { findBank, getBank } from '../constants/banks';
 
 /**
  * Logo de banco brasileiro (lib @edusites/bancos-brasil — SVGs embutidos,
- * funciona offline/no APK).
+ * funciona offline).
  *
  * A lib pesa ~110 KB (todos os SVGs), então é carregada sob demanda uma única
  * vez e compartilhada entre todas as instâncias — não infla o bundle inicial.

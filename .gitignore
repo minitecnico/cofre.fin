@@ -16,17 +16,6 @@
 *.key
 *.cert
 *.crt
-# Assinatura do APK — quem tem o keystore publica update em nome do seu app.
-*.jks
-*.keystore
-keystore.properties
-
-
-# ─── ANDROID / CAPACITOR ────────────────────────────────────
-# O resto (build/, .gradle/, local.properties) já está coberto
-# pelo frontend/android/.gitignore gerado pelo Capacitor.
-frontend/android/app/release/
-frontend/android/app/debug/
 
 
 # ─── DEPENDÊNCIAS ───────────────────────────────────────────

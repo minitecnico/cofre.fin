@@ -19,8 +19,9 @@ export default function Toast({ message, onClose, duration = 4500, icon: Icon = 
   return (
     <AnimatePresence>
       {/*
-        O `top` com safe-area existe por causa do APK: no Android 15 o app desenha
-        edge-to-edge, e um `top-4` cru colocaria o toast por baixo do relógio.
+        O `top` com safe-area existe por causa do app instalado na tela inicial:
+        com a barra de status translúcida, um `top-4` cru colocaria o toast por
+        baixo do relógio.
         No desktop o `md:top-6` continua mandando; no navegador o env() vira 0.
       */}
       {message && (
