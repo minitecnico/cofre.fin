@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
+import PaidDisclosure from '../components/PaidDisclosure';
 import { resolveDebtorStatement } from '../services/cobrancas';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
@@ -45,6 +46,8 @@ export default function DebtorStatement() {
   const wallet = useMemo(() => summarizeCharges(charges), [charges]);
   const groups = useMemo(() => groupCharges(charges), [charges]);
   const months = useMemo(() => groupOpenByMonth(charges), [charges]);
+  const openGroups = groups.filter((g) => g.items.some((c) => !c.paid));
+  const doneGroups = groups.filter((g) => g.items.every((c) => c.paid));
 
   const pickedList = useMemo(() => charges.filter((c) => picked.has(c)), [charges, picked]);
   const pickedTotal = Math.round(pickedList.reduce((s, c) => s + Number(c.amount), 0) * 100) / 100;
@@ -176,26 +179,22 @@ export default function DebtorStatement() {
           </div>
         )}
 
-        {/* Dívidas / parcelas */}
-        {groups.map((g, gi) => (
-          <div key={g.groupId || gi} className="bg-white rounded-2xl shadow-soft overflow-hidden">
-            {g.type === 'installment' && (
-              <GroupHeader items={g.items} canPick={canPay} picked={picked} onToggle={() => toggle(g.items)} />
-            )}
-            <div className="divide-y divide-ink-50">
-              {g.items.map((ch, i) => (
-                <Row
-                  key={i}
-                  charge={ch}
-                  inGroup={g.type === 'installment'}
-                  canPick={canPay}
-                  checked={picked.has(ch)}
-                  onToggle={() => toggle([ch])}
-                />
-              ))}
-            </div>
-          </div>
+        {/* Dívidas em aberto; as quitadas por inteiro ficam recolhidas no fim */}
+        {openGroups.map((g, gi) => (
+          <Block key={g.groupId || gi} group={g} canPick={canPay} picked={picked} toggle={toggle} />
         ))}
+        <PaidDisclosure
+          count={doneGroups.length}
+          total={doneGroups.reduce((s, g) => s + summarizeCharges(g.items).paid, 0)}
+          label={`${doneGroups.length} dívida(s) quitada(s)`}
+          className="bg-white rounded-2xl shadow-soft overflow-hidden"
+        >
+          <div className="p-2 pt-0 space-y-2">
+            {doneGroups.map((g, gi) => (
+              <Block key={g.groupId || gi} group={g} canPick={false} picked={picked} toggle={toggle} flat />
+            ))}
+          </div>
+        </PaidDisclosure>
 
         <p className={`text-center text-[11px] text-ink-400 pt-2 ${canPay ? 'pb-24' : ''}`}>
           Atualizado em tempo real · Gerado pelo app Cofre
@@ -268,6 +267,30 @@ function groupOpenByMonth(charges) {
 function monthLabel(key) {
   const [y, m] = key.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace(' de ', ' ');
+}
+
+/**
+ * Bloco de uma dívida (avulsa ou parcelamento). Parcelas pagas de um
+ * parcelamento em aberto ficam recolhidas — só o que falta pagar aparece.
+ */
+function Block({ group, canPick, picked, toggle, flat = false }) {
+  const inGroup = group.type === 'installment';
+  const open = group.items.filter((c) => !c.paid);
+  const paid = group.items.filter((c) => c.paid);
+  const rows = (list) => list.map((ch, i) => (
+    <Row key={i} charge={ch} inGroup={inGroup} canPick={canPick} checked={picked.has(ch)} onToggle={() => toggle([ch])} />
+  ));
+  return (
+    <div className={`bg-white overflow-hidden ${flat ? 'rounded-xl border border-ink-100' : 'rounded-2xl shadow-soft'}`}>
+      {inGroup && <GroupHeader items={group.items} canPick={canPick} picked={picked} onToggle={() => toggle(group.items)} />}
+      <div className="divide-y divide-ink-50">{rows(open.length ? open : group.items)}</div>
+      {open.length > 0 && (
+        <PaidDisclosure count={paid.length} total={summarizeCharges(paid).paid} label={`${paid.length} parcela(s) paga(s)`} className="border-t border-ink-100">
+          <div className="divide-y divide-ink-50">{rows(paid)}</div>
+        </PaidDisclosure>
+      )}
+    </div>
+  );
 }
 
 function Stat({ label, value, tone = 'text-ink-900' }) {

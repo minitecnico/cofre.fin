@@ -10,6 +10,7 @@ import Stepper from '../components/Stepper';
 import Select from '../components/Select';
 import BankLogo from '../components/BankLogo';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PaidDisclosure from '../components/PaidDisclosure';
 import CobrancaQuickForm from '../components/CobrancaQuickForm';
 import { CardTag, CardSelect } from '../components/CardTag';
 import { useDisclosure } from '../hooks/useDisclosure';
@@ -655,6 +656,12 @@ function DebtorCard({
   const hasDebt = debtor.openCount > 0;
   const wallet = useMemo(() => summarizeCharges(charges), [charges]);
   const groups = useMemo(() => groupCharges(charges), [charges]);
+  const openGroups = groups.filter((g) => g.items.some((x) => !x.paid));
+  const doneGroups = groups.filter((g) => g.items.every((x) => x.paid));
+  const blockProps = {
+    selecting, selected: selectedIds, onToggleSelect, onTogglePaid,
+    onEdit: onEditCharge, onEditGroup, onRemove: onRemoveCharge,
+  };
   const pendingIds = charges.filter((x) => !x.paid).map((x) => x.id);
 
   return (
@@ -742,21 +749,20 @@ function DebtorCard({
                 onDone={onEndSelect}
               />
 
-              {/* Cada cobrança é um bloco. Parcelamento vira um bloco agrupado. */}
+              {/* Cada cobrança é um bloco. Parcelamento vira um bloco agrupado.
+                  Quitadas por inteiro ficam recolhidas no fim (lista enxuta). */}
               <div className="px-3 pb-3 space-y-2">
-                {groups.map((g) => (
-                  <ChargeBlock
-                    key={g.groupId || g.items[0].id}
-                    group={g}
-                    selecting={selecting}
-                    selected={selectedIds}
-                    onToggleSelect={onToggleSelect}
-                    onTogglePaid={onTogglePaid}
-                    onEdit={onEditCharge}
-                    onEditGroup={onEditGroup}
-                    onRemove={onRemoveCharge}
-                  />
-                ))}
+                {openGroups.map((g) => <ChargeBlock key={g.groupId || g.items[0].id} group={g} {...blockProps} />)}
+                <PaidDisclosure
+                  count={doneGroups.length}
+                  total={doneGroups.reduce((s, g) => s + summarizeCharges(g.items).paid, 0)}
+                  label={`${doneGroups.length} quitada(s)`}
+                  className="rounded-xl border border-ink-200 bg-white overflow-hidden"
+                >
+                  <div className="p-2 pt-0 space-y-2">
+                    {doneGroups.map((g) => <ChargeBlock key={g.groupId || g.items[0].id} group={g} {...blockProps} />)}
+                  </div>
+                </PaidDisclosure>
               </div>
             </>
           )}
@@ -849,7 +855,9 @@ function ChargeBlock({ group, selecting, selected, onToggleSelect, onTogglePaid,
 
   // Parcelamento — bloco com cabeçalho (resumo + seleção/edição do grupo) + parcelas
   const items = group.items;
-  const ids = items.filter((x) => !x.paid).map((x) => x.id); // pagas: travadas
+  const openItems = items.filter((x) => !x.paid);
+  const paidItems = items.filter((x) => x.paid);
+  const ids = openItems.map((x) => x.id); // pagas: travadas
   const w = summarizeCharges(items);
   const n = items[0].installment_total || items.length;
   const selCount = ids.filter((id) => selected.has(id)).length;
@@ -878,11 +886,21 @@ function ChargeBlock({ group, selecting, selected, onToggleSelect, onTogglePaid,
           </button>
         )}
       </div>
+      {/* Em aberto visíveis; pagas recolhidas (se o grupo todo está pago, mostra tudo). */}
       <div className="divide-y divide-ink-50">
-        {items.map((ch) => (
+        {(openItems.length ? openItems : items).map((ch) => (
           <ChargeRow key={ch.id} charge={ch} selected={selected.has(ch.id)} onToggleSelect={() => onToggleSelect([ch.id])} {...rowProps} />
         ))}
       </div>
+      {openItems.length > 0 && (
+        <PaidDisclosure count={paidItems.length} total={w.paid} label={`${paidItems.length} parcela(s) paga(s)`} className="border-t border-ink-100">
+          <div className="divide-y divide-ink-50">
+            {paidItems.map((ch) => (
+              <ChargeRow key={ch.id} charge={ch} selected={false} onToggleSelect={() => {}} {...rowProps} />
+            ))}
+          </div>
+        </PaidDisclosure>
+      )}
     </div>
   );
 }
