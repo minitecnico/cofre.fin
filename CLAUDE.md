@@ -72,7 +72,8 @@ frontend/
     │   │                       # recurringService, dashboardService
     │   ├── goals.js            # weeklyChallengeService, goalService, noteService
     │   ├── alerts.js           # service puro: gera lista de alertas
-    │   └── importExport.js     # CSV/XLSX
+    │   ├── importExport.js     # CSV/XLSX
+    │   └── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
     ├── components/
     │   ├── Layout.jsx              # Sidebar + Header + Outlet + BottomNav + FAB
     │   ├── Sidebar.jsx             # desktop md+
@@ -103,6 +104,7 @@ frontend/
     │   ├── Recurring.jsx           # modelos de transações recorrentes
     │   ├── Goals.jsx               # desafio 52 semanas + metas + notas
     │   ├── ImportExport.jsx
+    │   ├── Fipe.jsx                # /fipe — consulta Tabela FIPE (API pública parallelum)
     │   └── Settings.jsx
     ├── constants/
     │   ├── index.js                # constantes do app (prazos, PIX, cartões, PUBLIC_APP_URL)

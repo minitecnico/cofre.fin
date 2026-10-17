@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, FileText, HandCoins } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, FileText, HandCoins, Car } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AlertCenter from './AlertCenter';
 
@@ -13,6 +13,7 @@ const links = [
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
   { to: '/reports', label: 'Relatórios', icon: FileText },
   { to: '/categories', label: 'Categorias', icon: Tag },
+  { to: '/fipe', label: 'Tabela FIPE', icon: Car },
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ];
 

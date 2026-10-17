@@ -13,6 +13,7 @@ import Categories from './pages/Categories';
 import Recurring from './pages/Recurring';
 import Settings from './pages/Settings';
 import Goals from './pages/Goals';
+import Fipe from './pages/Fipe';
 import ImportExport from './pages/ImportExport';
 import RedirectLink from './pages/RedirectLink';
 import PixPay from './pages/PixPay';
@@ -55,6 +56,7 @@ export default function App() {
               <Route path="recurring" element={<Recurring />} />
               <Route path="cards" element={<Cards />} />
               <Route path="categories" element={<Categories />} />
+              <Route path="fipe" element={<Fipe />} />
               <Route path="settings" element={<Settings />} />
               <Route path="goals" element={<Goals />} />
               <Route
