@@ -66,31 +66,6 @@ export const goalService = {
     return data;
   },
 
-  /**
-   * Adiciona um depósito à meta. Se o total atingir/passar o alvo,
-   * marca como completed automaticamente.
-   */
-  async deposit(id, amount) {
-    const { data: goal, error: fetchErr } = await supabase
-      .from('goals')
-      .select('current_amount, target_amount')
-      .eq('id', id)
-      .single();
-    if (fetchErr) throw fetchErr;
-
-    const newAmount = Number(goal.current_amount || 0) + Number(amount);
-    const completed = newAmount >= Number(goal.target_amount);
-
-    const { data, error } = await supabase
-      .from('goals')
-      .update({ current_amount: newAmount, completed })
-      .eq('id', id)
-      .select('*')
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
   /** Retira valor da meta (caso o usuário desistir, etc). */
   async withdraw(id, amount) {
     const { data: goal, error: fetchErr } = await supabase
@@ -154,7 +129,21 @@ export const goalService = {
     if (error) throw error;
   },
 
-  /** Registra um depósito na meta coletiva (soma no total para todos). */
+  /** Depósitos de uma meta (individual ou coletiva), mais recentes primeiro. */
+  async listContributions(goalId) {
+    const { data, error } = await supabase
+      .from('goal_contributions')
+      .select('*')
+      .eq('goal_id', goalId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Registra um depósito (meta individual ou coletiva): grava no histórico e
+   * soma no total; se atingir o alvo, a meta fica completed.
+   */
   async contribute(goalId, amount) {
     const { error } = await supabase.rpc('goal_contribute', { p_goal_id: goalId, p_amount: amount });
     if (error) throw error;

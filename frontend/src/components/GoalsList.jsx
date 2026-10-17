@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Target, Plus, TrendingUp, Calendar, Check, Trash2, Edit2, Calculator,
-  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users,
+  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users, History,
 } from 'lucide-react';
 import { goalService } from '../services/goals';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,7 @@ import GoalSimulator from './GoalSimulator';
 import GoalInvites from './GoalInvites';
 import NickCard from './NickCard';
 import SharedGoalDetails from './SharedGoalDetails';
+import GoalContributionList from './GoalContributionList';
 
 const PRESET_COLORS = [
   '#b8e94e', // accent
@@ -64,6 +65,7 @@ export default function GoalsList() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sharedGoalId, setSharedGoalId] = useState(null);
+  const [historyGoalId, setHistoryGoalId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [depositingGoal, setDepositingGoal] = useState(null);
@@ -90,8 +92,7 @@ export default function GoalsList() {
   }, [load]);
 
   async function handleDeposit(goal, amount) {
-    if (goal.is_shared) await goalService.contribute(goal.id, amount);
-    else await goalService.deposit(goal.id, amount);
+    await goalService.contribute(goal.id, amount);
     setDepositingGoal(null);
     load();
   }
@@ -117,6 +118,7 @@ export default function GoalsList() {
   const completedGoals = goals.filter((g) => g.completed);
   // Busca na lista (e não guarda o objeto) para o modal refletir o Realtime.
   const sharedGoal = goals.find((g) => g.id === sharedGoalId) || null;
+  const historyGoal = goals.find((g) => g.id === historyGoalId) || null;
 
   return (
     <div className="space-y-4">
@@ -160,6 +162,7 @@ export default function GoalsList() {
                 onDelete={() => setConfirmDelete(goal)}
                 onSimulate={() => setSimulatingGoal(goal)}
                 onShared={() => setSharedGoalId(goal.id)}
+                onHistory={() => setHistoryGoalId(goal.id)}
               />
             ))}
           </div>
@@ -179,6 +182,7 @@ export default function GoalsList() {
                     onEdit={() => { setEditing(goal); setCreating(true); }}
                     onDelete={() => setConfirmDelete(goal)}
                     onShared={() => setSharedGoalId(goal.id)}
+                    onHistory={() => setHistoryGoalId(goal.id)}
                   />
                 ))}
               </div>
@@ -230,6 +234,16 @@ export default function GoalsList() {
       </Modal>
 
       <Modal
+        isOpen={!!historyGoal}
+        onClose={() => setHistoryGoalId(null)}
+        title={historyGoal ? `Depósitos · ${historyGoal.title}` : 'Depósitos'}
+      >
+        {historyGoal && (
+          <DepositHistory goalId={historyGoal.id} currentUserId={user?.id} refreshKey={refreshKey} onChanged={load} />
+        )}
+      </Modal>
+
+      <Modal
         isOpen={!!simulatingGoal}
         onClose={() => setSimulatingGoal(null)}
         title="Simular meta"
@@ -272,7 +286,7 @@ export default function GoalsList() {
 // Card de meta individual
 // ─────────────────────────────────────────────────────────────────────────
 
-function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onShared }) {
+function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onShared, onHistory }) {
   const Icon = ICON_MAP[goal.icon] || Target;
   const target = Number(goal.target_amount);
   const current = Number(goal.current_amount);
@@ -336,6 +350,16 @@ function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onSh
               aria-label="Participantes e PIX"
             >
               <Users className="w-4 h-4" />
+            </button>
+          )}
+          {!goal.is_shared && (
+            <button
+              onClick={onHistory}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors"
+              title="Depósitos"
+              aria-label="Ver e editar depósitos"
+            >
+              <History className="w-4 h-4" />
             </button>
           )}
           <button
@@ -415,6 +439,41 @@ function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onSh
           {goal.is_shared ? 'Registrar depósito' : 'Adicionar valor'}
         </button>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Histórico de depósitos (meta individual — a coletiva mostra no próprio modal)
+// ─────────────────────────────────────────────────────────────────────────
+
+function DepositHistory({ goalId, currentUserId, refreshKey, onChanged }) {
+  const [contributions, setContributions] = useState(null);
+  const [error, setError] = useState(null);
+
+  const reload = useCallback(async () => {
+    try {
+      setContributions(await goalService.listContributions(goalId));
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [goalId]);
+
+  useEffect(() => { reload(); }, [reload, refreshKey]);
+
+  if (error) return <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">{error}</div>;
+  if (!contributions) return <div className="h-24 bg-ink-100 animate-pulse rounded-2xl" />;
+
+  return (
+    <div className="space-y-3">
+      <GoalContributionList
+        contributions={contributions}
+        currentUserId={currentUserId}
+        onChanged={async () => { await reload(); onChanged(); }}
+      />
+      <p className="text-[11px] text-ink-400">
+        Valores guardados antes do histórico existir não aparecem aqui — ajuste-os em “Editar” › “Já guardado”.
+      </p>
     </div>
   );
 }
