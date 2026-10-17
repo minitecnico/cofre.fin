@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Car, Loader2 } from 'lucide-react';
 import Select from '../components/Select';
-import { fipeService, FIPE_VEHICLE_TYPES } from '../services/fipe';
+import { fipeService, FIPE_VEHICLE_TYPES, FIPE_DAILY_LIMIT } from '../services/fipe';
 
 /**
  * Tabela FIPE — preço médio de veículos. Escolhas em cascata: tipo → marca →
@@ -20,6 +20,7 @@ export default function FipePage() {
 
   const [loading, setLoading] = useState(null); // 'brands' | 'models' | 'years' | 'price'
   const [error, setError] = useState(null);
+  const [used, setUsed] = useState(fipeService.usedToday);
 
   /**
    * Roda uma consulta marcando o nível que está carregando. Retorna o cleanup
@@ -32,7 +33,10 @@ export default function FipePage() {
     request
       .then((data) => { if (alive) onData(data); })
       .catch((err) => { if (alive) setError(err.message); })
-      .finally(() => { if (alive) setLoading(null); });
+      .finally(() => {
+        setUsed(fipeService.usedToday());
+        if (alive) setLoading(null);
+      });
     return () => { alive = false; };
   }
 
@@ -69,9 +73,17 @@ export default function FipePage() {
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div data-tour="page-header">
-        <p className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">
-          Consulta
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">
+            Consulta
+          </p>
+          <span
+            className={`font-mono text-xs font-bold tabular-nums ${used >= FIPE_DAILY_LIMIT ? 'text-negative' : 'text-ink-400'}`}
+            title="Consultas FIPE hoje neste aparelho"
+          >
+            {used}/{FIPE_DAILY_LIMIT}
+          </span>
+        </div>
         <h1 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mt-1 leading-tight tracking-tight flex items-center gap-2 md:gap-3">
           <Car className="w-7 h-7 md:w-10 md:h-10 flex-shrink-0 text-accent" strokeWidth={2.25} />
           <span>Tabela FIPE</span>
