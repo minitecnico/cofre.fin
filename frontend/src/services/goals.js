@@ -160,6 +160,18 @@ export const goalService = {
     if (error) throw error;
   },
 
+  /** Corrige o valor de um depósito próprio (o total da meta acompanha). */
+  async updateContribution(id, amount) {
+    const { error } = await supabase.rpc('goal_contribution_update', { p_id: id, p_amount: amount });
+    if (error) throw error;
+  },
+
+  /** Exclui um depósito próprio e tira o valor do total da meta. */
+  async removeContribution(id) {
+    const { error } = await supabase.rpc('goal_contribution_delete', { p_id: id });
+    if (error) throw error;
+  },
+
   /** Sair da meta (membro) ou remover um participante (dono). */
   async removeMember(goalId, userId) {
     const { error } = await supabase.from('goal_members').delete().eq('goal_id', goalId).eq('user_id', userId);
