@@ -1,12 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Target, Plus, TrendingUp, Calendar, Check, Trash2, Edit2, Calculator,
-  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift,
+  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users,
 } from 'lucide-react';
 import { goalService } from '../services/goals';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrency, parseAmount, formatDate } from '../utils/format';
+import { PIX_KEY_TYPES } from '../constants';
 import Modal from './Modal';
+import Select from './Select';
 import GoalSimulator from './GoalSimulator';
+import GoalInvites from './GoalInvites';
+import NickCard from './NickCard';
+import SharedGoalDetails from './SharedGoalDetails';
 
 const PRESET_COLORS = [
   '#b8e94e', // accent
@@ -46,30 +52,46 @@ const ICON_PRESETS = [
 /**
  * Painel de Metas — lista todas as metas do usuário e permite criar, editar,
  * depositar/sacar valor e excluir.
+ *
+ * Metas coletivas (is_shared) aparecem para todos os participantes; só o dono
+ * edita/exclui. O canal Realtime recarrega a lista quando alguém deposita,
+ * entra, sai ou convida — por isso o progresso é acompanhado ao vivo.
  */
 export default function GoalsList() {
+  const { user } = useAuth();
   const [goals, setGoals] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [sharedGoalId, setSharedGoalId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [depositingGoal, setDepositingGoal] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [simulatingGoal, setSimulatingGoal] = useState(null);
 
-  async function load() {
-    setLoading(true);
+  // Sem skeleton nos recarregamentos (Realtime) — só no primeiro carregamento.
+  const load = useCallback(async () => {
     try {
-      const data = await goalService.list();
+      const [data, myInvites] = await Promise.all([goalService.list(), goalService.myInvites()]);
       setGoals(data);
+      setInvites(myInvites);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    return goalService.subscribe(() => {
+      load();
+      setRefreshKey((k) => k + 1);
+    });
+  }, [load]);
 
-  async function handleDeposit(goalId, amount) {
-    await goalService.deposit(goalId, amount);
+  async function handleDeposit(goal, amount) {
+    if (goal.is_shared) await goalService.contribute(goal.id, amount);
+    else await goalService.deposit(goal.id, amount);
     setDepositingGoal(null);
     load();
   }
@@ -93,9 +115,14 @@ export default function GoalsList() {
 
   const activeGoals = goals.filter((g) => !g.completed);
   const completedGoals = goals.filter((g) => g.completed);
+  // Busca na lista (e não guarda o objeto) para o modal refletir o Realtime.
+  const sharedGoal = goals.find((g) => g.id === sharedGoalId) || null;
 
   return (
     <div className="space-y-4">
+      <GoalInvites invites={invites} onResponded={load} />
+      <NickCard />
+
       {/* Header / CTA */}
       <div className="flex items-center justify-between">
         <h3 className="font-display text-lg md:text-xl font-bold tracking-tight">
@@ -127,10 +154,12 @@ export default function GoalsList() {
               <GoalCard
                 key={goal.id}
                 goal={goal}
+                isOwner={goal.user_id === user?.id}
                 onDeposit={() => setDepositingGoal(goal)}
                 onEdit={() => { setEditing(goal); setCreating(true); }}
                 onDelete={() => setConfirmDelete(goal)}
                 onSimulate={() => setSimulatingGoal(goal)}
+                onShared={() => setSharedGoalId(goal.id)}
               />
             ))}
           </div>
@@ -145,9 +174,11 @@ export default function GoalsList() {
                   <GoalCard
                     key={goal.id}
                     goal={goal}
+                    isOwner={goal.user_id === user?.id}
                     onDeposit={() => setDepositingGoal(goal)}
                     onEdit={() => { setEditing(goal); setCreating(true); }}
                     onDelete={() => setConfirmDelete(goal)}
+                    onShared={() => setSharedGoalId(goal.id)}
                   />
                 ))}
               </div>
@@ -171,13 +202,29 @@ export default function GoalsList() {
       <Modal
         isOpen={!!depositingGoal}
         onClose={() => setDepositingGoal(null)}
-        title="Adicionar à meta"
+        title={depositingGoal?.is_shared ? 'Registrar depósito' : 'Adicionar à meta'}
       >
         {depositingGoal && (
           <DepositForm
             goal={depositingGoal}
-            onSaved={(amount) => handleDeposit(depositingGoal.id, amount)}
+            onSaved={(amount) => handleDeposit(depositingGoal, amount)}
             onCancel={() => setDepositingGoal(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!sharedGoal}
+        onClose={() => setSharedGoalId(null)}
+        title={sharedGoal ? `Meta coletiva · ${sharedGoal.title}` : 'Meta coletiva'}
+      >
+        {sharedGoal && (
+          <SharedGoalDetails
+            goal={sharedGoal}
+            isOwner={sharedGoal.user_id === user?.id}
+            currentUserId={user?.id}
+            refreshKey={refreshKey}
+            onLeft={() => { setSharedGoalId(null); load(); }}
           />
         )}
       </Modal>
@@ -225,7 +272,7 @@ export default function GoalsList() {
 // Card de meta individual
 // ─────────────────────────────────────────────────────────────────────────
 
-function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
+function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onShared }) {
   const Icon = ICON_MAP[goal.icon] || Target;
   const target = Number(goal.target_amount);
   const current = Number(goal.current_amount);
@@ -269,6 +316,11 @@ function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
                 <Check className="w-3 h-3" strokeWidth={3} /> Pronto
               </span>
             )}
+            {goal.is_shared && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-ink-900 text-white">
+                <Users className="w-3 h-3" strokeWidth={2.5} /> Coletiva
+              </span>
+            )}
           </div>
           {goal.description && (
             <p className="text-xs text-ink-500 mt-0.5 line-clamp-1">{goal.description}</p>
@@ -276,6 +328,16 @@ function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
         </div>
 
         <div className="flex gap-1 flex-shrink-0">
+          {goal.is_shared && (
+            <button
+              onClick={onShared}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors"
+              title="Participantes e PIX"
+              aria-label="Participantes e PIX"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onSimulate}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors"
@@ -284,6 +346,8 @@ function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
           >
             <Calculator className="w-4 h-4" />
           </button>
+          {isOwner && (
+          <>
           <button
             onClick={onEdit}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors"
@@ -298,6 +362,8 @@ function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
           >
             <Trash2 className="w-4 h-4" />
           </button>
+          </>
+          )}
         </div>
       </div>
 
@@ -346,7 +412,7 @@ function GoalCard({ goal, onDeposit, onEdit, onDelete, onSimulate }) {
           className="w-full px-4 py-2.5 min-h-[40px] bg-gradient-dark text-white font-bold rounded-xl text-sm hover:shadow-soft-md active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
         >
           <TrendingUp className="w-4 h-4" />
-          Adicionar valor
+          {goal.is_shared ? 'Registrar depósito' : 'Adicionar valor'}
         </button>
       )}
     </div>
@@ -370,6 +436,13 @@ function GoalForm({ initial, onSaved, onCancel }) {
   const [deadline, setDeadline] = useState(initial?.deadline || '');
   const [color, setColor] = useState(initial?.color || '#b8e94e');
   const [icon, setIcon] = useState(initial?.icon || 'target');
+  const [isShared, setIsShared] = useState(initial?.is_shared || false);
+  const [pixKeyType, setPixKeyType] = useState(initial?.pix_key_type || 'cpf');
+  const [pixKey, setPixKey] = useState(initial?.pix_key || '');
+  const [pixName, setPixName] = useState(initial?.pix_name || '');
+  const [pixCity, setPixCity] = useState(initial?.pix_city || '');
+  // Em meta coletiva o total vem dos depósitos registrados — não se edita à mão.
+  const lockCurrent = isEdit && initial.is_shared;
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -386,10 +459,19 @@ function GoalForm({ initial, onSaved, onCancel }) {
         current_amount: parseAmount(currentAmount) || 0,
         deadline: deadline || null,
         color, icon,
+        is_shared: isShared,
+        pix_key: isShared ? pixKey.trim() || null : null,
+        pix_key_type: isShared ? pixKeyType : null,
+        pix_name: isShared ? pixName.trim() || null : null,
+        pix_city: isShared ? pixCity.trim() || null : null,
       };
+      if (lockCurrent) delete payload.current_amount;
       if (!payload.title) throw new Error('Informe um título');
       if (!payload.target_amount || payload.target_amount <= 0) {
         throw new Error('Informe um valor alvo válido');
+      }
+      if (isShared && (!payload.pix_key || !payload.pix_name || !payload.pix_city)) {
+        throw new Error('Informe a chave PIX, o titular e a cidade da conta da meta');
       }
 
       if (isEdit) {
@@ -448,6 +530,7 @@ function GoalForm({ initial, onSaved, onCancel }) {
           </div>
         </div>
 
+        {!lockCurrent && (
         <div>
           <label className="label">Já guardado{!isEdit && ' (opcional)'}</label>
           <div className="relative">
@@ -462,6 +545,7 @@ function GoalForm({ initial, onSaved, onCancel }) {
             />
           </div>
         </div>
+        )}
       </div>
 
       <div>
@@ -472,6 +556,47 @@ function GoalForm({ initial, onSaved, onCancel }) {
           onChange={(e) => setDeadline(e.target.value)}
           className="input-field"
         />
+      </div>
+
+      {/* Meta coletiva — uma vez compartilhada, não volta a ser individual */}
+      <div className="rounded-xl bg-ink-50 p-3 space-y-3">
+        <label className={`flex items-start gap-3 ${initial?.is_shared ? '' : 'cursor-pointer'}`}>
+          <input
+            type="checkbox"
+            checked={isShared}
+            onChange={(e) => setIsShared(e.target.checked)}
+            disabled={initial?.is_shared}
+            className="mt-1 w-4 h-4 accent-ink-900"
+          />
+          <span>
+            <span className="font-bold text-sm flex items-center gap-1.5"><Users className="w-4 h-4" /> Meta coletiva</span>
+            <span className="block text-xs text-ink-500">
+              Junte dinheiro com outras pessoas (ex.: viagem do casal). Cada um entra com o próprio login
+              depois de aceitar o convite e acompanha o progresso em tempo real.
+            </span>
+          </span>
+        </label>
+
+        {isShared && (
+          <div className="space-y-3 animate-slide-up">
+            <p className="text-xs font-bold text-ink-700">Conta onde todos vão depositar via PIX</p>
+            <Select label="Tipo da chave" value={pixKeyType} onChange={setPixKeyType} options={PIX_KEY_TYPES} />
+            <div>
+              <label className="label">Chave PIX</label>
+              <input className="input-field" value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="Chave da conta da meta" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Titular da conta</label>
+                <input className="input-field" value={pixName} onChange={(e) => setPixName(e.target.value)} placeholder="Como aparece no PIX" />
+              </div>
+              <div>
+                <label className="label">Cidade</label>
+                <input className="input-field" value={pixCity} onChange={(e) => setPixCity(e.target.value)} placeholder="Ex: Recife" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div>
@@ -569,7 +694,7 @@ function DepositForm({ goal, onSaved, onCancel }) {
       </div>
 
       <div>
-        <label className="label">Quanto guardou agora?</label>
+        <label className="label">{goal.is_shared ? 'Quanto você depositou no PIX da meta?' : 'Quanto guardou agora?'}</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-500 font-mono pointer-events-none">R$</span>
           <input

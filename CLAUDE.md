@@ -178,6 +178,7 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 - **`transactions`** — `user_id`, `type`, `amount`, `description`, `date`, `category_id`, `credit_card_id?`, `paid`, `installment_total?`, `installment_number?`, `installment_group_id?`, `recurring_id?`.
 - **`recurring_transactions`** — modelos: `day_of_month`, `start_month`, `kind`, `active`.
 - Tabelas de Goals: `weekly_challenges`, `goals`, `notes` (ver `services/goals.js`).
+- **Metas coletivas** (`migration_goals_shared.sql`): `goals.is_shared` + `pix_*` (conta onde todos depositam), `profiles` (@nick único por usuário, `profileService`), `goal_members`, `goal_invites` (convite pelo @nick dentro do app, aceito pelo convidado), `goal_contributions`. Exceção à policy única: participantes **leem** a meta via `is_goal_member()`; convidar/aceitar/depositar só por RPC (`invite_to_goal`, `respond_goal_invite`, `goal_contribute`). Realtime ligado nas 4 tabelas.
 
 ### RLS
 
