@@ -6,9 +6,10 @@ import TransactionList from '../components/TransactionList';
 import Modal from '../components/Modal';
 import TransactionForm from '../components/TransactionForm';
 import BatchTransactionForm from '../components/BatchTransactionForm';
+import ConfirmDialog from '../components/ConfirmDialog';
 import MonthSelector from '../components/MonthSelector';
 import { useDisclosure } from '../hooks/useDisclosure';
-import { formatCurrency, parseLoanInfo } from '../utils/format';
+import { formatCurrency, formatDate, parseLoanInfo } from '../utils/format';
 import { useMonth } from '../context/MonthContext';
 
 export default function TransactionListPage({ type = 'income' }) {
@@ -17,6 +18,7 @@ export default function TransactionListPage({ type = 'income' }) {
   const { isOpen, open, close } = useDisclosure();
   const [searchTerm, setSearchTerm] = useState('');
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
+  const [confirmReq, setConfirmReq] = useState(null);
 
   // Filtros via URL (deep linking) — vindos da página de Recorrências/Empréstimos:
   //   ?recurringId=UUID       → só transações geradas pelo modelo X
@@ -36,6 +38,26 @@ export default function TransactionListPage({ type = 'income' }) {
     // Quando filtra por recurring/installment, mostra histórico inteiro
     ...(hasDeepFilter ? { startDate: null, endDate: null } : {}),
   });
+
+  // ── Trava de pagamento (mesma de Cobranças) ─────────────────────────
+  // Marcar como pago é imediato. Já PAGA fica travada: desmarcar exige
+  // confirmação, pra um toque sem querer não voltar a despesa pra pendente.
+  function handleTogglePaid(id, currentPaid) {
+    if (!currentPaid) { togglePaid(id, false); return; }
+    const t = items.find((i) => i.id === id);
+    setConfirmReq({
+      title: 'Desmarcar pagamento?',
+      message: (
+        <>
+          <b className="text-ink-900">{t?.description || 'Esta despesa'}</b> ({formatCurrency(t?.amount)}
+          {t?.date ? <>, {formatDate(t.date, 'long')}</> : null}) está marcada como paga.
+          {' '}Ela volta a ficar pendente.
+        </>
+      ),
+      confirmLabel: 'Desmarcar pagamento',
+      onConfirm: () => togglePaid(id, true),
+    });
+  }
 
   function clearDeepFilter() {
     const next = new URLSearchParams(searchParams);
@@ -322,7 +344,7 @@ export default function TransactionListPage({ type = 'income' }) {
         loading={loading}
         onChange={refresh}
         onDelete={remove}
-        onTogglePaid={togglePaid}
+        onTogglePaid={handleTogglePaid}
         emptyMessage={
           searchTerm
             ? `Nenhuma ${isIncome ? 'receita' : 'despesa'} encontrada para "${searchTerm}".`
@@ -364,6 +386,8 @@ export default function TransactionListPage({ type = 'income' }) {
           />
         )}
       </Modal>
+
+      <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>
   );
 }
