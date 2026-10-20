@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ArrowUpCircle, ArrowDownCircle, Plus, Search, X, Filter } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, Plus, Search, X, Filter, Check } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useTransactions } from '../hooks/useTransactions';
 import TransactionList from '../components/TransactionList';
@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import TransactionForm from '../components/TransactionForm';
 import BatchTransactionForm from '../components/BatchTransactionForm';
 import MonthSelector from '../components/MonthSelector';
+import MonthBalance from '../components/MonthBalance';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { formatCurrency, parseLoanInfo } from '../utils/format';
 import { useMonth } from '../context/MonthContext';
@@ -28,7 +29,7 @@ export default function TransactionListPage({ type = 'income' }) {
   const installmentGroup = searchParams.get('installmentGroup');
   const hasDeepFilter = !!(recurringId || installmentGroup);
 
-  const { items, total, loading, refresh, remove, togglePaid } = useTransactions({
+  const { items, loading, refresh, remove, togglePaid } = useTransactions({
     type,
     limit: 200,
     ...(recurringId ? { recurringId } : {}),
@@ -84,11 +85,6 @@ export default function TransactionListPage({ type = 'income' }) {
   }, [items, searchTerm]);
 
   const totalAmount = filteredItems.reduce((s, t) => s + Number(t.amount), 0);
-
-  const pendingCount = !isIncome ? filteredItems.filter((t) => !t.paid).length : 0;
-  const pendingTotal = !isIncome
-    ? filteredItems.filter((t) => !t.paid).reduce((s, t) => s + Number(t.amount), 0)
-    : 0;
 
   // Quando filtrando por installmentGroup (parcelas de um financiamento/empréstimo),
   // calculamos as métricas específicas: valor financiado, em aberto, juros e
@@ -242,56 +238,9 @@ export default function TransactionListPage({ type = 'income' }) {
           </div>
         </div>
       ) : (
-        <div
-          className={`grid gap-3 md:gap-5 grid-cols-1 ${
-            isIncome ? '' : 'md:grid-cols-2'
-          }`}
-        >
-          <div
-            className={`rounded-2xl shadow-soft p-4 md:p-6 ${
-              isIncome
-                ? 'bg-accent text-ink-950 border border-accent-dark/30'
-                : 'bg-ink-950 text-white border border-hairline-strong'
-            }`}
-          >
-            <p
-              className={`text-[10px] md:text-xs uppercase font-semibold tracking-widest ${
-                isIncome ? 'text-ink-700' : 'text-ink-400'
-              }`}
-            >
-              Total {isIncome ? 'recebido' : 'gasto'} no mês
-              {searchTerm && <span className="ml-1 normal-case">· filtrado</span>}
-            </p>
-            <p className="stat-number text-3xl md:text-4xl mt-2 md:mt-3 break-all">
-              {formatCurrency(totalAmount)}
-            </p>
-            <p className={`text-xs md:text-sm mt-2 ${isIncome ? 'text-ink-700' : 'text-ink-400'}`}>
-              {filteredItems.length} {filteredItems.length === 1 ? 'transação' : 'transações'}
-              {searchTerm && total !== filteredItems.length && (
-                <span> de {total}</span>
-              )}
-            </p>
-          </div>
-
-          {!isIncome && (
-            <div className="feature-card p-4 md:p-6">
-              <p className="text-[10px] md:text-xs uppercase font-semibold tracking-widest text-ink-500">
-                Ainda a pagar
-              </p>
-              <p
-                className={`stat-number text-3xl md:text-4xl mt-2 md:mt-3 break-all ${
-                  pendingTotal > 0 ? 'text-negative' : 'text-positive'
-                }`}
-              >
-                {formatCurrency(pendingTotal)}
-              </p>
-              <p className="text-xs md:text-sm mt-2 text-ink-500">
-                {pendingCount === 0
-                  ? '✓ Tudo pago'
-                  : `${pendingCount} ${pendingCount === 1 ? 'pendente' : 'pendentes'}`}
-              </p>
-            </div>
-          )}
+        <div className="space-y-3">
+          <MonthBalance refreshKey={items} />
+          {!isIncome && <PaymentProgress items={items} />}
         </div>
       )}
 
@@ -315,6 +264,12 @@ export default function TransactionListPage({ type = 'income' }) {
           </button>
         )}
       </div>
+      {searchTerm && (
+        <p className="-mt-2 px-1 text-xs text-ink-500">
+          {filteredItems.length} {filteredItems.length === 1 ? 'resultado' : 'resultados'} · total{' '}
+          <b className="text-ink-900 tabular-nums">{formatCurrency(totalAmount)}</b>
+        </p>
+      )}
 
       {/* Lista */}
       <TransactionList
@@ -365,6 +320,42 @@ export default function TransactionListPage({ type = 'income' }) {
         )}
       </Modal>
 
+    </div>
+  );
+}
+
+/**
+ * Despesas do mês: quanto já foi pago e quanto falta (toda a lista do mês,
+ * sem o filtro da busca).
+ */
+function PaymentProgress({ items }) {
+  const sum = (list) => list.reduce((acc, t) => acc + Number(t.amount), 0);
+  const paid = items.filter((t) => t.paid);
+  const pending = items.filter((t) => !t.paid);
+  const total = sum(items);
+  const pct = total > 0 ? Math.round((sum(paid) / total) * 100) : 0;
+
+  return (
+    <div className="card-flat p-4 md:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] md:text-[11px] uppercase font-semibold tracking-widest text-ink-500">Pagamento das despesas</p>
+        <p className="text-xs font-bold text-ink-900 tabular-nums">{pct}% pago</p>
+      </div>
+      <div className="h-2 rounded-full bg-ink-100 overflow-hidden mt-2.5">
+        <div className="h-full rounded-full bg-positive transition-all duration-500" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mt-2.5 text-xs text-ink-500 tabular-nums">
+        <span>
+          Pago <b className="text-positive">{formatCurrency(sum(paid))}</b> · {paid.length} {paid.length === 1 ? 'despesa' : 'despesas'}
+        </span>
+        {pending.length === 0 ? (
+          <span className="inline-flex items-center gap-1 font-bold text-positive"><Check className="w-3.5 h-3.5" strokeWidth={3} /> Tudo pago</span>
+        ) : (
+          <span>
+            Ainda a pagar <b className="text-negative">{formatCurrency(sum(pending))}</b> · {pending.length} {pending.length === 1 ? 'pendente' : 'pendentes'}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
