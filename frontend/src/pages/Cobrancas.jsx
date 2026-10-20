@@ -1585,6 +1585,9 @@ function EditGroupModal({ group, cards, onClose, onSave }) {
   );
 }
 
+/** Botão secundário do modal da central: mesmo formato do btn-accent, em contorno. */
+const SECONDARY_BTN = 'inline-flex items-center justify-center gap-1.5 min-h-[48px] px-3 rounded-full border border-ink-300 bg-white text-ink-900 font-bold text-sm md:text-base whitespace-nowrap shadow-soft hover:bg-ink-50 hover:border-ink-400 active:scale-[0.98] transition-all duration-200';
+
 // ── Modal: enviar extrato (link público ao vivo) ───────────────
 function ShareStatementModal({ debtor, charges, getLink, onClose }) {
   const [link, setLink] = useState('');
@@ -1682,18 +1685,11 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
             {/* Link */}
             <div>
               <p className="label">Link da central</p>
-              <div className="flex items-center gap-1 rounded-xl border border-ink-200 bg-ink-50 pl-3 pr-1 py-1">
+              <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 min-h-[44px]">
                 <Link2 className="w-4 h-4 text-ink-400 flex-shrink-0" />
-                <span className="text-xs text-ink-700 truncate flex-1 min-w-0 ml-1" title={link}>
+                <span className="text-xs text-ink-700 truncate flex-1 min-w-0" title={link}>
                   {link.replace(/^https?:\/\//, '')}
                 </span>
-                <button
-                  onClick={copy}
-                  className="h-10 px-3 rounded-lg bg-white shadow-soft text-ink-800 font-bold text-xs hover:bg-ink-100 flex items-center gap-1.5 flex-shrink-0 transition-colors"
-                >
-                  {copied ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
-                  {copied ? 'Copiado' : 'Copiar'}
-                </button>
               </div>
               {expiresAt && (
                 <p className="flex items-start gap-1.5 text-[11px] text-ink-500 mt-2 leading-snug">
@@ -1706,26 +1702,28 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
               )}
             </div>
 
-            {/* Ações: enviar ao devedor e conferir o extrato como ele vai ver */}
+            {/* Ações — mesmo formato (pílula, 48px): WhatsApp é a principal;
+                copiar, abrir e compartilhar são secundárias e idênticas. */}
             <div className="space-y-2">
               <div className="flex gap-2">
-                <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1 min-h-[48px] flex items-center justify-center gap-2">
+                <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1">
                   <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp
                 </a>
                 {typeof navigator !== 'undefined' && navigator.share && (
-                  <button onClick={share} className="btn-ghost min-h-[48px] w-12 px-0 flex items-center justify-center" title="Compartilhar" aria-label="Compartilhar">
-                    <Share2 className="w-4 h-4" />
+                  <button onClick={share} className={`${SECONDARY_BTN} w-12 !px-0 flex-shrink-0`} title="Compartilhar" aria-label="Compartilhar">
+                    <Share2 className="w-5 h-5" />
                   </button>
                 )}
               </div>
-              <a
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full min-h-[48px] px-6 rounded-full border border-ink-300 bg-white text-ink-900 font-bold text-sm md:text-base shadow-soft hover:bg-ink-50 hover:border-ink-400 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="w-5 h-5" /> Abrir central
-              </a>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={copy} className={SECONDARY_BTN}>
+                  {copied ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copiado!' : 'Copiar link'}
+                </button>
+                <a href={link} target="_blank" rel="noopener noreferrer" className={SECONDARY_BTN}>
+                  <ExternalLink className="w-4 h-4" /> Abrir central
+                </a>
+              </div>
             </div>
 
             {/* Trocar o link — invalida o anterior, por isso fica separado */}
