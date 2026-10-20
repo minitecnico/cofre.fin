@@ -181,6 +181,7 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 - **`recurring_transactions`** — modelos: `day_of_month`, `start_month`, `kind`, `active`.
 - Tabelas de Goals: `weekly_challenges`, `goals`, `notes` (ver `services/goals.js`).
 - **Metas coletivas** (`migration_goals_shared.sql`): `goals.is_shared` + `pix_*` (conta onde todos depositam), `profiles` (@nick único por usuário, `profileService`), `goal_members`, `goal_invites` (convite pelo @nick dentro do app, aceito pelo convidado), `goal_contributions`. Exceção à policy única: participantes **leem** a meta via `is_goal_member()`; convidar/aceitar/depositar só por RPC (`invite_to_goal`, `respond_goal_invite`, `goal_contribute`; editar/excluir o próprio depósito: `goal_contribution_update`/`_delete` em `migration_goals_contrib_edit.sql`; desde `migration_goals_contrib_personal.sql` metas individuais também gravam depósitos em `goal_contributions`). Realtime ligado nas 4 tabelas.
+- **Comprovantes de PIX das metas** (`migration_goal_receipts.sql`, `goalReceiptService`): tabela `goal_receipts` + bucket privado `goal-receipts` (`{quem enviou}/{goal_id}/{uuid}.{ext}`). Dono e participantes enviam e veem; só o dono da meta exclui (RLS da tabela e do Storage). Excluir: arquivo antes da linha — a policy do Storage libera o dono pela linha.
 
 ### RLS
 

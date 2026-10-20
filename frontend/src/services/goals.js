@@ -242,6 +242,7 @@ export const RECEIPT_ACCEPT = Object.keys(RECEIPT_EXT).join(',');
 /**
  * Arquivos ficam no bucket privado 'goal-receipts' (migration_goal_receipts.sql)
  * e a tabela goal_receipts guarda o path + valor do PIX, quando informado.
+ * Em meta coletiva todos os participantes enviam e veem; só o dono exclui.
  */
 export const goalReceiptService = {
   /** Comprovantes da meta (mais recentes primeiro), cada um com `url` assinada válida por 1h. */
@@ -299,10 +300,15 @@ export const goalReceiptService = {
     return data;
   },
 
+  /**
+   * Só o dono da meta consegue (RLS). Arquivo antes da linha: a policy do
+   * Storage libera o dono justamente pela linha em goal_receipts.
+   */
   async remove(receipt) {
+    const { error: rmErr } = await supabase.storage.from(RECEIPTS_BUCKET).remove([receipt.file_path]);
+    if (rmErr) throw rmErr;
     const { error } = await supabase.from('goal_receipts').delete().eq('id', receipt.id);
     if (error) throw error;
-    await supabase.storage.from(RECEIPTS_BUCKET).remove([receipt.file_path]);
   },
 };
 

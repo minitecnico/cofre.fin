@@ -6,8 +6,11 @@ import { formatCurrency, formatDate } from '../utils/format';
 /**
  * Comprovantes de PIX de uma meta — lista, abre, exclui e envia avulso
  * (ex.: PIX feito antes de existir o campo no depósito, ou meta já concluída).
+ *
+ * Em meta coletiva todos enviam e veem (com o nome de quem enviou); excluir é
+ * só do dono (`canDelete`) — o RLS garante o mesmo no banco.
  */
-export default function GoalReceipts({ goal }) {
+export default function GoalReceipts({ goal, canDelete }) {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -112,13 +115,16 @@ export default function GoalReceipts({ goal }) {
                     {r.amount != null ? formatCurrency(r.amount) : r.file_name}
                   </p>
                   <p className="text-xs text-ink-500 truncate">
-                    {formatDate(new Date(r.created_at), 'long')}
-                    {r.amount != null && ` · ${r.file_name}`}
+                    {[
+                      goal.is_shared && r.display_name,
+                      formatDate(new Date(r.created_at), 'long'),
+                      r.amount != null && r.file_name,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
               </a>
 
-              {confirmingId === r.id ? (
+              {!canDelete ? null : confirmingId === r.id ? (
                 <div className="flex gap-1 flex-shrink-0">
                   <button
                     onClick={() => handleRemove(r)}
@@ -147,6 +153,10 @@ export default function GoalReceipts({ goal }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {!canDelete && receipts.length > 0 && (
+        <p className="text-[11px] text-ink-400">Só quem criou a meta pode excluir comprovantes.</p>
       )}
     </div>
   );

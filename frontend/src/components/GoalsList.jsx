@@ -218,7 +218,6 @@ export default function GoalsList() {
         {depositingGoal && (
           <DepositForm
             goal={depositingGoal}
-            canAttach={depositingGoal.user_id === user?.id}
             onSaved={(amount, receipt) => handleDeposit(depositingGoal, amount, receipt)}
             onCancel={() => setDepositingGoal(null)}
           />
@@ -256,7 +255,9 @@ export default function GoalsList() {
         onClose={() => setReceiptsGoal(null)}
         title="Comprovantes de PIX"
       >
-        {receiptsGoal && <GoalReceipts goal={receiptsGoal} />}
+        {receiptsGoal && (
+          <GoalReceipts goal={receiptsGoal} canDelete={receiptsGoal.user_id === user?.id} />
+        )}
       </Modal>
 
       <Modal
@@ -459,17 +460,14 @@ function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onSh
             {goal.is_shared ? 'Registrar depósito' : 'Adicionar valor'}
           </button>
         )}
-        {/* Só o dono: o RLS de goal_receipts ainda não libera participantes de meta coletiva. */}
-        {isOwner && (
-          <button
-            onClick={onReceipts}
-            className={`${isComplete ? 'flex-1' : ''} px-3 py-2.5 min-h-[40px] bg-ink-100 text-ink-700 font-bold rounded-xl text-sm hover:bg-ink-200 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2`}
-            title="Comprovantes de PIX"
-          >
-            <Paperclip className="w-4 h-4" />
-            Comprovantes
-          </button>
-        )}
+        <button
+          onClick={onReceipts}
+          className={`${isComplete ? 'flex-1' : ''} px-3 py-2.5 min-h-[40px] bg-ink-100 text-ink-700 font-bold rounded-xl text-sm hover:bg-ink-200 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2`}
+          title="Comprovantes de PIX"
+        >
+          <Paperclip className="w-4 h-4" />
+          Comprovantes
+        </button>
       </div>
     </div>
   );
@@ -747,7 +745,7 @@ function GoalForm({ initial, onSaved, onCancel }) {
   );
 }
 
-function DepositForm({ goal, canAttach, onSaved, onCancel }) {
+function DepositForm({ goal, onSaved, onCancel }) {
   const [amount, setAmount] = useState('');
   const [receipt, setReceipt] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -801,7 +799,6 @@ function DepositForm({ goal, canAttach, onSaved, onCancel }) {
         </div>
       </div>
 
-      {canAttach && (
       <div>
         <label className="label">Comprovante do PIX (opcional)</label>
         {receipt ? (
@@ -830,7 +827,6 @@ function DepositForm({ goal, canAttach, onSaved, onCancel }) {
           </label>
         )}
       </div>
-      )}
 
       {value > 0 && (
         <div className={`px-4 py-3 rounded-xl ${willComplete ? 'bg-gradient-accent text-ink-900' : 'bg-ink-50'}`}>
