@@ -1585,7 +1585,7 @@ function EditGroupModal({ group, cards, onClose, onSave }) {
   );
 }
 
-/** Botão secundário do modal da central: mesmo formato do btn-accent, em contorno. */
+/** Botão secundário do modal da central: pílula em contorno, ao lado da principal (btn-accent). */
 const SECONDARY_BTN = 'inline-flex items-center justify-center gap-1.5 min-h-[48px] px-3 rounded-full border border-ink-300 bg-white text-ink-900 font-bold text-sm md:text-base whitespace-nowrap shadow-soft hover:bg-ink-50 hover:border-ink-400 active:scale-[0.98] transition-all duration-200';
 
 // ── Modal: enviar extrato (link público ao vivo) ───────────────
@@ -1624,10 +1624,6 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
 
   async function copy() {
     try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
-  }
-
-  async function share() {
-    try { await navigator.share({ title: 'Extrato de cobrança', text: message }); } catch { /* cancelado */ }
   }
 
   return (
@@ -1675,60 +1671,43 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
           </p>
         ) : !link ? (
           <div className="space-y-2">
-            <div className="h-[52px] rounded-xl bg-ink-50 flex items-center justify-center">
+            <div className="h-[52px] rounded-full bg-ink-50 flex items-center justify-center">
               <Loader2 className="w-5 h-5 animate-spin text-ink-400" />
             </div>
-            <div className="h-12 rounded-xl bg-ink-50 animate-pulse" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-12 rounded-full bg-ink-50 animate-pulse" />
+              <div className="h-12 rounded-full bg-ink-50 animate-pulse" />
+            </div>
           </div>
         ) : (
           <div className="space-y-4 animate-slide-up">
-            {/* Link */}
-            <div>
-              <p className="label">Link da central</p>
-              <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 min-h-[44px]">
-                <Link2 className="w-4 h-4 text-ink-400 flex-shrink-0" />
-                <span className="text-xs text-ink-700 truncate flex-1 min-w-0" title={link}>
-                  {link.replace(/^https?:\/\//, '')}
-                </span>
-              </div>
-              {expiresAt && (
-                <p className="flex items-start gap-1.5 text-[11px] text-ink-500 mt-2 leading-snug">
-                  <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>
-                    Válido até <b className="text-ink-700">{formatDate(new Date(expiresAt), 'long')}</b>.
-                    {' '}Deixa de abrir quando tudo for pago.
-                  </span>
-                </p>
-              )}
-            </div>
-
-            {/* Ações — mesmo formato (pílula, 48px): WhatsApp é a principal;
-                copiar, abrir e compartilhar são secundárias e idênticas. */}
+            {/* Ações: abrir é a principal; copiar e WhatsApp, secundárias iguais */}
             <div className="space-y-2">
-              <div className="flex gap-2">
-                <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1">
-                  <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp
-                </a>
-                {typeof navigator !== 'undefined' && navigator.share && (
-                  <button onClick={share} className={`${SECONDARY_BTN} w-12 !px-0 flex-shrink-0`} title="Compartilhar" aria-label="Compartilhar">
-                    <Share2 className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
+              <a href={link} target="_blank" rel="noopener noreferrer" className="btn-accent w-full min-h-[52px]">
+                <ExternalLink className="w-5 h-5" /> Abrir central de pagamentos
+              </a>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={copy} className={SECONDARY_BTN}>
                   {copied ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
                   {copied ? 'Copiado!' : 'Copiar link'}
                 </button>
-                <a href={link} target="_blank" rel="noopener noreferrer" className={SECONDARY_BTN}>
-                  <ExternalLink className="w-4 h-4" /> Abrir central
+                <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className={SECONDARY_BTN}>
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="sm:hidden">WhatsApp</span>
+                  <span className="hidden sm:inline">Enviar no WhatsApp</span>
                 </a>
               </div>
             </div>
 
-            {/* Trocar o link — invalida o anterior, por isso fica separado */}
+            {/* Validade + trocar o link (invalida o anterior, por isso fica à parte) */}
             <div className="flex items-center justify-between gap-3 pt-4 border-t border-ink-100">
-              <p className="text-[11px] text-ink-500 leading-snug">Um link novo desativa o atual.</p>
+              <p className="flex items-start gap-1.5 text-[11px] text-ink-500 leading-snug min-w-0">
+                <Clock className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                <span>
+                  {expiresAt && <>Válido até <b className="text-ink-700">{formatDate(new Date(expiresAt), 'long')}</b>. </>}
+                  Um link novo desativa o atual.
+                </span>
+              </p>
               <button
                 onClick={() => load(true)}
                 disabled={state === 'loading'}
