@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Paperclip, FileText, Trash2, Loader2, X } from 'lucide-react';
-import { goalReceiptService, RECEIPT_ACCEPT } from '../services/goals';
+import { goalReceiptService } from '../services/goals';
+import { RECEIPT_ACCEPT } from '../constants';
 import { formatCurrency, formatDate } from '../utils/format';
 
 /**

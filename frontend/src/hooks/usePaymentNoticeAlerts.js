@@ -9,8 +9,8 @@ import { debtorCode } from '../utils/charges';
 export const PAYMENT_NOTICE_EVENT = 'cofre:payment-notice';
 
 /**
- * Escuta, em qualquer tela do app, os avisos de pagamento que os devedores
- * geram no extrato público. A cada aviso novo: chama `onNotice(texto)` (toast),
+ * Escuta, em qualquer tela do app, os avisos de pagamento (e os comprovantes)
+ * que os devedores enviam pelo extrato público. A cada um: chama `onNotice(texto)` (toast),
  * mostra notificação do sistema (se autorizada) e avisa a tela de Cobranças.
  *
  * Sem a migration (tabela inexistente) a inscrição simplesmente não recebe nada.
@@ -37,6 +37,28 @@ export function usePaymentNoticeAlerts(onNotice) {
         title: 'Aviso de pagamento',
         body: `${text}.`,
         tag: `cofre-pagamento-${notice.id}`,
+        url: '/cobrancas',
+      });
+      window.dispatchEvent(new CustomEvent(PAYMENT_NOTICE_EVENT, { detail: notice }));
+    });
+    return unsubscribe;
+  }, [onNotice]);
+
+  // Comprovante do banco que o devedor enviou pelo extrato.
+  useEffect(() => {
+    const unsubscribe = paymentNoticeService.subscribeReceipts(async (row) => {
+      let notice = null;
+      try { notice = await paymentNoticeService.get(row.notice_id); } catch { /* segue sem o nome */ }
+      const who = notice?.debtor
+        ? `${notice.debtor.name}${notice.debtor.code ? ` ${debtorCode(notice.debtor.code)}` : ''}`
+        : 'Um devedor';
+      const text = `${who} enviou o comprovante do PIX${notice ? ` de ${formatCurrency(notice.amount)}` : ''}`;
+
+      onNotice?.(`📎 ${text} — confira em Cobranças`);
+      showSystemNotification({
+        title: 'Comprovante de pagamento',
+        body: `${text}.`,
+        tag: `cofre-comprovante-${row.id}`,
         url: '/cobrancas',
       });
       window.dispatchEvent(new CustomEvent(PAYMENT_NOTICE_EVENT, { detail: notice }));

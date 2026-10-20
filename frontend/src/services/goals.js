@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { RECEIPT_EXT, RECEIPT_MAX_BYTES } from '../constants';
 
 /**
  * Service unificado para a página Objetivos:
@@ -228,16 +229,6 @@ export const profileService = {
 // ═════════════════════════════════════════════════════════════════════════
 
 const RECEIPTS_BUCKET = 'goal-receipts';
-const RECEIPT_EXT = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-};
-const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
-
-/** Valor do `accept` do <input type="file">. Sem HEIC: o iOS converte a foto pra JPEG. */
-export const RECEIPT_ACCEPT = Object.keys(RECEIPT_EXT).join(',');
 
 /**
  * Arquivos ficam no bucket privado 'goal-receipts' (migration_goal_receipts.sql)

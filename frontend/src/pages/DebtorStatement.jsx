@@ -2,18 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Loader2, Copy, Check, FileWarning, QrCode, Lock, AlertTriangle, ReceiptText, Minus,
-  KeyRound, CalendarDays, Smartphone, BellRing,
+  KeyRound, CalendarDays, Smartphone, BellRing, Paperclip,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
 import PaidDisclosure from '../components/PaidDisclosure';
-import { resolveDebtorStatement, notifyPayment } from '../services/cobrancas';
+import { resolveDebtorStatement, notifyPayment, sendPaymentReceipt } from '../services/cobrancas';
 import { requestPaymentPush } from '../services/push';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
 import { BANKS_WITH_APP, findBank } from '../constants/banks';
-import { PIX_KEY_TYPES } from '../constants';
+import { PIX_KEY_TYPES, RECEIPT_ACCEPT } from '../constants';
 
 /**
  * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
@@ -253,7 +253,7 @@ export default function DebtorStatement() {
       <Modal isOpen={payOpen} onClose={() => setPayOpen(false)} title="Pagar via PIX">
         {payOpen && (
           <PayStep pix={data.pix} amount={pickedTotal} items={pickedList} payload={payload} copiedOnOpen={copied}
-            notified={notified} ownerName={data.owner_name} />
+            notified={notified} ownerName={data.owner_name} code={code} />
         )}
       </Modal>
     </div>
@@ -427,7 +427,7 @@ function androidAppLink(pkg) {
  * Passo 2: código já copiado (com valor) → abrir o app do banco → colar.
  * QR fica recolhido (útil se for pagar por outro aparelho).
  */
-function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName }) {
+function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName, code }) {
   const [copied, setCopied] = useState(copiedOnOpen ? 'code' : '');
   const [showQr, setShowQr] = useState(HAS_MOUSE);
   const [qr, setQr] = useState('');
@@ -550,12 +550,19 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
         </Step>
 
         {/* 3. colar */}
-        <Step n={3} last title="Cole em PIX › Pix Copia e Cola">
+        <Step n={3} last={!notified} title="Cole em PIX › Pix Copia e Cola">
           <p className="text-xs text-ink-500 leading-snug">
             Antes de confirmar, veja se o valor é <b className="text-ink-700">{formatCurrency(amount)}</b> e
             quem recebe é <b className="text-ink-700">{pix.name}</b>.
           </p>
         </Step>
+
+        {/* 4. comprovante — só com o aviso registrado (é nele que o arquivo entra) */}
+        {notified && (
+          <Step n={4} last title="Envie o comprovante">
+            <ReceiptUpload code={code} ownerName={ownerName} />
+          </Step>
+        )}
       </ol>
 
       {/* Alternativas */}
@@ -612,5 +619,55 @@ function Step({ n, title, done = false, last = false, children }) {
         {children}
       </div>
     </li>
+  );
+}
+
+/**
+ * Passo 4: o banco gerou o comprovante → o devedor salva (imagem ou PDF) e
+ * envia aqui. Vai pro aviso de pagamento que o credor vê em Cobranças.
+ */
+function ReceiptUpload({ code, ownerName }) {
+  const [state, setState] = useState('idle'); // idle | sending | sent
+  const [error, setError] = useState('');
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo
+    if (!file) return;
+    setError('');
+    setState('sending');
+    try {
+      await sendPaymentReceipt(code, file);
+      setState('sent');
+    } catch (err) {
+      setError(err.message);
+      setState('idle');
+    }
+  }
+
+  if (state === 'sent') {
+    return (
+      <p className="flex items-center gap-2 text-xs text-positive font-semibold bg-emerald-50 rounded-xl px-3 py-2.5 animate-fade-in">
+        <Check className="w-4 h-4 flex-shrink-0" strokeWidth={3} />
+        Comprovante enviado para {ownerName || 'quem te cobrou'}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-ink-500 leading-snug">
+        No app do banco, salve o comprovante (imagem ou PDF) e envie aqui.
+      </p>
+      <label className={`btn-ghost w-full border border-dashed border-ink-300 ${
+        state === 'sending' ? 'opacity-60 pointer-events-none' : 'cursor-pointer'
+      }`}>
+        {state === 'sending'
+          ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
+          : <><Paperclip className="w-4 h-4" /> Enviar comprovante</>}
+        <input type="file" accept={RECEIPT_ACCEPT} onChange={handleFile} disabled={state === 'sending'} className="sr-only" />
+      </label>
+      {error && <p className="text-xs text-negative font-medium">{error}</p>}
+    </div>
   );
 }

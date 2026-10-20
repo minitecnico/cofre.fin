@@ -3,7 +3,7 @@ import {
   Users, Plus, Trash2, MessageCircle, QrCode, FileText,
   ChevronDown, ChevronRight, KeyRound, Loader2, CheckCircle2, Copy, Check,
   AlertTriangle, Wallet, Share2, CreditCard, Pencil, Star, Link2, X,
-  Bell, BellRing, Clock, Send, Lock, Minus, ListChecks, ExternalLink, RefreshCw, HandCoins,
+  Bell, BellRing, Clock, Send, Lock, Minus, ListChecks, ExternalLink, RefreshCw, HandCoins, Paperclip,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import Stepper from '../components/Stepper';
@@ -578,9 +578,10 @@ function AttentionPanel({ debtors, onCharge, notifyPerm, onEnableNotify }) {
 }
 
 /**
- * Avisos de pagamento: o devedor tocou em "Pagar" no extrato e gerou o PIX.
- * É SÓ notificação — não mexe em nenhuma parcela; marcar como pago continua
- * manual. "Ok, visto" tira o aviso da lista.
+ * Avisos de pagamento: o devedor tocou em "Pagar" no extrato e gerou o PIX
+ * (e, se mandou, o comprovante do banco). É SÓ notificação — não mexe em
+ * nenhuma parcela; marcar como pago continua manual. "Ok, visto" tira o aviso
+ * da lista.
  */
 function NoticePanel({ notices, charges, onDismiss }) {
   const byId = new Map(charges.map((x) => [x.id, x]));
@@ -612,9 +613,22 @@ function NoticePanel({ notices, charges, onDismiss }) {
                   </p>
                 </div>
               </div>
-              <button onClick={() => onDismiss(n)} className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
-                <Check className="w-3.5 h-3.5" /> Ok, visto
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {n.receipts?.map((r, i) => (
+                  <a
+                    key={r.id}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-emerald-50 text-positive font-bold text-xs hover:bg-emerald-100 transition-colors"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" /> Comprovante{n.receipts.length > 1 ? ` ${i + 1}` : ''}
+                  </a>
+                ))}
+                <button onClick={() => onDismiss(n)} className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-lg bg-ink-100 text-ink-700 font-bold text-xs hover:bg-ink-200 transition-colors">
+                  <Check className="w-3.5 h-3.5" /> Ok, visto
+                </button>
+              </div>
             </div>
           );
         })}

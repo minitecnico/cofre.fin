@@ -33,6 +33,18 @@ export const MAX_INSTALLMENTS = 48;
 /** localStorage: último dia em que a notificação de cobranças disparou. */
 export const CHARGE_NOTIFY_STORAGE_KEY = 'cofre_cobr_notif';
 
+// ── Comprovantes (metas e pagamentos de cobrança) ───────────────────────────
+// Mesmas regras dos buckets no Supabase (allowed_mime_types e 5 MB).
+export const RECEIPT_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+};
+export const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
+/** Valor do `accept` do <input type="file">. Sem HEIC: o iOS converte a foto pra JPEG. */
+export const RECEIPT_ACCEPT = Object.keys(RECEIPT_EXT).join(',');
+
 // ── PIX ─────────────────────────────────────────────────────────────────────
 export const PIX_KEY_TYPES = [
   { value: 'cpf', label: 'CPF' },

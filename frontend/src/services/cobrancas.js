@@ -3,7 +3,7 @@ import { currentUserId } from './index';
 import { splitInstallmentAmount, generateInstallmentDates } from '../utils/format';
 import { buildPixPayload, pixQrCodeDataUrl } from './pix';
 import { randomLinkCode } from '../utils/randomCode';
-import { PUBLIC_APP_URL, SHARE_LINK_DAYS, DAY_MS } from '../constants';
+import { PUBLIC_APP_URL, SHARE_LINK_DAYS, DAY_MS, RECEIPT_EXT, RECEIPT_MAX_BYTES } from '../constants';
 
 /**
  * Extrato público de um devedor (rota /extrato/:code, sem login).
@@ -24,6 +24,55 @@ export async function notifyPayment(code, chargeIds) {
   const { data, error } = await supabase.rpc('notify_payment', { p_code: code, p_charge_ids: chargeIds });
   if (error) throw error;
   return !!data;
+}
+
+const PAYMENT_RECEIPTS_BUCKET = 'payment-receipts';
+
+/**
+ * Devedor envia o comprovante do PIX (extrato público, sem login): sobe no
+ * bucket privado, na pasta do código, e a RPC anexa ao aviso de pagamento
+ * mais recente — valida código, arquivo e limite no servidor.
+ * Lança erro com mensagem pronta pra tela.
+ */
+export async function sendPaymentReceipt(code, file) {
+  const ext = RECEIPT_EXT[file.type];
+  if (!ext) throw new Error('Envie uma imagem (JPG, PNG ou WEBP) ou um PDF.');
+  if (file.size > RECEIPT_MAX_BYTES) throw new Error('Arquivo muito grande — o limite é 5 MB.');
+
+  const path = `${code}/${crypto.randomUUID()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from(PAYMENT_RECEIPTS_BUCKET)
+    .upload(path, file, { contentType: file.type });
+  if (upErr) failReceipt(upErr);
+
+  const { data, error } = await supabase.rpc('attach_payment_receipt', {
+    p_code: code, p_path: path, p_file_name: file.name, p_mime: file.type,
+  });
+  if (error || !data) failReceipt(error || 'attach_payment_receipt recusou');
+}
+
+/** O devedor vê só a mensagem amigável; o motivo real fica no console. */
+function failReceipt(cause) {
+  console.error(cause);
+  throw new Error('Não foi possível enviar o comprovante. Tente de novo.');
+}
+
+/** Comprovantes destes avisos, cada um com `url` assinada (1h) pra abrir. */
+async function receiptsFor(noticeIds) {
+  if (!noticeIds.length) return [];
+  const { data, error } = await supabase
+    .from('payment_receipts')
+    .select('*')
+    .in('notice_id', noticeIds)
+    .order('created_at');
+  if (error) throw error;
+  if (!data.length) return [];
+  const { data: signed, error: signErr } = await supabase.storage
+    .from(PAYMENT_RECEIPTS_BUCKET)
+    .createSignedUrls(data.map((r) => r.file_path), 60 * 60);
+  if (signErr) throw signErr;
+  const urlByPath = Object.fromEntries(signed.map((s) => [s.path, s.signedUrl]));
+  return data.map((r) => ({ ...r, url: urlByPath[r.file_path] || null }));
 }
 
 /**
@@ -407,7 +456,7 @@ export const pixLinkService = {
 // ─────────────────────────────────────────────────────────────────────────
 
 export const paymentNoticeService = {
-  /** Avisos ainda não resolvidos, mais recentes primeiro. */
+  /** Avisos ainda não resolvidos, mais recentes primeiro, com os comprovantes. */
   async listPending() {
     const { data, error } = await supabase
       .from('payment_notices')
@@ -415,7 +464,10 @@ export const paymentNoticeService = {
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    const notices = data || [];
+    // Comprovantes são opcionais: sem a migration, os avisos seguem sem eles.
+    const receipts = await receiptsFor(notices.map((n) => n.id)).catch(() => []);
+    return notices.map((n) => ({ ...n, receipts: receipts.filter((r) => r.notice_id === n.id) }));
   },
 
   /** "Ok, visto": tira o aviso da lista. Não mexe em nenhuma parcela. */
@@ -443,6 +495,15 @@ export const paymentNoticeService = {
     const channel = supabase
       .channel('payment_notices_inserts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_notices' }, (payload) => onInsert(payload.new))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  },
+
+  /** Igual ao `subscribe`, mas pros comprovantes que os devedores enviam. */
+  subscribeReceipts(onInsert) {
+    const channel = supabase
+      .channel('payment_receipts_inserts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_receipts' }, (payload) => onInsert(payload.new))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   },

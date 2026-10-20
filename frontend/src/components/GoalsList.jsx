@@ -3,10 +3,10 @@ import {
   Target, Plus, TrendingUp, Calendar, Check, Trash2, Edit2, Calculator,
   Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users, History, Paperclip, X,
 } from 'lucide-react';
-import { goalService, goalReceiptService, RECEIPT_ACCEPT } from '../services/goals';
+import { goalService, goalReceiptService } from '../services/goals';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, parseAmount, formatDate } from '../utils/format';
-import { PIX_KEY_TYPES } from '../constants';
+import { PIX_KEY_TYPES, RECEIPT_ACCEPT } from '../constants';
 import Modal from './Modal';
 import Select from './Select';
 import GoalSimulator from './GoalSimulator';

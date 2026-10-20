@@ -17,7 +17,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/login` | `Login.jsx` | login/registro, OAuth Google | pública |
 | `/reset-password` | `ResetPassword.jsx` | recuperação de senha | pública |
 | `/pix/:code` | `PixPay.jsx` | página de pagamento PIX (QR + copia-e-cola + valor) | pública |
-| `/extrato/:code` | `DebtorStatement.jsx` (lazy) | extrato do DEVEDOR, ao vivo: total, pago, a pagar, parcelas, PIX do saldo | pública |
+| `/extrato/:code` | `DebtorStatement.jsx` (lazy) | extrato do DEVEDOR, ao vivo: total, pago, a pagar, parcelas, PIX do saldo, **envio do comprovante do banco** | pública |
 | `/` | `Dashboard.jsx` | KPIs do mês, gastos por categoria, **resumo do mês pra enviar**, transações (busca + status) | Sidebar + BottomNav |
 | `/incomes` | `TransactionListPage.jsx` (type=income) | lista/CRUD receitas | Sidebar + BottomNav |
 | `/expenses` | `TransactionListPage.jsx` (type=expense) | lista/CRUD despesas, swipe-to-delete | Sidebar + BottomNav |
@@ -69,9 +69,9 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime), `push_subscriptions` (aparelhos inscritos no Web Push), `goal_receipts` (comprovantes de PIX das metas). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime), `push_subscriptions` (aparelhos inscritos no Web Push), `goal_receipts` (comprovantes de PIX das metas), `payment_receipts` (comprovante que o devedor envia pelo extrato; anexado ao `payment_notices`). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
 
-**Storage:** bucket privado `goal-receipts` (comprovantes; signed URL, RLS segue `goal_receipts`) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
+**Storage:** bucket privado `goal-receipts` (comprovantes; signed URL, RLS segue `goal_receipts`) + bucket privado `payment-receipts` (comprovantes dos devedores, pasta = `share_code`; upload anon só com código válido + aviso nas últimas 24h, via `payment_receipt_upload_ok`) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
 **RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_pix_link` + `resolve_debtor_statement` (SECURITY DEFINER, pública/anon).
 
@@ -81,6 +81,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-10-20** — **Devedor envia o comprovante do PIX pelo extrato** (`migration_payment_receipts.sql`). No modal "Pagar via PIX", depois do aviso registrado, aparece o passo 4 "Envie o comprovante" (`ReceiptUpload`, `sendPaymentReceipt`): sobe no bucket privado `payment-receipts` (`{share_code}/{uuid}.{ext}`, policy anon via `payment_receipt_upload_ok`: código válido, aviso < 24h, até 10 arquivos/dia) e a RPC `attach_payment_receipt` grava em `payment_receipts` ligado ao aviso mais recente e devolve o aviso pra `pending`. Credor: botão "Comprovante" no `NoticePanel` (Cobranças), toast + notificação do sistema via Realtime (`subscribeReceipts`). Sem Web Push com o app fechado (o `/api/push-notify` só cobre o aviso). Compartilhar direto do app do banco pro Cofre não dá: o devedor não tem o PWA e o iOS não suporta Web Share Target. Constantes de comprovante (`RECEIPT_EXT/MAX_BYTES/ACCEPT`) foram pro `constants/index.js`. ⚠️ Rodar a migration.
 - **2026-10-20** — **Fix: painel de notificações atrás dos cards.** O `AlertCenter` mora na `Sidebar`/`MobileHeader` (`sticky` = camada própria), então o `z-50` do painel não passava dos StatCards animados (desktop) nem da BottomNav/FAB (mobile). Painel + backdrop agora vão por `createPortal` pro `<body>`.
 - **2026-10-20** — **Trava ao desmarcar pagamento em toda lista de transações.** A confirmação (`ConfirmDialog`) saiu da `TransactionListPage` e foi pra dentro do `TransactionList` — o Dashboard marcava/desmarcava sem trava. Caixa de pago mostra um cadeado.
 - **2026-10-20** — **Cantos arredondados padronizados.** Varredura no projeto: saíram as sobras do estilo brutalista (borda preta de 2px, cantos retos, `shadow-flat`) da lista de transações, `TransactionForm` (toggle receita/despesa, forma de pagamento, recorrência), `Categories`, `InstallBanner`, `Login`/`ResetPassword`, botão "Nova receita/despesa", avisos de erro e selos (badges viram pill). Card de categorias ganhou `overflow-hidden` (a faixa colorida vazava do canto). Tour: botão pill e destaque arredondado. Escala de raios documentada no CLAUDE.md (Design system › Bordas e raios).
