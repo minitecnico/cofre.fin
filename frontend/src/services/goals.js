@@ -89,13 +89,17 @@ export const goalService = {
 
   async remove(id) {
     // O cascade do banco apaga as linhas de goal_receipts, mas não os arquivos
-    // no Storage — remove eles antes.
+    // no Storage — remove eles antes. Se falhar, a meta fica: apagá-la perderia
+    // o único registro de onde estão os arquivos, que ocupariam espaço pra sempre.
     const { data: receipts } = await supabase
       .from('goal_receipts')
       .select('file_path')
       .eq('goal_id', id);
     if (receipts?.length) {
-      await supabase.storage.from(RECEIPTS_BUCKET).remove(receipts.map((r) => r.file_path));
+      const { error: rmErr } = await supabase.storage
+        .from(RECEIPTS_BUCKET)
+        .remove(receipts.map((r) => r.file_path));
+      if (rmErr) throw rmErr;
     }
 
     const { error } = await supabase.from('goals').delete().eq('id', id);
