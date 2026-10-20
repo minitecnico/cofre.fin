@@ -247,7 +247,7 @@ Todas as tabelas têm uma única policy `for all using (auth.uid() = user_id) wi
 ## Design system (estado atual)
 
 > ⚠️ **README e alguns comentários antigos descrevem "neo-brutalismo" (bordas grossas, sombras `4px 4px 0`).**
-> **O design FOI atualizado** para um estilo moderno minimalista. Os artefatos remanescentes do brutalismo (ex.: `Toast.jsx` que ainda usa `border-2 border-ink-900 shadow-flat`) são **dívida técnica**.
+> **O design FOI atualizado** para um estilo moderno minimalista. Os últimos artefatos do brutalismo (borda preta grossa, cantos retos) saíram em 2026-10-20.
 >
 > Ao criar UI nova, siga o estilo MODERNO descrito abaixo, não o brutalista.
 
@@ -275,7 +275,18 @@ Fonte única: **Plus Jakarta Sans** (importada do Google Fonts no `index.html`).
 
 ### Bordas e raios
 
-`rounded-xl` (0.875rem), `rounded-2xl` (1.25rem), `rounded-3xl` (1.75rem).
+`rounded-xl` (0.875rem), `rounded-2xl` (1.25rem), `rounded-3xl` (1.75rem). Nada com fundo, borda ou sombra fica de canto reto — escala por tamanho:
+
+| Elemento | Raio |
+|---|---|
+| Modal, bottom sheet, card de destaque | `rounded-3xl` |
+| Card, painel, lista em caixa (com `overflow-hidden` se tiver faixa/linha colorida dentro) | `rounded-2xl` |
+| Input, caixa interna, aviso/erro, toggle segmentado (pista), ícone-quadrado ≥ 40px | `rounded-xl` |
+| Botão de ícone 28–40px, segmento do toggle, botão secundário pequeno | `rounded-lg` |
+| Caixinha de seleção ~22px, botão de ícone 24px | `rounded-md` |
+| Botão principal (`btn-*`), chip, badge/selo, avatar, ponto | `rounded-full` |
+
+Borda: `border` (1px) em `hairline-light`/`ink-200`; selecionado = `border-ink-900` ou `ring-2`. Nunca `border-2 border-ink-900`.
 
 ### Animações
 
@@ -362,11 +373,10 @@ npm run preview      # serve dist/ localmente
 ## Dívidas técnicas conhecidas (oportunidades de melhoria)
 
 1. **`TransactionForm.jsx` e `ChangePasswordModal.jsx` chamam `supabase` diretamente** — devem passar pelos services.
-2. **`Toast.jsx` ainda usa estilo brutalista antigo** (`border-2 border-ink-900 shadow-flat`). Atualizar para `shadow-soft-lg` + `bg-gradient-card`.
-3. **`README.md` descreve aesthetic neo-brutalista** — desatualizado.
-4. Não há `.env.example` no repo.
-5. Migrations não têm numeração — recomendável renomear para `001_paid.sql`, `002_monthly.sql`, etc.
-6. Lógica grande em alguns componentes (`Recurring.jsx` ~48KB, `Cards.jsx` ~36KB, `BatchTransactionForm.jsx` ~24KB). Considerar quebrar em subcomponentes.
+2. **`README.md` descreve aesthetic neo-brutalista** — desatualizado.
+3. Não há `.env.example` no repo.
+4. Migrations não têm numeração — recomendável renomear para `001_paid.sql`, `002_monthly.sql`, etc.
+5. Lógica grande em alguns componentes (`Recurring.jsx` ~48KB, `Cards.jsx` ~36KB, `BatchTransactionForm.jsx` ~24KB). Considerar quebrar em subcomponentes.
 
 ---
 

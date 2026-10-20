@@ -204,12 +204,12 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
     <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
       {/* Toggle Receita/Despesa */}
       {!isEdit && (
-        <div className="grid grid-cols-2 gap-0 border-2 border-ink-900">
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-ink-100">
           <button
             type="button"
             onClick={() => setType('income')}
-            className={`py-3 min-h-[44px] font-semibold text-sm uppercase tracking-wider transition-colors ${
-              type === 'income' ? 'bg-accent text-ink-900' : 'bg-white text-ink-500 hover:bg-ink-50'
+            className={`py-3 min-h-[44px] rounded-lg font-semibold text-sm uppercase tracking-wider transition-colors ${
+              type === 'income' ? 'bg-accent text-ink-900 shadow-soft' : 'text-ink-500 hover:bg-white/70'
             }`}
           >
             ↑ Receita
@@ -217,8 +217,8 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
           <button
             type="button"
             onClick={() => setType('expense')}
-            className={`py-3 min-h-[44px] font-semibold text-sm uppercase tracking-wider transition-colors border-l-2 border-ink-900 ${
-              type === 'expense' ? 'bg-ink-900 text-white' : 'bg-white text-ink-500 hover:bg-ink-50'
+            className={`py-3 min-h-[44px] rounded-lg font-semibold text-sm uppercase tracking-wider transition-colors ${
+              type === 'expense' ? 'bg-ink-900 text-white shadow-soft' : 'text-ink-500 hover:bg-white/70'
             }`}
           >
             ↓ Despesa
@@ -367,10 +367,10 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
             <button
               type="button"
               onClick={() => setPaymentMethod('account')}
-              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium border-2 transition-all ${
+              className={`px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border transition-all ${
                 paymentMethod === 'account'
                   ? 'bg-ink-900 text-white border-ink-900'
-                  : 'bg-white text-ink-700 border-ink-300 hover:border-ink-900'
+                  : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
               }`}
             >
               Conta / dinheiro
@@ -378,10 +378,10 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
             <button
               type="button"
               onClick={() => setPaymentMethod('card')}
-              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium border-2 transition-all ${
+              className={`px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border transition-all ${
                 paymentMethod === 'card'
                   ? 'bg-ink-900 text-white border-ink-900'
-                  : 'bg-white text-ink-700 border-ink-300 hover:border-ink-900'
+                  : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
               }`}
             >
               Cartão de crédito
@@ -443,8 +443,8 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
       {/* Recorrência — só em criação, e não pode ter parcelamento */}
       {!isEdit && installmentCount === 1 && (
         <label
-          className={`flex items-start gap-3 p-3 md:p-4 border-2 cursor-pointer transition-colors ${
-            isRecurring ? 'border-ink-900 bg-accent/30' : 'border-ink-300 hover:border-ink-900 bg-white'
+          className={`flex items-start gap-3 p-3 md:p-4 rounded-xl border cursor-pointer transition-colors ${
+            isRecurring ? 'border-ink-900 bg-accent/20' : 'border-ink-200 hover:border-ink-400 bg-white'
           }`}
         >
           <input
@@ -470,7 +470,7 @@ export default function TransactionForm({ initial = null, onSaved, onCancel, onS
       )}
 
       {error && (
-        <div className="px-4 py-3 bg-red-50 border-2 border-negative text-negative text-sm">
+        <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">
           {error}
         </div>
       )}

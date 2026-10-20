@@ -68,7 +68,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Logo de topo */}
         <div className="flex items-center gap-3 mb-6 md:mb-8">
-          <div className="w-11 h-11 md:w-12 md:h-12 bg-accent flex items-center justify-center border-2 border-ink-900 shadow-flat-sm flex-shrink-0">
+          <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-accent flex items-center justify-center shadow-soft flex-shrink-0">
             <Wallet className="w-5 h-5 md:w-6 md:h-6 text-ink-900" strokeWidth={2.5} />
           </div>
           <div>
@@ -148,13 +148,13 @@ export default function Login() {
             )}
 
             {info && (
-              <div className="px-4 py-3 bg-yellow-50 border-2 border-warn text-yellow-900 text-sm">
+              <div className="px-4 py-3 bg-yellow-50 border border-warn text-yellow-900 text-sm rounded-xl">
                 {info}
               </div>
             )}
 
             {error && (
-              <div className="px-4 py-3 bg-red-50 border-2 border-negative text-negative text-sm">
+              <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">
                 {error}
               </div>
             )}

@@ -177,7 +177,7 @@ export default function TransactionListPage({ type = 'income' }) {
 
         <button
           onClick={open}
-          className={`w-full sm:w-auto px-4 md:px-5 py-2.5 md:py-3 min-h-[44px] font-semibold border-2 border-ink-900 shadow-flat-sm hover:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all ${bgAccent} self-stretch sm:self-end flex-shrink-0`}
+          className={`w-full sm:w-auto px-5 md:px-6 py-2.5 md:py-3 min-h-[44px] rounded-full font-semibold shadow-soft hover:shadow-soft-md active:scale-[0.98] transition-all ${bgAccent} self-stretch sm:self-end flex-shrink-0`}
         >
           <span className="flex items-center justify-center gap-2 text-sm md:text-base">
             <Plus className="w-5 h-5" />
@@ -330,7 +330,7 @@ export default function TransactionListPage({ type = 'income' }) {
         {searchTerm && (
           <button
             onClick={() => setSearchTerm('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center hover:bg-ink-100 transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-ink-100 transition-colors"
             aria-label="Limpar busca"
           >
             <X className="w-4 h-4" />

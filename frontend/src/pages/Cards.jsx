@@ -162,7 +162,7 @@ function CardForm({ initial, onSaved, onCancel }) {
       </div>
 
       {error && (
-        <div className="px-4 py-3 bg-red-50 border-2 border-negative text-negative text-sm">
+        <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">
           {error}
         </div>
       )}
@@ -469,19 +469,19 @@ function BillDetail({ bill, transactions, loading, canPrev, canNext, onPrev, onN
   let statusBadge;
   if (bill.isFullyPaid) {
     statusBadge = (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-positive text-white">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-positive text-white">
         <CheckCircle2 className="w-3 h-3" strokeWidth={3} /> Paga
       </span>
     );
   } else if (bill.isClosed) {
     statusBadge = (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-warn text-ink-900">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-warn text-ink-900">
         <AlertTriangle className="w-3 h-3" strokeWidth={2.5} /> Fechada
       </span>
     );
   } else {
     statusBadge = (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-ink-200 text-ink-700">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ink-200 text-ink-700">
         <Calendar className="w-3 h-3" strokeWidth={2.25} /> Aberta
       </span>
     );
@@ -578,12 +578,12 @@ function BillDetail({ bill, transactions, loading, canPrev, canNext, onPrev, onN
                       {t.description}
                     </p>
                     {isInstallment && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-ink-100 text-ink-700 rounded">
+                      <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-ink-100 text-ink-700 rounded-full">
                         {t.installment_number}/{t.installment_total}
                       </span>
                     )}
                     {isPaid && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-positive text-white rounded">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-positive text-white rounded-full">
                         <CheckCircle2 className="w-3 h-3" strokeWidth={3} /> Pago
                       </span>
                     )}

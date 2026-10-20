@@ -51,12 +51,12 @@ function CategoryForm({ initial, onSaved, onCancel }) {
 
       <div>
         <label className="label">Tipo</label>
-        <div className="grid grid-cols-2 gap-0 border-2 border-ink-900">
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-ink-100">
           <button
             type="button"
             onClick={() => setForm({ ...form, type: 'income' })}
-            className={`py-3 min-h-[44px] font-semibold text-sm uppercase tracking-wider transition-colors ${
-              form.type === 'income' ? 'bg-accent text-ink-900' : 'bg-white hover:bg-ink-50'
+            className={`py-3 min-h-[44px] rounded-lg font-semibold text-sm uppercase tracking-wider transition-colors ${
+              form.type === 'income' ? 'bg-accent text-ink-900 shadow-soft' : 'text-ink-500 hover:bg-white/70'
             }`}
           >
             Receita
@@ -64,8 +64,8 @@ function CategoryForm({ initial, onSaved, onCancel }) {
           <button
             type="button"
             onClick={() => setForm({ ...form, type: 'expense' })}
-            className={`py-3 min-h-[44px] font-semibold text-sm uppercase tracking-wider transition-colors border-l-2 border-ink-900 ${
-              form.type === 'expense' ? 'bg-ink-900 text-white' : 'bg-white hover:bg-ink-50'
+            className={`py-3 min-h-[44px] rounded-lg font-semibold text-sm uppercase tracking-wider transition-colors ${
+              form.type === 'expense' ? 'bg-ink-900 text-white shadow-soft' : 'text-ink-500 hover:bg-white/70'
             }`}
           >
             Despesa
@@ -81,8 +81,8 @@ function CategoryForm({ initial, onSaved, onCancel }) {
               key={c}
               type="button"
               onClick={() => setForm({ ...form, color: c })}
-              className={`w-11 h-11 border-2 transition-all ${
-                form.color === c ? 'border-ink-900 scale-110' : 'border-ink-300 hover:scale-105'
+              className={`w-11 h-11 rounded-xl shadow-soft transition-all ${
+                form.color === c ? 'ring-2 ring-ink-900 ring-offset-2 scale-110' : 'hover:scale-105'
               }`}
               style={{ backgroundColor: c }}
               aria-label={`Cor ${c}`}
@@ -92,7 +92,7 @@ function CategoryForm({ initial, onSaved, onCancel }) {
       </div>
 
       {error && (
-        <div className="px-4 py-3 bg-red-50 border-2 border-negative text-negative text-sm">
+        <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">
           {error}
         </div>
       )}
@@ -174,8 +174,8 @@ export default function CategoriesPage() {
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
-          <div className="h-56 md:h-64 bg-ink-100 animate-pulse" />
-          <div className="h-56 md:h-64 bg-ink-100 animate-pulse" />
+          <div className="h-56 md:h-64 bg-ink-100 animate-pulse rounded-2xl" />
+          <div className="h-56 md:h-64 bg-ink-100 animate-pulse rounded-2xl" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
@@ -183,18 +183,18 @@ export default function CategoriesPage() {
             { title: 'Receitas', items: incomeCategories, accent: 'bg-accent' },
             { title: 'Despesas', items: expenseCategories, accent: 'bg-ink-900 text-white' },
           ].map(({ title, items, accent }) => (
-            <div key={title} className="card-flat">
+            <div key={title} className="card-flat overflow-hidden">
               <div className={`px-4 md:px-6 py-3 md:py-4 ${accent} font-display text-lg md:text-xl font-bold`}>
                 {title} <span className="text-xs md:text-sm font-mono opacity-70">({items.length})</span>
               </div>
-              <div className="divide-y-2 divide-ink-100">
+              <div className="divide-y divide-ink-100">
                 {items.length === 0 ? (
                   <p className="p-4 md:p-6 text-center text-sm text-ink-500">Nenhuma categoria</p>
                 ) : (
                   items.map((c) => (
                     <div key={c.id} className="group flex items-center gap-3 p-3 md:p-4 hover:bg-ink-50">
                       <div
-                        className="w-8 h-8 border-2 border-ink-900 flex items-center justify-center flex-shrink-0"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: c.color }}
                       >
                         <Tag className="w-4 h-4 text-white" />
@@ -204,14 +204,14 @@ export default function CategoriesPage() {
                       <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => { setEditing(c); open(); }}
-                          className="w-9 h-9 flex items-center justify-center hover:bg-ink-200"
+                          className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-ink-200 transition-colors"
                           aria-label="Editar"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => { setDeleting(c); setDeletingError(null); }}
-                          className="w-9 h-9 flex items-center justify-center text-negative hover:bg-red-50"
+                          className="w-9 h-9 rounded-lg flex items-center justify-center text-negative hover:bg-red-50 transition-colors"
                           aria-label="Excluir"
                         >
                           <Trash2 className="w-4 h-4" />

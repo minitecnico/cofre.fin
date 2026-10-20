@@ -170,7 +170,10 @@ export function TourProvider({ children }) {
             arrowColor: '#ffffff',
             zIndex: 10000,
           },
-          tooltip: { borderRadius: 16 },
+          // Mesmos raios do app: card 2xl (20px), botão pill, destaque 2xl.
+          tooltip: { borderRadius: 20 },
+          buttonNext: { borderRadius: 9999 },
+          spotlight: { borderRadius: 20 },
           tooltipTitle: { fontWeight: 800 },
         }}
       />

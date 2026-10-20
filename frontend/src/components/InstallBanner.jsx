@@ -32,7 +32,7 @@ export default function InstallBanner() {
   return (
     <>
       <div className="card-flat bg-accent text-ink-900 p-4 md:p-5 flex items-start gap-3 md:gap-4 animate-slide-up">
-        <div className="w-10 h-10 md:w-12 md:h-12 bg-ink-900 text-accent flex items-center justify-center flex-shrink-0 border-2 border-ink-900">
+        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-ink-900 text-accent flex items-center justify-center flex-shrink-0">
           <Download className="w-5 h-5 md:w-6 md:h-6" strokeWidth={2.5} />
         </div>
 
@@ -46,13 +46,13 @@ export default function InstallBanner() {
           <div className="flex items-center gap-2 mt-3">
             <button
               onClick={handleInstall}
-              className="px-3 py-2 min-h-[40px] bg-ink-900 text-white text-xs md:text-sm font-semibold border-2 border-ink-900 hover:bg-ink-800 active:translate-x-0.5 active:translate-y-0.5 transition-all"
+              className="px-4 py-2 min-h-[40px] rounded-full bg-ink-900 text-white text-xs md:text-sm font-semibold hover:bg-ink-800 active:scale-[0.98] transition-all"
             >
               {isIOS ? 'Como instalar' : 'Instalar agora'}
             </button>
             <button
               onClick={dismiss}
-              className="px-3 py-2 min-h-[40px] text-xs md:text-sm font-medium text-ink-700 hover:bg-ink-900/10 transition-colors"
+              className="px-4 py-2 min-h-[40px] rounded-full text-xs md:text-sm font-medium text-ink-700 hover:bg-ink-900/10 transition-colors"
             >
               Mais tarde
             </button>
@@ -61,7 +61,7 @@ export default function InstallBanner() {
 
         <button
           onClick={dismiss}
-          className="w-8 h-8 flex items-center justify-center hover:bg-ink-900/10 transition-colors flex-shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-ink-900/10 transition-colors flex-shrink-0"
           aria-label="Fechar"
         >
           <X className="w-4 h-4" />
@@ -76,7 +76,7 @@ export default function InstallBanner() {
         >
           <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" />
           <div
-            className="relative bg-white border-2 border-ink-900 shadow-flat w-full md:max-w-md p-5 md:p-6 animate-slide-up"
+            className="relative bg-white rounded-3xl border border-hairline-light shadow-soft-xl w-full md:max-w-md p-5 md:p-6 animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
@@ -85,7 +85,7 @@ export default function InstallBanner() {
               </h3>
               <button
                 onClick={() => setShowIOSInstructions(false)}
-                className="w-9 h-9 flex items-center justify-center hover:bg-ink-100"
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-ink-100 transition-colors"
                 aria-label="Fechar"
               >
                 <X className="w-5 h-5" />
@@ -94,35 +94,35 @@ export default function InstallBanner() {
 
             <ol className="space-y-4">
               <li className="flex gap-3 items-start">
-                <span className="w-7 h-7 bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                <span className="w-7 h-7 rounded-full bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                   1
                 </span>
                 <div className="flex-1">
                   <p className="text-sm">
                     Toque no botão <strong>Compartilhar</strong>
                   </p>
-                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 bg-ink-100 text-xs font-medium">
+                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ink-100 text-xs font-medium">
                     <Share2 className="w-4 h-4" />
                     na barra inferior do Safari
                   </div>
                 </div>
               </li>
               <li className="flex gap-3 items-start">
-                <span className="w-7 h-7 bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                <span className="w-7 h-7 rounded-full bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                   2
                 </span>
                 <div className="flex-1">
                   <p className="text-sm">
                     Role e toque em <strong>"Adicionar à Tela de Início"</strong>
                   </p>
-                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 bg-ink-100 text-xs font-medium">
+                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ink-100 text-xs font-medium">
                     <Plus className="w-4 h-4" />
                     Adicionar à Tela de Início
                   </div>
                 </div>
               </li>
               <li className="flex gap-3 items-start">
-                <span className="w-7 h-7 bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                <span className="w-7 h-7 rounded-full bg-ink-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                   3
                 </span>
                 <p className="text-sm pt-1">

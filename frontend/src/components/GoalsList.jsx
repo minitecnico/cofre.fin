@@ -346,12 +346,12 @@ function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onSh
               {goal.title}
             </h4>
             {isComplete && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-positive text-white">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-positive text-white">
                 <Check className="w-3 h-3" strokeWidth={3} /> Pronto
               </span>
             )}
             {goal.is_shared && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-ink-900 text-white">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-ink-900 text-white">
                 <Users className="w-3 h-3" strokeWidth={2.5} /> Coletiva
               </span>
             )}

@@ -22,7 +22,7 @@ export default function TransactionList({
     return (
       <div className="space-y-2">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-20 md:h-16 bg-ink-100 animate-pulse" />
+          <div key={i} className="h-20 md:h-16 bg-ink-100 animate-pulse rounded-2xl" />
         ))}
       </div>
     );
@@ -78,7 +78,7 @@ export default function TransactionList({
       <p className="md:hidden mb-2 text-[11px] text-ink-500">
         Dica: arraste um lançamento para a esquerda para excluir.
       </p>
-      <div className="bg-white border-2 border-ink-900 shadow-flat-sm md:shadow-flat divide-y-2 divide-ink-100">
+      <div className="bg-white rounded-2xl border border-hairline-light shadow-soft overflow-hidden divide-y divide-ink-100">
         <AnimatePresence initial={false}>
         {items.map((t, index) => {
           const isIncome = t.type === 'income';
@@ -108,7 +108,7 @@ export default function TransactionList({
                 <button
                   type="button"
                   onClick={() => onTogglePaid?.(t.id, isPaid)}
-                  className={`flex items-center justify-center w-12 md:w-14 flex-shrink-0 border-r-2 border-ink-100 transition-colors ${
+                  className={`flex items-center justify-center w-12 md:w-14 flex-shrink-0 border-r border-ink-100 transition-colors ${
                     isPaid
                       ? 'bg-positive text-white hover:bg-green-700'
                       : 'bg-ink-50 hover:bg-accent text-ink-400 hover:text-ink-900'
@@ -139,7 +139,7 @@ export default function TransactionList({
                     </h4>
                     {isInstallment && (
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider bg-ink-100 text-ink-900 border border-ink-900 whitespace-nowrap"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider bg-ink-100 text-ink-900 whitespace-nowrap"
                         title={`Parcela ${t.installment_number} de ${t.installment_total}`}
                       >
                         <Layers className="w-3 h-3" strokeWidth={2.5} />
@@ -148,7 +148,7 @@ export default function TransactionList({
                     )}
                     {t.recurring_id && (
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider bg-ink-900 text-accent whitespace-nowrap"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider bg-ink-900 text-accent whitespace-nowrap"
                         title="Esta é uma transação recorrente"
                       >
                         <Repeat className="w-3 h-3" strokeWidth={2.5} /> Recorrente
@@ -156,14 +156,14 @@ export default function TransactionList({
                     )}
                     {card && (
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-white whitespace-nowrap"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-white whitespace-nowrap"
                         style={{ backgroundColor: card.color || '#1e293b' }}
                       >
                         <CardIcon className="w-3 h-3" /> {card.name}
                       </span>
                     )}
                     {isExpense && isPaid && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-white bg-positive whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-white bg-positive whitespace-nowrap">
                         <Check className="w-3 h-3" strokeWidth={3} /> Pago
                       </span>
                     )}
@@ -212,14 +212,14 @@ export default function TransactionList({
                   <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => setEditing(t)}
-                      className="w-9 h-9 flex items-center justify-center -translate-y-1 md:translate-y-0 hover:bg-ink-200 transition-colors"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center -translate-y-1 md:translate-y-0 hover:bg-ink-200 transition-colors"
                       aria-label="Editar"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteClick(t)}
-                      className="hidden md:flex w-9 h-9 items-center justify-center text-negative hover:bg-red-50 transition-colors"
+                      className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-negative hover:bg-red-50 transition-colors"
                       aria-label="Excluir"
                     >
                       <Trash2 className="w-4 h-4" />

@@ -487,7 +487,7 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
                 {c.installment_total > 1 ? baseDescription(c.description) : c.description}
               </span>
               {c.installment_total > 1 && (
-                <span className="text-[10px] font-bold text-ink-500 bg-ink-100 rounded-md px-1.5 py-0.5 flex-shrink-0">
+                <span className="text-[10px] font-bold text-ink-500 bg-ink-100 rounded-full px-2 py-0.5 flex-shrink-0">
                   {c.installment_number}/{c.installment_total}
                 </span>
               )}

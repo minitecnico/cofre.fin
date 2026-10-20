@@ -152,7 +152,7 @@ export default function CategorySelect({ type, value, onChange, autoSelectFirst 
           </div>
 
           {error && (
-            <div className="px-3 py-2 bg-red-50 border border-negative/30 text-negative text-xs rounded-lg">
+            <div className="px-3 py-2 bg-red-50 border border-negative/30 text-negative text-xs rounded-xl">
               {error}
             </div>
           )}
