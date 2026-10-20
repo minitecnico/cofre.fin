@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
@@ -123,8 +124,11 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
         )}
       </button>
 
-      {/* Painel — desktop: dropdown ancorado / mobile: sheet inferior */}
-      {open && (
+      {/* Painel — desktop: dropdown ancorado / mobile: sheet inferior.
+          Portal no <body>: o sino mora na Sidebar/MobileHeader, que são
+          `sticky` (criam camada própria) — dali o z-50 não passava dos cards
+          animados do dashboard nem da BottomNav/FAB. */}
+      {open && createPortal(
         <>
           {/* Backdrop só no mobile */}
           <div
@@ -235,7 +239,8 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
