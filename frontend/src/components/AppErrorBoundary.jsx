@@ -1,4 +1,5 @@
 import React from 'react';
+import { trackEvent } from '../services/admin';
 
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,7 @@ export default class AppErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Falha inesperada ao renderizar o aplicativo:', error, info);
+    trackEvent('error', `${window.location.pathname}: ${error?.message || error}`);
   }
 
   handleReload = () => {

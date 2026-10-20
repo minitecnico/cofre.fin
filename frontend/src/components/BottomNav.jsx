@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
-  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car,
+  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { motion, useReducedMotion } from 'motion/react';
 
 // Itens fixos na barra inferior (mobile) — os de uso diário.
@@ -26,6 +27,8 @@ const secondary = [
 ];
 
 export default function BottomNav() {
+  const { isAdmin } = useAuth();
+  const moreItems = isAdmin ? [...secondary, { to: '/admin', label: 'Admin', icon: ShieldCheck }] : secondary;
   const [moreOpen, setMoreOpen] = useState(false);
   const reduce = useReducedMotion();
 
@@ -88,7 +91,7 @@ export default function BottomNav() {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {secondary.map(({ to, label, icon: Icon }) => (
+              {moreItems.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}

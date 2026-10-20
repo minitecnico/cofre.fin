@@ -2,7 +2,16 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import { trackEvent } from './services/admin';
 import './styles/index.css';
+
+// Erros fora do React (promises sem catch, scripts) também vão pro log do admin.
+window.addEventListener('error', (e) => {
+  if (!String(e.message).includes('ResizeObserver')) trackEvent('error', e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  trackEvent('error', e.reason?.message || String(e.reason));
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

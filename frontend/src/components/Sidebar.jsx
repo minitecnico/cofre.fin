@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, HandCoins, Car } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard, Tag, LogOut, Wallet, Repeat, Settings, Sparkles, HandCoins, Car, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AlertCenter from './AlertCenter';
 
@@ -16,12 +16,16 @@ const links = [
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ];
 
+// Só aparece pra quem é admin (o banco também barra as RPCs do painel).
+const ADMIN_LINK = { to: '/admin', label: 'Admin', icon: ShieldCheck };
+
 /**
  * Sidebar — visível apenas em telas md+ (≥768px).
  * Visual moderno: gradiente escuro suave + ícones com glow.
  */
 export default function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
+  const items = isAdmin ? [...links, ADMIN_LINK] : links;
 
   return (
     <aside className="hidden md:flex w-60 lg:w-64 min-h-screen bg-gradient-dark text-ink-50 flex-col sticky top-0 shadow-soft-lg">
@@ -45,7 +49,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-1">
-        {links.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

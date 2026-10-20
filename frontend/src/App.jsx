@@ -19,6 +19,8 @@ import PixPay from './pages/PixPay';
 
 // Lazy: Cobranças carrega o jsPDF (pesado) — só baixa quando acessada.
 const Cobrancas = lazy(() => import('./pages/Cobrancas'));
+// Lazy: só o admin abre — fora do bundle de todo mundo.
+const Admin = lazy(() => import('./pages/Admin'));
 // Lazy: página pública do devedor (puxa o gerador de QR) — fora do bundle do app.
 const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
 // Lazy: destino do "Compartilhar" do Android (comprovantes) — fora do bundle do app.
@@ -75,6 +77,14 @@ export default function App() {
                 }
               />
               <Route path="import-export" element={<ImportExport />} />
+              <Route
+                path="admin"
+                element={
+                  <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                    <Admin />
+                  </Suspense>
+                }
+              />
             </Route>
           </Routes>
         </BrowserRouter>

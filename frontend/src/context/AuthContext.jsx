@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
+import { adminService } from '../services/admin';
 
 const AuthContext = createContext(null);
 
@@ -16,6 +17,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [adminCheck, setAdminCheck] = useState({ userId: null, value: false });
 
   useEffect(() => {
     // Carrega sessão atual (se já estiver logado, vem instantâneo do localStorage)
@@ -31,6 +33,17 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Admin é decidido no banco (app_admins); aqui só pra mostrar/esconder o painel.
+  // null = ainda conferindo ESTE usuário (evita redirecionar o /admin por engano).
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    adminService.isAdmin().then((value) => alive && setAdminCheck({ userId, value }));
+    return () => { alive = false; };
+  }, [userId]);
+  const isAdmin = !userId ? false : adminCheck.userId === userId ? adminCheck.value : null;
 
   async function login(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -144,7 +157,7 @@ export function AuthProvider({ children }) {
     : null;
 
   return (
-    <AuthContext.Provider value={{ user: userInfo, loading, login, register, logout, requestPasswordReset, updatePassword, loginWithGoogle, linkGoogle, listIdentities, unlinkIdentity }}>
+    <AuthContext.Provider value={{ user: userInfo, loading, isAdmin, login, register, logout, requestPasswordReset, updatePassword, loginWithGoogle, linkGoogle, listIdentities, unlinkIdentity }}>
       {children}
     </AuthContext.Provider>
   );

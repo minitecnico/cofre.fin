@@ -105,6 +105,7 @@ frontend/
     │   ├── Recurring.jsx           # modelos de transações recorrentes
     │   ├── Goals.jsx               # desafio 52 semanas + metas + notas
     │   ├── ImportExport.jsx
+    │   ├── Admin.jsx               # /admin — central do administrador (só app_admins)
     │   ├── Fipe.jsx                # /fipe — consulta Tabela FIPE (API pública parallelum)
     │   └── Settings.jsx
     ├── constants/

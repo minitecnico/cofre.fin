@@ -9,6 +9,7 @@ import Toast from './Toast';
 import { useAutoRecurring } from '../hooks/useAutoRecurring';
 import { usePaymentNoticeAlerts } from '../hooks/usePaymentNoticeAlerts';
 import { TourProvider } from '../context/TourContext';
+import { trackEvent } from '../services/admin';
 
 export default function Layout() {
   const [tick, setTick] = useState(0);
@@ -16,6 +17,11 @@ export default function Layout() {
   const [toastMessage, setToastMessage] = useState(null);
   const location = useLocation();
   const reduceMotion = useReducedMotion();
+
+  // Uso do app pro painel do admin: uma linha por tela aberta.
+  useEffect(() => {
+    trackEvent('page_view', location.pathname);
+  }, [location.pathname]);
 
   // Devedor gerou PIX no extrato → toast (+ notificação do sistema no hook).
   usePaymentNoticeAlerts(useCallback((msg) => setToastMessage(msg), []));
