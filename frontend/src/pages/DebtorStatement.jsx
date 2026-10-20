@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Loader2, Copy, Check, FileWarning, QrCode, Lock, AlertTriangle, ReceiptText, Minus,
-  KeyRound, CalendarDays, ChevronDown, Smartphone, BellRing,
+  KeyRound, CalendarDays, Smartphone, BellRing,
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
@@ -13,6 +13,7 @@ import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
 import { groupCharges, summarizeCharges, baseDescription, isOverdue } from '../utils/charges';
 import { BANKS_WITH_APP, findBank } from '../constants/banks';
+import { PIX_KEY_TYPES } from '../constants';
 
 /**
  * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
@@ -409,6 +410,8 @@ function Row({ charge, inGroup, canPick, checked, onToggle }) {
 }
 
 const IS_ANDROID = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+// Mouse = computador: não tem app do banco ali, então o QR já vem aberto.
+const HAS_MOUSE = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
 const LAST_BANK_KEY = 'cofre_extrato_banco'; // último banco escolhido (conveniência do devedor)
 
 /**
@@ -426,7 +429,7 @@ function androidAppLink(pkg) {
  */
 function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName }) {
   const [copied, setCopied] = useState(copiedOnOpen ? 'code' : '');
-  const [showQr, setShowQr] = useState(false);
+  const [showQr, setShowQr] = useState(HAS_MOUSE);
   const [qr, setQr] = useState('');
   const [lastBank, setLastBank] = useState(() => {
     try { return localStorage.getItem(LAST_BANK_KEY) || ''; } catch { return ''; }
@@ -456,98 +459,149 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
 
   // Banco usado da última vez vem primeiro.
   const banks = [...BANKS_WITH_APP].sort((a, b) => (b.id === lastBank) - (a.id === lastBank));
+  const keyType = PIX_KEY_TYPES.find((t) => t.value === pix.key_type)?.label || 'PIX';
 
   return (
-    <div className="space-y-4">
-      {/* Resumo do que está pagando */}
+    <div className="space-y-5">
+      {/* Valor e quem recebe */}
       <div className="text-center">
-        <p className="text-xs text-ink-500">{items.length} parcela(s) · para {pix.name}</p>
-        <p className="font-display font-bold text-3xl text-ink-900">{formatCurrency(amount)}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-500">Valor a pagar</p>
+        <p className="font-display font-bold text-4xl text-ink-900 tabular-nums mt-1">{formatCurrency(amount)}</p>
+        <p className="text-sm text-ink-500 mt-1">para <b className="text-ink-900 font-semibold">{pix.name}</b></p>
         {payeeBank && (
-          <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 bg-ink-50 rounded-full pl-1 pr-2.5 py-1">
+          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 bg-ink-50 rounded-full pl-1 pr-2.5 py-1">
             <BankLogo bankId={payeeBank.id} size={20} /> Recebe no {payeeBank.name}
           </p>
         )}
       </div>
-      <ul className="text-xs text-ink-600 bg-ink-50 rounded-xl px-3 py-2 max-h-24 overflow-y-auto space-y-0.5">
-        {items.map((c, i) => (
-          <li key={i} className="flex justify-between gap-2">
-            <span className="truncate">
-              {c.installment_total > 1
-                ? `${baseDescription(c.description)} · ${c.installment_number}/${c.installment_total}`
-                : c.description}
-            </span>
-            <span className="font-mono flex-shrink-0">{formatCurrency(c.amount)}</span>
-          </li>
-        ))}
-      </ul>
+
+      {/* O que está sendo pago */}
+      <div className="rounded-2xl border border-ink-200 overflow-hidden">
+        <p className="px-4 py-2 bg-ink-50 text-[10px] font-semibold uppercase tracking-widest text-ink-500">
+          {items.length} {items.length === 1 ? 'parcela' : 'parcelas'}
+        </p>
+        <ul className="divide-y divide-ink-100 max-h-40 overflow-y-auto">
+          {items.map((c, i) => (
+            <li key={i} className="flex items-center gap-2 px-4 py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate text-ink-800">
+                {c.installment_total > 1 ? baseDescription(c.description) : c.description}
+              </span>
+              {c.installment_total > 1 && (
+                <span className="text-[10px] font-bold text-ink-500 bg-ink-100 rounded-md px-1.5 py-0.5 flex-shrink-0">
+                  {c.installment_number}/{c.installment_total}
+                </span>
+              )}
+              <span className="w-24 text-right font-mono font-semibold text-ink-900 flex-shrink-0">{formatCurrency(c.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {notified && (
-        <p className="flex items-center gap-2 text-xs text-positive font-semibold bg-emerald-50 rounded-xl px-3 py-2 animate-fade-in">
+        <p className="flex items-center gap-2 text-xs text-positive font-semibold bg-emerald-50 rounded-xl px-3 py-2.5 animate-fade-in">
           <BellRing className="w-4 h-4 flex-shrink-0" />
           Avisamos {ownerName || 'quem te cobrou'} que você está pagando.
         </p>
       )}
 
-      {/* 1. código copiado */}
-      <Step n={1} done={copied === 'code'} title={copied === 'code' ? 'Código PIX copiado, já com o valor' : 'Copie o código PIX (já com o valor)'}>
-        <button onClick={() => copy('code')} className={`${copied === 'code' ? 'btn-ghost' : 'btn-primary'} w-full min-h-[48px] flex items-center justify-center gap-2`}>
-          {copied === 'code' ? <Check className="w-4 h-4 text-positive" /> : <Copy className="w-4 h-4" />}
-          {copied === 'code' ? 'Copiar de novo' : 'Copiar código PIX'}
-        </button>
-      </Step>
-
-      {/* 2. abrir o banco */}
-      <Step n={2} title="Abra o app do seu banco">
-        {IS_ANDROID ? (
-          <div className="grid grid-cols-4 gap-2">
-            {banks.map((b) => (
-              <a
-                key={b.id}
-                href={androidAppLink(b.android)}
-                onClick={() => rememberBank(b.id)}
-                className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-colors ${b.id === lastBank ? 'bg-accent/15' : 'hover:bg-ink-50'}`}
+      {/* Passo a passo */}
+      <ol>
+        {/* 1. código copiado */}
+        <Step n={1} done={copied === 'code'} title={copied === 'code' ? 'Código PIX copiado, já com o valor' : 'Copie o código PIX (já com o valor)'}>
+          {copied === 'code' ? (
+            <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-ink-50 pl-3 pr-1 py-1">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-500">{payload}</span>
+              <button
+                onClick={() => copy('code')}
+                className="h-10 px-3 rounded-lg bg-white shadow-soft text-ink-800 font-bold text-xs hover:bg-ink-100 flex items-center gap-1.5 flex-shrink-0 transition-colors"
               >
-                <BankLogo bankId={b.id} size={36} />
-                <span className="text-[10px] font-semibold text-ink-700 text-center leading-tight line-clamp-1">{b.name}</span>
-              </a>
-            ))}
-          </div>
-        ) : (
-          <p className="flex items-start gap-2 text-xs text-ink-500">
-            <Smartphone className="w-4 h-4 flex-shrink-0 mt-px" />
-            Abra o app do seu banco no celular. Se estiver no computador, use o QR Code abaixo.
-          </p>
-        )}
-      </Step>
+                <Copy className="w-4 h-4" /> Copiar de novo
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => copy('code')} className="btn-primary w-full">
+              <Copy className="w-4 h-4" /> Copiar código PIX
+            </button>
+          )}
+        </Step>
 
-      {/* 3. colar */}
-      <Step n={3} title="Vá em PIX → Pix Copia e Cola → cole e confirme" />
+        {/* 2. abrir o banco */}
+        <Step n={2} title="Abra o app do seu banco">
+          {IS_ANDROID ? (
+            <div className="grid grid-cols-4 gap-2">
+              {banks.map((b) => (
+                <a
+                  key={b.id}
+                  href={androidAppLink(b.android)}
+                  onClick={() => rememberBank(b.id)}
+                  className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-colors ${b.id === lastBank ? 'bg-accent/15' : 'hover:bg-ink-50'}`}
+                >
+                  <BankLogo bankId={b.id} size={36} />
+                  <span className="text-[10px] font-semibold text-ink-700 text-center leading-tight line-clamp-1">{b.name}</span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="flex items-start gap-2 text-xs text-ink-500 leading-snug">
+              <Smartphone className="w-4 h-4 flex-shrink-0" />
+              <span>No celular, abra o app do seu banco. No computador, escaneie o QR Code abaixo com o celular.</span>
+            </p>
+          )}
+        </Step>
+
+        {/* 3. colar */}
+        <Step n={3} last title="Cole em PIX › Pix Copia e Cola">
+          <p className="text-xs text-ink-500 leading-snug">
+            Antes de confirmar, veja se o valor é <b className="text-ink-700">{formatCurrency(amount)}</b> e
+            quem recebe é <b className="text-ink-700">{pix.name}</b>.
+          </p>
+        </Step>
+      </ol>
 
       {/* Alternativas */}
-      <div className="pt-1 border-t border-ink-100 space-y-1">
-        <button onClick={() => setShowQr((v) => !v)} className="w-full flex items-center justify-between min-h-[44px] text-sm font-semibold text-ink-700">
-          <span className="flex items-center gap-2"><QrCode className="w-4 h-4" /> Mostrar QR Code</span>
-          <ChevronDown className={`w-4 h-4 transition-transform ${showQr ? 'rotate-180' : ''}`} />
-        </button>
-        {showQr && (
-          qr ? <img src={qr} alt="QR Code PIX" className="w-52 h-52 mx-auto rounded-2xl border border-ink-100 animate-fade-in" />
-            : <div className="w-52 h-52 mx-auto rounded-2xl bg-ink-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-ink-400" /></div>
+      <div className="pt-4 border-t border-ink-100 space-y-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-500">Outras formas de pagar</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowQr((v) => !v)}
+            aria-expanded={showQr}
+            className={`min-h-[48px] px-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+              showQr ? 'border-ink-900 bg-ink-900 text-white' : 'border-ink-200 bg-white text-ink-800 hover:bg-ink-50'
+            }`}
+          >
+            <QrCode className="w-4 h-4 flex-shrink-0" /> QR Code
+          </button>
+          <button
+            onClick={() => copy('key')}
+            className="min-h-[48px] px-3 rounded-xl border border-ink-200 bg-white text-ink-800 text-sm font-semibold hover:bg-ink-50 flex items-center justify-center gap-2 transition-colors"
+          >
+            {copied === 'key' ? <Check className="w-4 h-4 text-positive flex-shrink-0" /> : <KeyRound className="w-4 h-4 flex-shrink-0" />}
+            {copied === 'key' ? 'Chave copiada' : 'Copiar chave'}
+          </button>
+        </div>
+        {copied === 'key' && (
+          <p className="text-xs text-ink-500 leading-snug animate-fade-in">
+            Chave copiada ({keyType}). No app, pague com PIX por chave e digite o valor de <b className="text-ink-700">{formatCurrency(amount)}</b>.
+          </p>
         )}
-        <button onClick={() => copy('key')} className="w-full flex items-center gap-2 min-h-[44px] text-sm font-semibold text-ink-700">
-          {copied === 'key'
-            ? <Check className="w-4 h-4 text-positive" />
-            : <BankLogo bankId={payeeBank?.id} size={18} fallback={<KeyRound className="w-4 h-4" />} />}
-          {copied === 'key' ? 'Chave copiada — digite o valor no app' : `Copiar só a chave (${pix.key_type?.toUpperCase()})`}
-        </button>
+        {showQr && (
+          <div className="rounded-2xl border border-ink-200 p-4 flex flex-col items-center gap-2 animate-fade-in">
+            {qr
+              ? <img src={qr} alt="QR Code PIX" className="w-52 h-52" />
+              : <div className="w-52 h-52 rounded-xl bg-ink-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-ink-400" /></div>}
+            <p className="text-xs text-ink-500 text-center">Abra o app do banco no celular, escolha pagar com QR Code e aponte a câmera.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Step({ n, title, done = false, children }) {
+/** Um passo numerado; a linha vertical liga ao próximo (exceto no `last`). */
+function Step({ n, title, done = false, last = false, children }) {
   return (
-    <div className="flex gap-3">
+    <li className={`relative flex gap-3 ${last ? '' : 'pb-5'}`}>
+      {!last && <span className="absolute left-3 top-7 bottom-1 w-px bg-ink-200" aria-hidden="true" />}
       <span className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
         done ? 'bg-positive text-white' : 'bg-ink-900 text-white'
       }`}>
@@ -557,6 +611,6 @@ function Step({ n, title, done = false, children }) {
         <p className="text-sm font-semibold text-ink-900 pt-0.5">{title}</p>
         {children}
       </div>
-    </div>
+    </li>
   );
 }
