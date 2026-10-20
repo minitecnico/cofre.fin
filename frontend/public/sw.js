@@ -12,6 +12,8 @@
  */
 
 const CACHE_VERSION = 'cofre-v2';
+// Arquivo recebido pelo "Compartilhar" do Android (Web Share Target).
+const SHARE_CACHE = 'cofre-share';
 const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icons/icon.svg'];
 
 function isValidAssetResponse(request, response) {
@@ -39,10 +41,36 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+        Promise.all(keys.filter((k) => k !== CACHE_VERSION && k !== SHARE_CACHE).map((k) => caches.delete(k)))
       )
       .then(() => self.clients.claim())
   );
+});
+
+// "Compartilhar" do Android → Cofre (manifest share_target): o arquivo chega
+// num POST em /compartilhar. Guarda no Cache e abre a página que decide pra
+// onde ele vai (extrato do credor ou meta).
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+  if (request.method !== 'POST' || url.origin !== self.location.origin || url.pathname !== '/compartilhar') return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(SHARE_CACHE);
+    await cache.delete('/compartilhar/arquivo');
+    try {
+      const file = (await request.formData()).get('comprovante');
+      if (file && typeof file !== 'string') {
+        await cache.put('/compartilhar/arquivo', new Response(file, {
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'X-File-Name': encodeURIComponent(file.name || 'comprovante'),
+          },
+        }));
+      }
+    } catch { /* sem arquivo: a página mostra "nada pra enviar" */ }
+    return Response.redirect('/compartilhar', 303);
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

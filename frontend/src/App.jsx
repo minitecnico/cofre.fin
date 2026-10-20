@@ -21,6 +21,8 @@ import PixPay from './pages/PixPay';
 const Cobrancas = lazy(() => import('./pages/Cobrancas'));
 // Lazy: página pública do devedor (puxa o gerador de QR) — fora do bundle do app.
 const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
+// Lazy: destino do "Compartilhar" do Android (comprovantes) — fora do bundle do app.
+const ShareReceipt = lazy(() => import('./pages/ShareReceipt'));
 
 export default function App() {
   return (
@@ -31,6 +33,14 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/pix/:code" element={<PixPay />} />
+            <Route
+              path="/compartilhar"
+              element={
+                <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                  <ShareReceipt />
+                </Suspense>
+              }
+            />
             <Route
               path="/extrato/:code"
               element={

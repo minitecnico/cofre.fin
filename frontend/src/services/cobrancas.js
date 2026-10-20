@@ -39,6 +39,10 @@ export async function sendPaymentReceipt(code, file) {
   if (!ext) throw new Error('Envie uma imagem (JPG, PNG ou WEBP) ou um PDF.');
   if (file.size > RECEIPT_MAX_BYTES) throw new Error('Arquivo muito grande — o limite é 5 MB.');
 
+  // Mesma regra da policy de upload: sem um "Pagar" recente não há aviso pra anexar.
+  const { data: allowed } = await supabase.rpc('payment_receipt_upload_ok', { p_code: code });
+  if (!allowed) throw new Error('Abra o extrato, toque em "Pagar" e envie o comprovante de novo.');
+
   const path = `${code}/${crypto.randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from(PAYMENT_RECEIPTS_BUCKET)
@@ -49,6 +53,24 @@ export async function sendPaymentReceipt(code, file) {
     p_code: code, p_path: path, p_file_name: file.name, p_mime: file.type,
   });
   if (error || !data) failReceipt(error || 'attach_payment_receipt recusou');
+}
+
+const STATEMENTS_KEY = 'cofre_extratos';
+
+/**
+ * Extratos abertos neste aparelho (mais recente primeiro, até 5). A página
+ * /compartilhar usa pra mandar o comprovante sem a pessoa digitar nada.
+ */
+export function rememberStatement({ code, ownerName, debtorName }) {
+  try {
+    const list = savedStatements().filter((s) => s.code !== code);
+    list.unshift({ code, ownerName, debtorName });
+    localStorage.setItem(STATEMENTS_KEY, JSON.stringify(list.slice(0, 5)));
+  } catch { /* storage bloqueado: só perde o atalho */ }
+}
+
+export function savedStatements() {
+  try { return JSON.parse(localStorage.getItem(STATEMENTS_KEY)) || []; } catch { return []; }
 }
 
 /** O devedor vê só a mensagem amigável; o motivo real fica no console. */

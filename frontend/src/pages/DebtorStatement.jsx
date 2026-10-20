@@ -7,7 +7,8 @@ import {
 import Modal from '../components/Modal';
 import BankLogo from '../components/BankLogo';
 import PaidDisclosure from '../components/PaidDisclosure';
-import { resolveDebtorStatement, notifyPayment, sendPaymentReceipt } from '../services/cobrancas';
+import { resolveDebtorStatement, notifyPayment, sendPaymentReceipt, rememberStatement } from '../services/cobrancas';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { requestPaymentPush } from '../services/push';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { formatCurrency, formatDate, todayISO } from '../utils/format';
@@ -36,11 +37,18 @@ export default function DebtorStatement() {
   const [payOpen, setPayOpen] = useState(false);
   const [copied, setCopied] = useState(false);  // copiou ao abrir o passo 2
   const [notified, setNotified] = useState(false); // credor avisado deste pagamento
+  const install = useInstallPrompt(); // no topo: o evento de instalação chega cedo
 
   useEffect(() => {
     let alive = true;
     resolveDebtorStatement(code)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        // Lembra o extrato: o "Compartilhar" do Android (/compartilhar) manda o
+        // comprovante pra ele sem a pessoa digitar nada.
+        if (d?.status === 'active') rememberStatement({ code, ownerName: d.owner_name, debtorName: d.debtor_name });
+      })
       .catch(() => alive && setData(null));
     return () => { alive = false; };
   }, [code]);
@@ -253,7 +261,7 @@ export default function DebtorStatement() {
       <Modal isOpen={payOpen} onClose={() => setPayOpen(false)} title="Pagar via PIX">
         {payOpen && (
           <PayStep pix={data.pix} amount={pickedTotal} items={pickedList} payload={payload} copiedOnOpen={copied}
-            notified={notified} ownerName={data.owner_name} code={code} />
+            notified={notified} ownerName={data.owner_name} code={code} install={install} />
         )}
       </Modal>
     </div>
@@ -427,7 +435,7 @@ function androidAppLink(pkg) {
  * Passo 2: código já copiado (com valor) → abrir o app do banco → colar.
  * QR fica recolhido (útil se for pagar por outro aparelho).
  */
-function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName, code }) {
+function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerName, code, install }) {
   const [copied, setCopied] = useState(copiedOnOpen ? 'code' : '');
   const [showQr, setShowQr] = useState(HAS_MOUSE);
   const [qr, setQr] = useState('');
@@ -560,7 +568,7 @@ function PayStep({ pix, amount, items, payload, copiedOnOpen, notified, ownerNam
         {/* 4. comprovante — só com o aviso registrado (é nele que o arquivo entra) */}
         {notified && (
           <Step n={4} last title="Envie o comprovante">
-            <ReceiptUpload code={code} ownerName={ownerName} />
+            <ReceiptUpload code={code} ownerName={ownerName} install={install} />
           </Step>
         )}
       </ol>
@@ -626,7 +634,7 @@ function Step({ n, title, done = false, last = false, children }) {
  * Passo 4: o banco gerou o comprovante → o devedor salva (imagem ou PDF) e
  * envia aqui. Vai pro aviso de pagamento que o credor vê em Cobranças.
  */
-function ReceiptUpload({ code, ownerName }) {
+function ReceiptUpload({ code, ownerName, install }) {
   const [state, setState] = useState('idle'); // idle | sending | sent
   const [error, setError] = useState('');
 
@@ -668,6 +676,17 @@ function ReceiptUpload({ code, ownerName }) {
         <input type="file" accept={RECEIPT_ACCEPT} onChange={handleFile} disabled={state === 'sending'} className="sr-only" />
       </label>
       {error && <p className="text-xs text-negative font-medium">{error}</p>}
+
+      {/* Android: instalado, o Cofre aparece no "Compartilhar" do banco */}
+      {IS_ANDROID && !install.isStandalone && (
+        <p className="text-[11px] text-ink-500 leading-snug">
+          Na próxima, mande direto do banco: instale o Cofre
+          {install.canInstall
+            ? <> — <button type="button" onClick={install.prompt} className="font-bold text-ink-900 underline underline-offset-2">instalar agora</button></>
+            : ' (menu ⋮ do Chrome › Instalar app)'}
+          {' '}e ele aparece no <b>Compartilhar</b> do comprovante.
+        </p>
+      )}
     </div>
   );
 }
