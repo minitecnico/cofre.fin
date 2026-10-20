@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
-import { Pencil, Trash2, CreditCard as CardIcon, Check, Repeat, Layers, Percent } from 'lucide-react';
+import { Pencil, Trash2, CreditCard as CardIcon, Check, Repeat, Layers, Percent, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency, formatDate, parseAmortization } from '../utils/format';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 import TransactionForm from './TransactionForm';
 import { transactionService } from '../services';
 
@@ -17,6 +18,26 @@ export default function TransactionList({
   const [editing, setEditing] = useState(null);
   const [deletingGroup, setDeletingGroup] = useState(null); // {id, description, groupId, total}
   const [deletingSingle, setDeletingSingle] = useState(null); // {id, description}
+  const [confirmReq, setConfirmReq] = useState(null);
+
+  // Trava de pagamento (mesma de Cobranças): marcar como paga é imediato; já
+  // PAGA fica travada — desmarcar pede confirmação, pra um toque sem querer
+  // não voltar a despesa pra pendente. Vale em toda lista (dashboard e páginas).
+  function handleTogglePaid(t) {
+    if (!t.paid) { onTogglePaid?.(t.id, false); return; }
+    setConfirmReq({
+      title: 'Desmarcar pagamento?',
+      message: (
+        <>
+          <b className="text-ink-900">{t.description || 'Esta despesa'}</b> ({formatCurrency(t.amount)}
+          {t.date ? <>, {formatDate(t.date, 'long')}</> : null}) está marcada como paga.
+          {' '}Ela volta a ficar pendente.
+        </>
+      ),
+      confirmLabel: 'Desmarcar pagamento',
+      onConfirm: () => onTogglePaid?.(t.id, true),
+    });
+  }
 
   if (loading) {
     return (
@@ -107,16 +128,17 @@ export default function TransactionList({
               {isExpense && (
                 <button
                   type="button"
-                  onClick={() => onTogglePaid?.(t.id, isPaid)}
-                  className={`flex items-center justify-center w-12 md:w-14 flex-shrink-0 border-r border-ink-100 transition-colors ${
+                  onClick={() => handleTogglePaid(t)}
+                  className={`relative flex items-center justify-center w-12 md:w-14 flex-shrink-0 border-r border-ink-100 transition-colors ${
                     isPaid
                       ? 'bg-positive text-white hover:bg-green-700'
                       : 'bg-ink-50 hover:bg-accent text-ink-400 hover:text-ink-900'
                   }`}
                   aria-label={isPaid ? 'Marcar como pendente' : 'Marcar como pago'}
                   aria-pressed={isPaid}
-                  title={isPaid ? 'Pago — clique para desmarcar' : 'Pendente — clique para marcar como pago'}
+                  title={isPaid ? 'Pago e travado — desmarcar pede confirmação' : 'Pendente — clique para marcar como pago'}
                 >
+                  {isPaid && <Lock className="absolute bottom-1.5 right-1.5 w-2.5 h-2.5 opacity-80" strokeWidth={3} />}
                   <Check
                     className={`w-5 h-5 transition-transform ${
                       isPaid ? 'scale-100' : 'scale-0 group-hover:scale-100'
@@ -310,6 +332,8 @@ export default function TransactionList({
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
     </>
   );
 }
