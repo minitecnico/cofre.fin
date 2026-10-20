@@ -41,7 +41,7 @@ export async function sendPaymentReceipt(code, file) {
 
   // Mesma regra da policy de upload: sem um "Pagar" recente não há aviso pra anexar.
   const { data: allowed } = await supabase.rpc('payment_receipt_upload_ok', { p_code: code });
-  if (!allowed) throw new Error('Abra o extrato, toque em "Pagar" e envie o comprovante de novo.');
+  if (!allowed) throw new Error('Abra a central de pagamentos, toque em "Pagar" e envie o comprovante de novo.');
 
   const path = `${code}/${crypto.randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage

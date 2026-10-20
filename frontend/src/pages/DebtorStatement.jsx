@@ -17,7 +17,7 @@ import { BANKS_WITH_APP, findBank } from '../constants/banks';
 import { PIX_KEY_TYPES, RECEIPT_ACCEPT } from '../constants';
 
 /**
- * Rota pública /extrato/:code — a "carteira" vista pelo DEVEDOR.
+ * Rota pública /extrato/:code — a "Central de pagamentos" do DEVEDOR.
  *
  * Quem deve abre o link (sem login) e vê, sempre atualizado: total da dívida,
  * quanto já pagou, quanto falta, parcelas pagas × pendentes e cada dívida.
@@ -45,7 +45,7 @@ export default function DebtorStatement() {
       .then((d) => {
         if (!alive) return;
         setData(d);
-        // Lembra o extrato: o "Compartilhar" do Android (/compartilhar) manda o
+        // Lembra a central: o "Compartilhar" do Android (/compartilhar) manda o
         // comprovante pra ele sem a pessoa digitar nada.
         if (d?.status === 'active') rememberStatement({ code, ownerName: d.owner_name, debtorName: d.debtor_name });
       })
@@ -98,7 +98,7 @@ export default function DebtorStatement() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-app">
         <Loader2 className="w-8 h-8 animate-spin text-ink-500 mb-3" />
-        <p className="text-ink-600 text-sm">Carregando extrato…</p>
+        <p className="text-ink-600 text-sm">Carregando…</p>
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function DebtorStatement() {
     return (
       <StatusScreen
         icon={<FileWarning className="w-7 h-7 text-ink-500" />}
-        title={data ? 'Link expirado' : 'Extrato não encontrado'}
+        title={data ? 'Link expirado' : 'Link não encontrado'}
         text={data
           ? 'Por segurança, este link tem validade. Peça um novo a quem te enviou.'
           : 'Este link não existe mais. Peça um novo a quem te enviou.'}
@@ -116,7 +116,7 @@ export default function DebtorStatement() {
     );
   }
 
-  // Dívida quitada: o link deixa de mostrar o extrato.
+  // Dívida quitada: o link deixa de mostrar a central.
   if (data.status === 'settled') {
     return (
       <StatusScreen
@@ -132,21 +132,37 @@ export default function DebtorStatement() {
   const canPay = !settled && !!data.pix;
 
   return (
-    <div className="min-h-screen bg-gradient-app p-4 py-6 flex justify-center">
-      <div className="w-full max-w-md space-y-3">
-        {/* Cabeçalho + valor a pagar */}
-        <div className="bg-white rounded-3xl shadow-soft-lg overflow-hidden">
-          <div className="bg-gradient-dark text-white px-6 py-5">
-            <div className="inline-flex items-center gap-2 text-accent font-bold text-sm">
-              <ReceiptText className="w-4 h-4" /> Extrato de cobrança
+    <div className="min-h-screen bg-gradient-app">
+      {/* Marca */}
+      <header className="bg-gradient-dark text-white">
+        <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center flex-shrink-0">
+              <ReceiptText className="w-5 h-5 text-ink-900" />
             </div>
-            <p className="font-display font-bold text-lg mt-2">Olá, {data.debtor_name}</p>
-            {data.owner_name && <p className="text-ink-300 text-xs">Cobrança de {data.owner_name}</p>}
-            <p className="text-ink-300 text-xs mt-4">{settled ? 'Tudo pago' : 'Total em aberto'}</p>
-            <p className="font-display font-bold text-3xl">{formatCurrency(wallet.open)}</p>
+            <div className="min-w-0">
+              <p className="font-display font-bold text-base md:text-lg leading-tight">Central de pagamentos</p>
+              {data.owner_name && <p className="text-xs text-ink-300 truncate">Cobrança de {data.owner_name}</p>}
+            </div>
           </div>
+          <p className="hidden sm:flex items-center gap-1.5 text-[11px] text-ink-300 flex-shrink-0">
+            <Lock className="w-3.5 h-3.5" /> Link seguro
+            {data.expires_at && <> · válido até {formatDate(new Date(data.expires_at), 'long')}</>}
+          </p>
+        </div>
+      </header>
 
-          <div className="p-5 space-y-3">
+      <main className={`max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-8 lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:gap-6 lg:items-start space-y-4 lg:space-y-0 ${canPay ? 'pb-28 lg:pb-8' : ''}`}>
+        {/* Coluna do resumo — fixa no desktop */}
+        <aside className="space-y-4 lg:sticky lg:top-6">
+          <div className="bg-white rounded-2xl shadow-soft p-5 space-y-4">
+            <div>
+              <p className="text-sm text-ink-500">Olá, <b className="text-ink-900">{data.debtor_name}</b></p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-500 mt-3">
+                {settled ? 'Tudo pago' : 'Total em aberto'}
+              </p>
+              <p className="font-display font-bold text-3xl md:text-4xl text-ink-900 tabular-nums">{formatCurrency(wallet.open)}</p>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <Stat label="Total da dívida" value={formatCurrency(wallet.total)} />
               <Stat label="Já pago" value={formatCurrency(wallet.paid)} tone="text-positive" />
@@ -167,93 +183,103 @@ export default function DebtorStatement() {
               </p>
             )}
           </div>
-        </div>
 
-        {/* Passo 1: pagar por mês */}
-        {canPay && months.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-soft p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
-                <CalendarDays className="w-4 h-4" /> Qual mês você vai pagar?
-              </p>
-              {picked.size > 0 && (
-                <button onClick={() => setPicked(EMPTY)} className="text-[11px] font-bold text-ink-400 hover:text-ink-700 px-2 min-h-[32px]">
-                  Limpar
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {months.map((m) => {
-                const on = m.items.filter((c) => picked.has(c)).length;
-                const full = on === m.items.length;
-                return (
-                  <button
-                    key={m.key}
-                    onClick={() => toggle(m.items)}
-                    aria-pressed={full}
-                    className={`relative text-left rounded-xl border-2 px-3 py-2.5 min-h-[64px] transition-colors ${
-                      full ? 'border-ink-900 bg-ink-900 text-white'
-                        : on > 0 ? 'border-ink-900 bg-white'
-                          : m.overdue ? 'border-red-200 bg-red-50/60 hover:border-negative' : 'border-ink-100 bg-ink-50 hover:border-ink-300'
-                    }`}
-                  >
-                    <span className={`block text-xs font-bold capitalize ${full ? 'text-white' : 'text-ink-900'}`}>{m.label}</span>
-                    <span className={`block font-display font-bold text-base ${full ? 'text-accent' : 'text-ink-900'}`}>{formatCurrency(m.total)}</span>
-                    <span className={`block text-[10px] font-semibold ${full ? 'text-ink-300' : m.overdue ? 'text-negative' : 'text-ink-400'}`}>
-                      {m.items.length} parcela(s){m.overdue ? ' · atrasado' : m.current ? ' · este mês' : ''}
-                    </span>
-                    {full && <Check className="absolute top-2 right-2 w-4 h-4 text-accent" strokeWidth={3} />}
+          {canPay && (
+            <>
+              {/* Como pagar */}
+              <ol className="bg-white rounded-2xl shadow-soft p-4 space-y-2.5">
+                {['Escolha o mês ou as parcelas', 'Toque em Pagar e cole o PIX no seu banco', 'Envie o comprovante do banco'].map((t, i) => (
+                  <li key={t} className="flex items-center gap-2.5 text-xs text-ink-600">
+                    <span className="w-5 h-5 rounded-full bg-ink-100 text-ink-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                    {t}
+                  </li>
+                ))}
+              </ol>
+
+              {/* Pagar — no desktop fica aqui; no celular, na barra de baixo */}
+              <div className="hidden lg:block">
+                <PayBar count={picked.size} total={pickedTotal} onPay={startPayment} />
+              </div>
+            </>
+          )}
+        </aside>
+
+        {/* Coluna do que pagar */}
+        <section className="space-y-4 min-w-0">
+          {canPay && months.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-soft p-4 md:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                  <CalendarDays className="w-4 h-4" /> Qual mês você vai pagar?
+                </p>
+                {picked.size > 0 && (
+                  <button onClick={() => setPicked(EMPTY)} className="text-[11px] font-bold text-ink-400 hover:text-ink-700 px-2 min-h-[32px] rounded-lg">
+                    Limpar
                   </button>
-                );
-              })}
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {months.map((m) => {
+                  const on = m.items.filter((c) => picked.has(c)).length;
+                  const full = on === m.items.length;
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => toggle(m.items)}
+                      aria-pressed={full}
+                      className={`relative text-left rounded-xl border px-3 py-2.5 min-h-[64px] transition-colors ${
+                        full ? 'border-ink-900 bg-ink-900 text-white'
+                          : on > 0 ? 'border-ink-900 ring-1 ring-ink-900 bg-white'
+                            : m.overdue ? 'border-red-200 bg-red-50/60 hover:border-negative' : 'border-ink-200 bg-ink-50 hover:border-ink-400'
+                      }`}
+                    >
+                      <span className={`block text-xs font-bold capitalize ${full ? 'text-white' : 'text-ink-900'}`}>{m.label}</span>
+                      <span className={`block font-display font-bold text-base tabular-nums ${full ? 'text-accent' : 'text-ink-900'}`}>{formatCurrency(m.total)}</span>
+                      <span className={`block text-[10px] font-semibold ${full ? 'text-ink-300' : m.overdue ? 'text-negative' : 'text-ink-400'}`}>
+                        {m.items.length} parcela(s){m.overdue ? ' · atrasado' : m.current ? ' · este mês' : ''}
+                      </span>
+                      {full && <Check className="absolute top-2 right-2 w-4 h-4 text-accent" strokeWidth={3} />}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-ink-400">Toque no mês pra juntar todas as parcelas dele. Também dá pra marcar uma a uma abaixo.</p>
             </div>
-            <p className="text-[11px] text-ink-400">Toque no mês pra juntar todas as parcelas dele. Também dá pra marcar uma a uma lá embaixo.</p>
-          </div>
-        )}
+          )}
 
-        {/* Dívidas em aberto; as quitadas por inteiro ficam recolhidas no fim */}
-        {openGroups.map((g, gi) => (
-          <Block key={g.groupId || gi} group={g} canPick={canPay} picked={picked} toggle={toggle} />
-        ))}
-        <PaidDisclosure
-          count={doneGroups.length}
-          total={doneGroups.reduce((s, g) => s + summarizeCharges(g.items).paid, 0)}
-          label={`${doneGroups.length} dívida(s) quitada(s)`}
-          className="bg-white rounded-2xl shadow-soft overflow-hidden"
-        >
-          <div className="p-2 pt-0 space-y-2">
-            {doneGroups.map((g, gi) => (
-              <Block key={g.groupId || gi} group={g} canPick={false} picked={picked} toggle={toggle} flat />
-            ))}
-          </div>
-        </PaidDisclosure>
+          {/* Dívidas em aberto; as quitadas por inteiro ficam recolhidas no fim */}
+          {openGroups.length > 0 && (
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest text-ink-500 px-1 pt-1">
+              Em aberto · {openGroups.length} {openGroups.length === 1 ? 'dívida' : 'dívidas'}
+            </h2>
+          )}
+          {openGroups.map((g, gi) => (
+            <Block key={g.groupId || gi} group={g} canPick={canPay} picked={picked} toggle={toggle} />
+          ))}
+          <PaidDisclosure
+            count={doneGroups.length}
+            total={doneGroups.reduce((s, g) => s + summarizeCharges(g.items).paid, 0)}
+            label={`${doneGroups.length} dívida(s) quitada(s)`}
+            className="bg-white rounded-2xl shadow-soft overflow-hidden"
+          >
+            <div className="p-2 pt-0 space-y-2">
+              {doneGroups.map((g, gi) => (
+                <Block key={g.groupId || gi} group={g} canPick={false} picked={picked} toggle={toggle} flat />
+              ))}
+            </div>
+          </PaidDisclosure>
 
-        <p className={`text-center text-[11px] text-ink-400 pt-2 ${canPay ? 'pb-24' : ''}`}>
-          Atualizado em tempo real · Gerado pelo app Cofre
-        </p>
-      </div>
+          <p className="text-center text-[11px] text-ink-400 pt-2">
+            Atualizado em tempo real · Gerado pelo app Cofre
+          </p>
+        </section>
+      </main>
 
-      {/* Barra fixa: total escolhido → passo 2 */}
+      {/* Celular: barra fixa com o total escolhido → passo 2 */}
       {canPay && (
-        <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
-          <div className="w-full max-w-md bg-ink-900 text-white rounded-2xl shadow-soft-xl px-4 py-3 flex items-center gap-3 pointer-events-auto">
-            <div className="min-w-0 flex-1">
-              {picked.size ? (
-                <>
-                  <p className="text-[11px] text-ink-400">{picked.size} parcela(s) escolhida(s)</p>
-                  <p className="font-display font-bold text-lg leading-tight">{formatCurrency(pickedTotal)}</p>
-                </>
-              ) : (
-                <p className="text-xs text-ink-300 leading-snug">Escolha o mês ou as parcelas que vai pagar</p>
-              )}
-            </div>
-            <button
-              onClick={startPayment}
-              disabled={!picked.size}
-              className="inline-flex items-center gap-1.5 px-4 min-h-[44px] rounded-xl bg-accent text-ink-900 font-bold text-sm hover:bg-accent-light transition-colors disabled:opacity-40 flex-shrink-0"
-            >
-              <QrCode className="w-4 h-4" /> Pagar
-            </button>
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
+          <div className="w-full max-w-md pointer-events-auto">
+            <PayBar count={picked.size} total={pickedTotal} onPay={startPayment} />
           </div>
         </div>
       )}
@@ -270,10 +296,36 @@ export default function DebtorStatement() {
 
 const EMPTY = new Set();
 
+/** Total escolhido + botão Pagar (barra de baixo no celular, coluna no desktop). */
+function PayBar({ count, total, onPay }) {
+  return (
+    <div className="bg-ink-900 text-white rounded-2xl shadow-soft-xl px-4 py-3 flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        {count ? (
+          <>
+            <p className="text-[11px] text-ink-400">{count} parcela(s) escolhida(s)</p>
+            <p className="font-display font-bold text-lg leading-tight tabular-nums">{formatCurrency(total)}</p>
+          </>
+        ) : (
+          <p className="text-xs text-ink-300 leading-snug">Escolha o mês ou as parcelas que vai pagar</p>
+        )}
+      </div>
+      <button
+        onClick={onPay}
+        disabled={!count}
+        className="inline-flex items-center gap-1.5 px-5 min-h-[44px] rounded-full bg-accent text-ink-900 font-bold text-sm hover:bg-accent-light transition-colors disabled:opacity-40 flex-shrink-0"
+      >
+        <QrCode className="w-4 h-4" /> Pagar
+      </button>
+    </div>
+  );
+}
+
 /** Tela simples de status (link expirado / não encontrado / quitado). */
 function StatusScreen({ icon, title, text, tone = 'bg-ink-100' }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-app p-6 text-center">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-400 mb-4">Central de pagamentos</p>
       <div className={`w-14 h-14 rounded-2xl ${tone} flex items-center justify-center mb-3`}>{icon}</div>
       <p className="font-display font-bold text-lg text-ink-900">{title}</p>
       <p className="text-sm text-ink-500 mt-1 max-w-xs">{text}</p>

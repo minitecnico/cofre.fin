@@ -593,7 +593,7 @@ function NoticePanel({ notices, charges, onDismiss }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-bold text-sm text-ink-900">Avisos de pagamento</p>
-          <p className="text-[11px] text-ink-500">Quem gerou PIX pelo extrato pra te pagar.</p>
+          <p className="text-[11px] text-ink-500">Quem gerou PIX pela central de pagamentos pra te pagar.</p>
         </div>
       </div>
       <div className="divide-y divide-ink-100 border-t border-ink-100">
@@ -813,7 +813,7 @@ function DebtorCard({
             {chargedToday ? 'Cobrado' : 'Cobrar'}
           </ActionButton>
           <ActionButton onClick={onShowQr} icon={QrCode} title="Gerar PIX">PIX</ActionButton>
-          <ActionButton onClick={onShare} disabled={!charges.length} icon={Share2} title="Enviar extrato ao devedor">Extrato</ActionButton>
+          <ActionButton onClick={onShare} disabled={!charges.length} icon={Share2} title="Enviar a central de pagamentos ao devedor">Central</ActionButton>
           <ActionButton onClick={onAddCharge} icon={Plus} title="Nova cobrança pra esta pessoa">Cobrança</ActionButton>
           <span className="w-px h-6 bg-ink-100 mx-0.5 flex-shrink-0" aria-hidden />
           <button onClick={onEditDebtor} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors flex-shrink-0" title="Editar pessoa" aria-label="Editar pessoa">
@@ -1614,8 +1614,8 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
   }, [debtor, load]);
 
   const message = debtor
-    ? `Oi, ${debtor.name}! Segue seu extrato atualizado: ${formatCurrency(wallet.open)} a pagar`
-      + ` (${wallet.paidCount} de ${wallet.count} já pagas). Lá dá pra ver tudo e pagar via PIX: ${link}`
+    ? `Oi, ${debtor.name}! Segue sua central de pagamentos: ${formatCurrency(wallet.open)} a pagar`
+      + ` (${wallet.paidCount} de ${wallet.count} já pagas). Lá dá pra ver tudo, pagar via PIX e enviar o comprovante: ${link}`
       + (expiresAt ? ` (link válido até ${formatDate(new Date(expiresAt), 'long')})` : '')
     : '';
 
@@ -1628,7 +1628,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
   }
 
   return (
-    <Modal isOpen={!!debtor} onClose={onClose} title="Enviar extrato">
+    <Modal isOpen={!!debtor} onClose={onClose} title="Central de pagamentos">
       <div className="space-y-5">
         {/* Quem recebe */}
         <div className="flex items-center gap-3">
@@ -1638,7 +1638,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
           <div className="min-w-0">
             <p className="font-display font-bold text-base text-ink-900 truncate">{debtor?.name}</p>
             <p className="text-xs text-ink-500 leading-snug">
-              Recebe um link com o extrato sempre atualizado — parcelas, pagamentos e PIX para pagar.
+              Recebe o link da central de pagamentos, sempre atualizada — parcelas, PIX e envio do comprovante.
             </p>
           </div>
         </div>
@@ -1681,7 +1681,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
           <div className="space-y-4 animate-slide-up">
             {/* Link */}
             <div>
-              <p className="label">Link do extrato</p>
+              <p className="label">Link da central</p>
               <div className="flex items-center gap-1 rounded-xl border border-ink-200 bg-ink-50 pl-3 pr-1 py-1">
                 <Link2 className="w-4 h-4 text-ink-400 flex-shrink-0" />
                 <span className="text-xs text-ink-700 truncate flex-1 min-w-0 ml-1" title={link}>
@@ -1724,7 +1724,7 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
                 rel="noopener noreferrer"
                 className="w-full min-h-[48px] px-6 rounded-full border border-ink-300 bg-white text-ink-900 font-bold text-sm md:text-base shadow-soft hover:bg-ink-50 hover:border-ink-400 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
               >
-                <ExternalLink className="w-5 h-5" /> Abrir extrato
+                <ExternalLink className="w-5 h-5" /> Abrir central
               </a>
             </div>
 

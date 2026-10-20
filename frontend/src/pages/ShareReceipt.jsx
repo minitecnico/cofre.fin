@@ -129,7 +129,7 @@ export default function ShareReceipt() {
                 key={s.code}
                 icon={HandCoins}
                 title={`Enviar para ${s.ownerName || 'quem te cobrou'}`}
-                subtitle={`Extrato de ${s.debtorName}`}
+                subtitle={`Central de pagamentos de ${s.debtorName}`}
                 busy={sending === s.code}
                 disabled={!!sending}
                 onClick={() => send(s.code, () => sendPaymentReceipt(s.code, file),
@@ -170,7 +170,7 @@ export default function ShareReceipt() {
 
         {!hasDestination && (
           <p className="text-sm text-ink-600 text-center">
-            Pra enviar, abra antes o link do extrato que te mandaram — ou <Link to="/login" className="font-bold underline">entre na sua conta</Link>.
+            Pra enviar, abra antes o link da central de pagamentos que te mandaram — ou <Link to="/login" className="font-bold underline">entre na sua conta</Link>.
           </p>
         )}
       </div>
