@@ -67,11 +67,6 @@ const STEPS = [
     content: 'Cadastre suas chaves PIX pra gerar QR Code e link de pagamento. Selecione as cobranças em aberto pra mandar o PDF de quem te deve — ou desmarque as pagas pro relatório geral.',
   },
   {
-    route: '/reports', target: '[data-tour="page-header"]',
-    title: 'Relatórios do mês',
-    content: 'Gere o resumo financeiro de qualquer mês (receitas, despesas, saldo) e compartilhe direto pelo WhatsApp.',
-  },
-  {
     route: '/settings', target: '[data-tour="link-accounts"]', placement: 'top',
     title: 'Conta e login Google',
     content: 'Vincule o Google pra entrar com um toque. Aqui também troca senha e exporta seus dados.',

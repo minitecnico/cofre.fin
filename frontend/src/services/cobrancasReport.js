@@ -168,3 +168,33 @@ export function generateChargesPdf(report) {
 
   return { blob: doc.output('blob'), filename: `cobrancas-cofre-${todayISO()}.pdf` };
 }
+
+/**
+ * Tenta compartilhar o PDF via Web Share API (menu nativo → WhatsApp com anexo).
+ * Retorna 'shared' se conseguiu. Lança/retorna 'unsupported' se o device não suporta
+ * compartilhar arquivos (aí o chamador usa o fallback wa.me só-texto).
+ */
+export async function shareReportFile({ blob, filename, text }) {
+  if (typeof navigator === 'undefined' || !navigator.share) return 'unsupported';
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  if (navigator.canShare && !navigator.canShare({ files: [file] })) return 'unsupported';
+  try {
+    await navigator.share({ files: [file], text, title: 'Relatório Cofre' });
+    return 'shared';
+  } catch (err) {
+    if (err?.name === 'AbortError') return 'cancelled'; // usuário fechou o menu
+    return 'unsupported';
+  }
+}
+
+/** Baixa o PDF localmente (pra anexar manualmente ou guardar). */
+export function downloadPdf(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

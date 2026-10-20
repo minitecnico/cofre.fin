@@ -16,22 +16,20 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 |---|---|---|---|
 | `/login` | `Login.jsx` | login/registro, OAuth Google | pública |
 | `/reset-password` | `ResetPassword.jsx` | recuperação de senha | pública |
-| `/r/:code` | `RedirectLink.jsx` | encurtador: resolve código → redireciona pro PDF | pública |
 | `/pix/:code` | `PixPay.jsx` | página de pagamento PIX (QR + copia-e-cola + valor) | pública |
 | `/extrato/:code` | `DebtorStatement.jsx` (lazy) | extrato do DEVEDOR, ao vivo: total, pago, a pagar, parcelas, PIX do saldo | pública |
-| `/` | `Dashboard.jsx` | KPIs do mês, gráficos, comparação, alertas | Sidebar + BottomNav |
+| `/` | `Dashboard.jsx` | KPIs do mês, gastos por categoria, **resumo do mês pra enviar**, transações (busca + status) | Sidebar + BottomNav |
 | `/incomes` | `TransactionListPage.jsx` (type=income) | lista/CRUD receitas | Sidebar + BottomNav |
 | `/expenses` | `TransactionListPage.jsx` (type=expense) | lista/CRUD despesas, swipe-to-delete | Sidebar + BottomNav |
 | `/recurring` | `Recurring.jsx` | modelos recorrentes (aluguel, assinaturas), lazy-gen por mês | Sidebar + "Mais" |
 | `/cards` | `Cards.jsx` | cartões, faturas, ciclos, limite inteligente | Sidebar + BottomNav |
 | `/cobrancas` | `Cobrancas.jsx` (lazy) | quem te deve, PIX/QR, WhatsApp, PDF, **parcelamento** | Sidebar + "Mais" |
 | `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | Sidebar + "Mais" |
-| `/reports` | `Reports.jsx` (lazy) | relatório mensal PDF, link Storage, envio WhatsApp | Sidebar + "Mais" |
 | `/categories` | `Categories.jsx` | CRUD categorias | Sidebar + "Mais" |
 | `/import-export` | `ImportExport.jsx` | CSV/XLSX import/export, backup JSON | via Settings |
 | `/settings` | `Settings.jsx` | conta, senha, preferências | Sidebar + "Mais" |
 
-**Navegação mobile:** `BottomNav` = 5 fixos (Início, Receitas, Despesas, Cobranças, Relatórios) + botão **"Mais"** (folha com Cartões, Recorrências, Objetivos, Categorias, Ajustes). `Sidebar` (desktop) lista tudo.
+**Navegação mobile:** `BottomNav` = 4 fixos (Início, Receitas, Despesas, Cobranças) + botão **"Mais"** (folha com Cartões, Recorrências, Objetivos, Categorias, Tabela FIPE, Ajustes). `Sidebar` (desktop) lista tudo.
 
 ---
 
@@ -43,7 +41,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 - **Recorrências:** templates em `recurring_transactions`, geração lazy ao abrir o mês (`useAutoRecurring`).
 - **Cartões:** ciclo (`closing_day`/`due_day`), limite ocupado = compras **não pagas** do ciclo. RPCs `get_card_*`.
 - **Alertas (sino):** `services/alerts.js` gera lista (vencidas, cartão alto, saldo negativo). Ações inline no painel: **Marcar paga**, **Adiar 3d** (snooze localStorage), **Ver**. Notificação nativa do navegador opt-in.
-- **Relatórios:** `services/reports.js` → PDF (jsPDF+autotable) com KPIs/categorias/lançamentos. 3 formas de enviar: baixar, **Web Share** (anexo, mobile), **link curto** pra WhatsApp. Link: PDF no Storage `reports` (signed URL ~90d) + código curto em `report_links` → compartilha `<dominio>/r/<code>` (rota pública resolve via RPC `resolve_report_link` e redireciona).
+- **Resumo do mês:** `components/MonthSummary.jsx` (modal aberto pelo card do Dashboard) — receitas, despesas em aberto e pagas, e saldo do mês do `MonthContext`, listados; manda o mesmo conteúdo em texto no WhatsApp (`waLink`), copia ou Web Share. Sem PDF.
+- **Comprovantes de PIX das metas:** `goalReceiptService` (`services/goals.js`) + `GoalReceipts.jsx` — anexo no depósito ou avulso; dono e participantes da meta coletiva enviam e veem, só o dono exclui.
 - **Cobranças:** `services/cobrancas.js` — devedores + dívidas (valor, vencimento, pago; **editar** via `EditChargeModal`; **cartão opcional** via `charges.credit_card_id` → tarja colorida `CardTag` + `CardSelect` em `components/CardTag.jsx`, cartões via `cardService.listSimple`). **Múltiplas chaves PIX** (`pixKeyService` → tabela `pix_keys`, com padrão). **PIX** (`services/pix.js`: payload EMV BACEN + CRC16 + QR via lib `qrcode`; POI estático "11", chave normalizada por tipo, txid "***"). **Link de pagamento** (`pixLinkService.createPaymentLink`): gera QR PNG → bucket público `pix-qr` → `pix_links` → compartilha `<dominio>/pix/<code>` (página `PixPay` pública resolve via RPC `resolve_pix_link`). **Parcelamento** igual ao cartão. Cobrar via WhatsApp (msg + link). Relatório PDF com links clicáveis (`cobrancasReport.js`).
 - **Import/Export:** `services/importExport.js` (CSV/XLSX).
 - **PWA:** `manifest.json`, install prompt (`useInstallPrompt`). Sem service worker de cache.
@@ -52,7 +51,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Mapa de código
 
-**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `push.js` (pushService), `alerts.js`, `reports.js`, `cobrancas.js` (debtorService, chargeService, pixKeyService, pixLinkService, paymentNoticeService), `cobrancasReport.js`, `pix.js`, `importExport.js`, `supabase.js` (singleton).
+**Services** (`frontend/src/services/`): `index.js` (transactionService, categoryService, cardService, recurringService, dashboardService, loanService + `currentUserId`), `goals.js`, `push.js` (pushService), `alerts.js`, `cobrancas.js` (debtorService, chargeService, pixKeyService, pixLinkService, paymentNoticeService), `cobrancasReport.js` (PDF de cobranças + `downloadPdf`/`shareReportFile`), `pix.js`, `importExport.js`, `supabase.js` (singleton).
 
 **Constantes** (`frontend/src/constants/`): `index.js` (prazos de cobrança, `PUBLIC_APP_URL` dos links públicos, tipos de chave PIX, bandeiras/cores de cartão, limites) e `banks.js` (catálogo de 41 bancos BR + `findBank(texto)`). Número mágico novo vai pra cá.
 
@@ -70,11 +69,11 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Supabase
 
-**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (encurtador PDF), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime), `push_subscriptions` (aparelhos inscritos no Web Push). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
+**Tabelas:** `categories`, `credit_cards`, `transactions`, `recurring_transactions`, `weekly_challenges`, `goals`, `notes`, `user_settings` (legado, chave única), `debtors`, `charges`, `report_links` (legado: encurtador do PDF de relatório, sem uso no app), `pix_keys` (múltiplas chaves PIX), `pix_links` (links de pagamento), `payment_notices` (avisos do devedor; Realtime), `push_subscriptions` (aparelhos inscritos no Web Push), `goal_receipts` (comprovantes de PIX das metas). `debtors.share_code` = código do extrato público; `debtors.code` = nº humano sequencial por usuário (#001). Todas com RLS `auth.uid() = user_id`.
 
-**Storage:** bucket privado `reports` (PDFs; signed URL) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
+**Storage:** bucket privado `goal-receipts` (comprovantes; signed URL, RLS segue `goal_receipts`) + bucket privado `reports` (legado, sem uso no app) + bucket **público** `pix-qr` (imagens de QR PIX). Policies de escrita por pasta `{user_id}/...`.
 
-**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_monthly_history`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `get_balance_forecast`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_report_link` + `resolve_pix_link` + `resolve_debtor_statement` (SECURITY DEFINER, pública/anon).
+**RPCs principais:** `get_balance`, `get_period_summary`, `get_expenses_by_category`, `get_card_summary`, `get_card_bills`, `get_card_bill_transactions`, `pay_card_bill`, `generate_recurring_for_month`, `get_debtors_summary`, `resolve_pix_link` + `resolve_debtor_statement` (SECURITY DEFINER, pública/anon).
 
 **Migrations** (`supabase/`, rodar em ordem; idempotentes): `schema.sql` + `migration_*.sql`. Aplicar via Dashboard SQL Editor ou `supabase db query --linked -f <arquivo>` (CLI logada). Projeto: `cofre` ref `lnkrplyghpukmovpzkea`.
 
@@ -82,6 +81,8 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-10-20** — **Relatórios removidos e Dashboard enxuto.** Saíram a página `/reports` (`Reports.jsx`, `services/reports.js`), o link curto `/r/:code` (`RedirectLink.jsx`, `resolveReportLink`), o item da Sidebar/BottomNav (agora 4 fixos + "Mais") e o passo do tour. `downloadPdf`/`shareReportFile` (usados pelas Cobranças) foram pro `cobrancasReport.js`. No Dashboard saíram o saldo projetado (`dashboardService.forecast`), o gráfico dos últimos 6 meses (`MonthlyChart`, chamada a `get_monthly_history`), os chips de alerta (duplicavam o sino) e os filtros avançados (período/categoria/cartão/valor) — ficaram busca + status. Entrou o **Resumo do mês** (`MonthSummary.jsx`). `dashboardService.recent`/`exportCSV` (sem uso) removidos. No banco ficam `report_links`, bucket `reports`, `get_monthly_history` e `get_balance_forecast`, sem uso.
+- **2026-10-20** — **Comprovantes de PIX nas metas** (`migration_goal_receipts.sql`): tabela `goal_receipts` + bucket privado `goal-receipts`. Participantes da meta coletiva enviam e veem (nome de quem enviou gravado por trigger); só o dono exclui (RLS na tabela e no Storage). Excluir a meta apaga os arquivos. Modais "Enviar extrato" (Cobranças) e "Pagar via PIX" (extrato público) reorganizados.
 - **2026-10-16** — **APK/Capacitor removido por completo** (usuário usa o app pelo Chrome): pasta `frontend/android/`, `capacitor.config.json`, `frontend/assets/` (artes do ícone/splash nativos), `DEPLOY-ANDROID.md`, scripts `android:*`, deps `@capacitor/*` (208 pacotes a menos no `node_modules`), env `VITE_API_BASE_URL` (`PUBLIC_APP_URL` = `window.location.origin`), checagem `isBundledNative` do `main.jsx`, regras de keystore/android no `.gitignore` e no `.vercelignore`. Mantidos: safe-area do `MobileHeader`/`Toast` (servem ao app instalado pela tela inicial no iPhone), PWA/`InstallBanner`, e o "abrir o app do banco" no Android do devedor (extrato, via navegador).
 - **2026-10-16** — **Validade do link de extrato.** `debtors.share_expires_at` (+`SHARE_LINK_DAYS` = 90 ao gerar). `shareLink` reaproveita o link enquanto válido e gera outro sozinho quando vencido (`rotate` força). `resolve_debtor_statement` devolve `status`: `expired` (nada), `settled` (só o nome → tela "Tudo pago"; volta a `active` se surgir cobrança nova), `active` (+`expires_at`). `notify_payment` recusa link vencido. Modal "Enviar extrato" mostra "Válido até" e a validade vai na mensagem do WhatsApp. Links existentes ganharam 90 dias. ⚠️ Rodar `migration_extrato_expiry.sql`.
 - **2026-10-16** — **Fix:** `get_card_bill_transactions` (existia só no banco) dava erro 42702 em toda chamada — `where id = p_card_id` ambíguo com a coluna `id` do RETURNS TABLE → detalhe da fatura nunca carregava. Qualificado com alias e versionado em `migration_fix_card_bill_transactions.sql`. Auditoria de RLS confirmada pelo usuário: todas as tabelas `public` com RLS ligado e 1 policy `auth.uid() = user_id`. ⚠️ Rodar a migration.

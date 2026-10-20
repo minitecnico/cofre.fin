@@ -84,7 +84,8 @@ frontend/
     │   ├── Modal.jsx               # modal base (bottom-sheet no mobile, centered no desktop)
     │   ├── MonthSelector.jsx       # navegação ◀ mês ▶
     │   ├── StatCard.jsx            # card de KPI (balance|income|expense)
-    │   ├── Charts.jsx              # MonthlyChart + CategoryChart (Recharts)
+    │   ├── Charts.jsx              # CategoryChart (Recharts)
+    │   ├── MonthSummary.jsx        # resumo do mês pra enviar (WhatsApp/copiar)
     │   ├── TransactionForm.jsx     # form principal (suporta parcelamento e recorrência)
     │   ├── TransactionList.jsx     # lista com togglePaid e ações
     │   ├── BatchTransactionForm.jsx # lançamento em massa
@@ -194,12 +195,10 @@ Todas as tabelas têm uma única policy `for all using (auth.uid() = user_id) wi
 | `get_balance(p_month?)` | balance, total_income, total_expense | saldo total (ou do mês) |
 | `get_period_summary(p_period, p_reference?)` | income, expense, balance, tx_count | day / week / month |
 | `get_expenses_by_category(p_month?)` | category_id, name, color, icon, total, tx_count | gráfico pizza |
-| `get_monthly_history(p_months)` | month, income, expense, balance | gráfico barras |
 | `get_card_summary(p_card_id)` | card_limit, open_bill, paid_in_cycle, available, utilization_percent, cycle_start, cycle_end, ... | dashboard de cartão |
 | `get_card_bills(p_card_id)` | bill_month, closes_on, due_on, total, paid, unpaid, is_fully_paid | lista de faturas |
 | `get_card_bill_transactions(p_card_id, p_bill_month)` | transações de uma fatura | drill-down |
 | `pay_card_bill(p_card_id, p_bill_month?)` | int (qtd. paga) | marca compras como pagas |
-| `get_balance_forecast(p_months)` | month, projected, avg_income, avg_expense | projeção (média móvel) |
 | `generate_recurring_for_month(p_month)` | int (qtd. criada) | idempotente |
 
 ---

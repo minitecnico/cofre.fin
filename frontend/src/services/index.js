@@ -15,38 +15,6 @@ export async function currentUserId() {
 }
 
 /**
- * Resolve um código curto de relatório (/r/:code) na URL real do PDF.
- * Usa a RPC pública resolve_report_link — funciona pra quem não está logado.
- * @param {string} code
- * @returns {Promise<string|null>} URL do PDF ou null se não existir
- */
-export async function resolveReportLink(code) {
-  const { data, error } = await supabase.rpc('resolve_report_link', { p_code: code });
-  if (error) throw error;
-  return isOwnReportUrl(data) ? data : null;
-}
-
-/**
- * Só aceita a URL assinada de um PDF do bucket `reports` DESTE projeto Supabase.
- *
- * Segurança: a URL vem da tabela report_links, onde qualquer usuário logado
- * grava o que quiser nas próprias linhas. Sem essa checagem, /r/:code viraria
- * redirect aberto — e com `javascript:` rodaria script na origem do app
- * (roubando a sessão do localStorage de quem abrisse o link).
- */
-function isOwnReportUrl(value) {
-  try {
-    const target = new URL(value);
-    const supabaseOrigin = new URL(import.meta.env.VITE_SUPABASE_URL).origin;
-    return target.protocol === 'https:'
-      && target.origin === supabaseOrigin
-      && target.pathname.startsWith('/storage/v1/object/sign/reports/');
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Resolve um link de pagamento PIX (/pix/:code) — pra página pública.
  * Retorna { payload, amount, recipient_name, qr_url } ou null.
  */
@@ -704,25 +672,17 @@ export const dashboardService = {
       return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
     })();
 
-    const [balance, periodSummary, byCategory, monthlyHistory, previousBalance] = await Promise.all([
+    const [balance, periodSummary, byCategory, previousBalance] = await Promise.all([
       supabase.rpc('get_balance', { p_month: referenceMonth }).then((r) => r.data?.[0] || { balance: 0, total_income: 0, total_expense: 0 }),
       supabase.rpc('get_period_summary', { p_period: period, p_reference: referenceMonth }).then((r) => r.data?.[0] || { income: 0, expense: 0, balance: 0, tx_count: 0 }),
       supabase.rpc('get_expenses_by_category', { p_month: referenceMonth }).then((r) => r.data || []),
-      supabase.rpc('get_monthly_history', { p_months: 6 }).then((r) => r.data || []),
       supabase.rpc('get_balance', { p_month: previousMonth }).then((r) => r.data?.[0] || { balance: 0, total_income: 0, total_expense: 0 }),
     ]);
     // Normaliza pra estrutura que o frontend já consome
-    const balanceObj = {
-      balance: Number(balance.balance) || 0,
-      totalIncome: Number(balance.total_income) || 0,
-      totalExpense: Number(balance.total_expense) || 0,
-    };
+    const balanceObj = { balance: Number(balance.balance) || 0 };
     const periodObj = {
-      period,
       income: Number(periodSummary.income) || 0,
       expense: Number(periodSummary.expense) || 0,
-      balance: Number(periodSummary.balance) || 0,
-      count: Number(periodSummary.tx_count) || 0,
     };
 
     // Comparação com mês anterior — calcula variações em %
@@ -741,25 +701,7 @@ export const dashboardService = {
       incomeChange: pctChange(periodObj.income, prevIncome),
       expenseChange: pctChange(periodObj.expense, prevExpense),
       balanceChange: pctChange(balanceObj.balance, prevBalanceVal),
-      previous: {
-        income: prevIncome,
-        expense: prevExpense,
-        balance: prevBalanceVal,
-      },
     };
-
-    const alerts = [];
-    if (periodObj.income > 0 && periodObj.expense > periodObj.income * 0.8) {
-      alerts.push({
-        type: 'warning',
-        message: `Despesas representam ${Math.round(
-          (periodObj.expense / periodObj.income) * 100
-        )}% das receitas neste período.`,
-      });
-    }
-    if (balanceObj.balance < 0) {
-      alerts.push({ type: 'danger', message: 'Saldo negativo! Reveja seus gastos.' });
-    }
 
     return {
       balance: balanceObj,
@@ -769,61 +711,8 @@ export const dashboardService = {
         categoryId: c.category_id,
         name: c.name,
         color: c.color,
-        icon: c.icon,
         total: Number(c.total) || 0,
-        count: Number(c.tx_count) || 0,
-      })),
-      monthlyHistory: monthlyHistory.map((m) => ({
-        month: m.month,
-        income: Number(m.income) || 0,
-        expense: Number(m.expense) || 0,
-        balance: Number(m.balance) || 0,
-      })),
-      alerts,
-    };
-  },
-
-  async forecast(months = 3, referenceMonth = null) {
-    const { data, error } = await supabase.rpc('get_balance_forecast', { p_months: months });
-    if (error) throw error;
-    const balance = await supabase.rpc('get_balance', { p_month: referenceMonth }).then((r) => r.data?.[0]);
-    return {
-      current: Number(balance?.balance) || 0,
-      forecast: (data || []).map((f) => ({
-        month: f.month,
-        projected: Number(f.projected) || 0,
-        avgIncome: Number(f.avg_income) || 0,
-        avgExpense: Number(f.avg_expense) || 0,
       })),
     };
-  },
-
-  async recent(limit = 10) {
-    const { transactions } = await transactionService.list({ limit });
-    return transactions;
-  },
-
-  /**
-   * Exporta CSV no próprio cliente — sem precisar de backend.
-   * Busca as transações com os mesmos filtros e gera o CSV em memória.
-   */
-  async exportCSV(filters = {}) {
-    const { transactions } = await transactionService.list({ ...filters, limit: 10000 });
-
-    const header = ['Data', 'Tipo', 'Descrição', 'Categoria', 'Valor (R$)', 'Cartão'];
-    const rows = transactions.map((t) => {
-      const dateBr = new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR');
-      return [
-        dateBr,
-        t.type === 'income' ? 'Receita' : 'Despesa',
-        `"${(t.description || '').replace(/"/g, '""')}"`,
-        t.category?.name || '',
-        Number(t.amount).toFixed(2).replace('.', ','),
-        t.credit_card?.name || '',
-      ].join(';');
-    });
-
-    // BOM para Excel reconhecer UTF-8
-    return '\ufeff' + [header.join(';'), ...rows].join('\n');
   },
 };

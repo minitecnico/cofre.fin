@@ -26,8 +26,7 @@ import {
 import { BANKS } from '../constants/banks';
 import { buildPixPayload, pixQrCodeDataUrl } from '../services/pix';
 import { pixLinkService } from '../services/cobrancas';
-import { buildReminderText, waLink, generateChargesPdf } from '../services/cobrancasReport';
-import { downloadPdf, shareReportFile } from '../services/reports';
+import { buildReminderText, waLink, generateChargesPdf, downloadPdf, shareReportFile } from '../services/cobrancasReport';
 
 /**
  * Página de Cobranças — a "carteira do credor".

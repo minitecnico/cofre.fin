@@ -15,11 +15,9 @@ import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import Fipe from './pages/Fipe';
 import ImportExport from './pages/ImportExport';
-import RedirectLink from './pages/RedirectLink';
 import PixPay from './pages/PixPay';
 
-// Lazy: páginas que carregam jsPDF (pesado) — só baixam quando acessadas.
-const Reports = lazy(() => import('./pages/Reports'));
+// Lazy: Cobranças carrega o jsPDF (pesado) — só baixa quando acessada.
 const Cobrancas = lazy(() => import('./pages/Cobrancas'));
 // Lazy: página pública do devedor (puxa o gerador de QR) — fora do bundle do app.
 const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
@@ -32,7 +30,6 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/r/:code" element={<RedirectLink />} />
             <Route path="/pix/:code" element={<PixPay />} />
             <Route
               path="/extrato/:code"
@@ -59,14 +56,6 @@ export default function App() {
               <Route path="fipe" element={<Fipe />} />
               <Route path="settings" element={<Settings />} />
               <Route path="goals" element={<Goals />} />
-              <Route
-                path="reports"
-                element={
-                  <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
-                    <Reports />
-                  </Suspense>
-                }
-              />
               <Route
                 path="cobrancas"
                 element={

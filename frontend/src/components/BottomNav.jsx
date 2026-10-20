@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
-  MoreHorizontal, Repeat, Sparkles, FileText, HandCoins, Tag, Settings, X, Car,
+  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car,
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
@@ -12,7 +12,6 @@ const primary = [
   { to: '/incomes', label: 'Receitas', icon: ArrowUpCircle },
   { to: '/expenses', label: 'Despesas', icon: ArrowDownCircle },
   { to: '/cobrancas', label: 'Cobranças', icon: HandCoins },
-  { to: '/reports', label: 'Relatórios', icon: FileText },
 ];
 
 // Itens secundários — abrem na folha "Mais" (resolve a falta de espaço e
@@ -33,7 +32,7 @@ export default function BottomNav() {
   return (
     <>
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-gradient-dark text-ink-50 grid grid-cols-6 shadow-soft-xl"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-gradient-dark text-ink-50 grid grid-cols-5 shadow-soft-xl"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {primary.map(({ to, label, icon: Icon, end }) => (
