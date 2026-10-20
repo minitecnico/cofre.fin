@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 /**
  * Service unificado para a página Objetivos:
  *   - Metas / Goals (goalService)
+ *   - Comprovantes de PIX das metas (goalReceiptService)
  *   - Notas / Notes (noteService)
  *
  * Cada um é independente — não compartilham lógica nem afetam outros services.
@@ -87,6 +88,16 @@ export const goalService = {
   },
 
   async remove(id) {
+    // O cascade do banco apaga as linhas de goal_receipts, mas não os arquivos
+    // no Storage — remove eles antes.
+    const { data: receipts } = await supabase
+      .from('goal_receipts')
+      .select('file_path')
+      .eq('goal_id', id);
+    if (receipts?.length) {
+      await supabase.storage.from(RECEIPTS_BUCKET).remove(receipts.map((r) => r.file_path));
+    }
+
     const { error } = await supabase.from('goals').delete().eq('id', id);
     if (error) throw error;
   },
@@ -205,6 +216,89 @@ export const profileService = {
       throw error;
     }
     return clean;
+  },
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// COMPROVANTES DE PIX DAS METAS
+// ═════════════════════════════════════════════════════════════════════════
+
+const RECEIPTS_BUCKET = 'goal-receipts';
+const RECEIPT_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+};
+const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Valor do `accept` do <input type="file">. Sem HEIC: o iOS converte a foto pra JPEG. */
+export const RECEIPT_ACCEPT = Object.keys(RECEIPT_EXT).join(',');
+
+/**
+ * Arquivos ficam no bucket privado 'goal-receipts' (migration_goal_receipts.sql)
+ * e a tabela goal_receipts guarda o path + valor do PIX, quando informado.
+ */
+export const goalReceiptService = {
+  /** Comprovantes da meta (mais recentes primeiro), cada um com `url` assinada válida por 1h. */
+  async list(goalId) {
+    const { data, error } = await supabase
+      .from('goal_receipts')
+      .select('*')
+      .eq('goal_id', goalId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    if (!data.length) return [];
+
+    const { data: signed, error: signErr } = await supabase.storage
+      .from(RECEIPTS_BUCKET)
+      .createSignedUrls(data.map((r) => r.file_path), 60 * 60);
+    if (signErr) throw signErr;
+    const urlByPath = Object.fromEntries(signed.map((s) => [s.path, s.signedUrl]));
+    return data.map((r) => ({ ...r, url: urlByPath[r.file_path] || null }));
+  },
+
+  /**
+   * Sobe o arquivo e registra. A 1ª pasta do path é o user_id — é o que a
+   * policy do Storage confere.
+   */
+  async upload(goalId, file, amount = null) {
+    const ext = RECEIPT_EXT[file.type];
+    if (!ext) throw new Error('Envie uma imagem (JPG, PNG ou WEBP) ou um PDF.');
+    if (file.size > RECEIPT_MAX_BYTES) throw new Error('Arquivo muito grande — o limite é 5 MB.');
+
+    const userId = await currentUserId();
+    const path = `${userId}/${goalId}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from(RECEIPTS_BUCKET)
+      .upload(path, file, { contentType: file.type });
+    if (upErr) throw upErr;
+
+    const { data, error } = await supabase
+      .from('goal_receipts')
+      .insert({
+        user_id: userId,
+        goal_id: goalId,
+        amount,
+        file_path: path,
+        file_name: file.name,
+        mime_type: file.type,
+      })
+      .select('*')
+      .single();
+    if (error) {
+      // Sem a linha o arquivo fica inalcançável pelo app — não deixa lixo no bucket.
+      await supabase.storage.from(RECEIPTS_BUCKET).remove([path]);
+      throw error;
+    }
+    return data;
+  },
+
+  async remove(receipt) {
+    const { error } = await supabase.from('goal_receipts').delete().eq('id', receipt.id);
+    if (error) throw error;
+    await supabase.storage.from(RECEIPTS_BUCKET).remove([receipt.file_path]);
   },
 };
 

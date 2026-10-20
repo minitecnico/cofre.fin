@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Target, Plus, TrendingUp, Calendar, Check, Trash2, Edit2, Calculator,
-  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users, History,
+  Plane, Home, GraduationCap, Car, Heart, Smartphone, Coffee, Gift, Users, History, Paperclip, X,
 } from 'lucide-react';
-import { goalService } from '../services/goals';
+import { goalService, goalReceiptService, RECEIPT_ACCEPT } from '../services/goals';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, parseAmount, formatDate } from '../utils/format';
 import { PIX_KEY_TYPES } from '../constants';
@@ -14,6 +14,7 @@ import GoalInvites from './GoalInvites';
 import NickCard from './NickCard';
 import SharedGoalDetails from './SharedGoalDetails';
 import GoalContributionList from './GoalContributionList';
+import GoalReceipts from './GoalReceipts';
 
 const PRESET_COLORS = [
   '#b8e94e', // accent
@@ -71,6 +72,7 @@ export default function GoalsList() {
   const [depositingGoal, setDepositingGoal] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [simulatingGoal, setSimulatingGoal] = useState(null);
+  const [receiptsGoal, setReceiptsGoal] = useState(null);
 
   // Sem skeleton nos recarregamentos (Realtime) — só no primeiro carregamento.
   const load = useCallback(async () => {
@@ -91,7 +93,10 @@ export default function GoalsList() {
     });
   }, [load]);
 
-  async function handleDeposit(goal, amount) {
+  async function handleDeposit(goal, amount, receipt) {
+    // Comprovante primeiro: se o upload falhar, nada foi depositado e a pessoa
+    // tenta de novo sem somar o valor duas vezes.
+    if (receipt) await goalReceiptService.upload(goal.id, receipt, amount);
     await goalService.contribute(goal.id, amount);
     setDepositingGoal(null);
     load();
@@ -163,6 +168,7 @@ export default function GoalsList() {
                 onSimulate={() => setSimulatingGoal(goal)}
                 onShared={() => setSharedGoalId(goal.id)}
                 onHistory={() => setHistoryGoalId(goal.id)}
+                onReceipts={() => setReceiptsGoal(goal)}
               />
             ))}
           </div>
@@ -183,6 +189,7 @@ export default function GoalsList() {
                     onDelete={() => setConfirmDelete(goal)}
                     onShared={() => setSharedGoalId(goal.id)}
                     onHistory={() => setHistoryGoalId(goal.id)}
+                    onReceipts={() => setReceiptsGoal(goal)}
                   />
                 ))}
               </div>
@@ -211,7 +218,8 @@ export default function GoalsList() {
         {depositingGoal && (
           <DepositForm
             goal={depositingGoal}
-            onSaved={(amount) => handleDeposit(depositingGoal, amount)}
+            canAttach={depositingGoal.user_id === user?.id}
+            onSaved={(amount, receipt) => handleDeposit(depositingGoal, amount, receipt)}
             onCancel={() => setDepositingGoal(null)}
           />
         )}
@@ -244,6 +252,14 @@ export default function GoalsList() {
       </Modal>
 
       <Modal
+        isOpen={!!receiptsGoal}
+        onClose={() => setReceiptsGoal(null)}
+        title="Comprovantes de PIX"
+      >
+        {receiptsGoal && <GoalReceipts goal={receiptsGoal} />}
+      </Modal>
+
+      <Modal
         isOpen={!!simulatingGoal}
         onClose={() => setSimulatingGoal(null)}
         title="Simular meta"
@@ -265,6 +281,9 @@ export default function GoalsList() {
                   Você já guardou <strong>{formatCurrency(confirmDelete.current_amount)}</strong> nessa meta.
                 </span>
               )}
+              <span className="block mt-2 text-ink-500">
+                Os comprovantes de PIX anexados também serão apagados.
+              </span>
             </p>
             <div className="flex flex-col-reverse sm:flex-row gap-3">
               <button onClick={() => setConfirmDelete(null)} className="btn-ghost">Cancelar</button>
@@ -286,7 +305,7 @@ export default function GoalsList() {
 // Card de meta individual
 // ─────────────────────────────────────────────────────────────────────────
 
-function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onShared, onHistory }) {
+function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onShared, onHistory, onReceipts }) {
   const Icon = ICON_MAP[goal.icon] || Target;
   const target = Number(goal.target_amount);
   const current = Number(goal.current_amount);
@@ -429,16 +448,29 @@ function GoalCard({ goal, isOwner, onDeposit, onEdit, onDelete, onSimulate, onSh
         </div>
       )}
 
-      {/* Ação principal */}
-      {!isComplete && (
-        <button
-          onClick={onDeposit}
-          className="w-full px-4 py-2.5 min-h-[40px] bg-gradient-dark text-white font-bold rounded-xl text-sm hover:shadow-soft-md active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
-        >
-          <TrendingUp className="w-4 h-4" />
-          {goal.is_shared ? 'Registrar depósito' : 'Adicionar valor'}
-        </button>
-      )}
+      {/* Ações */}
+      <div className="flex gap-2">
+        {!isComplete && (
+          <button
+            onClick={onDeposit}
+            className="flex-1 px-4 py-2.5 min-h-[40px] bg-gradient-dark text-white font-bold rounded-xl text-sm hover:shadow-soft-md active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+          >
+            <TrendingUp className="w-4 h-4" />
+            {goal.is_shared ? 'Registrar depósito' : 'Adicionar valor'}
+          </button>
+        )}
+        {/* Só o dono: o RLS de goal_receipts ainda não libera participantes de meta coletiva. */}
+        {isOwner && (
+          <button
+            onClick={onReceipts}
+            className={`${isComplete ? 'flex-1' : ''} px-3 py-2.5 min-h-[40px] bg-ink-100 text-ink-700 font-bold rounded-xl text-sm hover:bg-ink-200 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2`}
+            title="Comprovantes de PIX"
+          >
+            <Paperclip className="w-4 h-4" />
+            Comprovantes
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -715,8 +747,9 @@ function GoalForm({ initial, onSaved, onCancel }) {
   );
 }
 
-function DepositForm({ goal, onSaved, onCancel }) {
+function DepositForm({ goal, canAttach, onSaved, onCancel }) {
   const [amount, setAmount] = useState('');
+  const [receipt, setReceipt] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -733,7 +766,7 @@ function DepositForm({ goal, onSaved, onCancel }) {
     }
     setSubmitting(true);
     try {
-      await onSaved(value);
+      await onSaved(value, receipt);
     } catch (err) {
       setError(err.message);
       setSubmitting(false);
@@ -767,6 +800,37 @@ function DepositForm({ goal, onSaved, onCancel }) {
           />
         </div>
       </div>
+
+      {canAttach && (
+      <div>
+        <label className="label">Comprovante do PIX (opcional)</label>
+        {receipt ? (
+          <div className="flex items-center gap-2 pl-3 pr-1 min-h-[44px] bg-ink-50 rounded-xl text-sm">
+            <Paperclip className="w-4 h-4 text-ink-500 flex-shrink-0" />
+            <span className="truncate flex-1">{receipt.name}</span>
+            <button
+              type="button"
+              onClick={() => setReceipt(null)}
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100 flex-shrink-0"
+              aria-label="Remover comprovante"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <label className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] border border-dashed border-ink-300 rounded-xl text-sm font-bold text-ink-700 hover:bg-ink-50 cursor-pointer transition-colors">
+            <Paperclip className="w-4 h-4" />
+            Anexar imagem ou PDF
+            <input
+              type="file"
+              accept={RECEIPT_ACCEPT}
+              onChange={(e) => setReceipt(e.target.files?.[0] || null)}
+              className="sr-only"
+            />
+          </label>
+        )}
+      </div>
+      )}
 
       {value > 0 && (
         <div className={`px-4 py-3 rounded-xl ${willComplete ? 'bg-gradient-accent text-ink-900' : 'bg-ink-50'}`}>
