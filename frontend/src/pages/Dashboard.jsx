@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import StatCard from '../components/StatCard';
-import { CategoryChart } from '../components/Charts';
+import { CategoryChart, MonthlyChart } from '../components/Charts';
 import TransactionList from '../components/TransactionList';
 import { useTransactions } from '../hooks/useTransactions';
 import InstallBanner from '../components/InstallBanner';
@@ -134,7 +134,11 @@ export default function Dashboard() {
         <ChevronRight className="w-5 h-5 text-ink-400 flex-shrink-0" />
       </button>
 
-      {data.byCategory.length > 0 && <CategoryChart data={data.byCategory} />}
+      {/* Gráficos lado a lado no desktop; empilhados no celular */}
+      <div className={`grid grid-cols-1 gap-3 md:gap-4 items-stretch ${data.byCategory.length > 0 ? 'lg:grid-cols-2' : ''}`}>
+        <MonthlyChart refreshKey={data} />
+        {data.byCategory.length > 0 && <CategoryChart data={data.byCategory} />}
+      </div>
 
       {/* Transações do mês */}
       <div className="space-y-3">

@@ -715,4 +715,16 @@ export const dashboardService = {
       })),
     };
   },
+
+  /** Receita, despesa e saldo de cada mês, os últimos `months` até `endMonth` ('YYYY-MM'). */
+  async monthly(endMonth, months) {
+    const { data, error } = await supabase.rpc('get_monthly_summary', { p_end_month: endMonth, p_months: months });
+    if (error) throw error;
+    return (data || []).map((m) => ({
+      month: m.month,
+      income: Number(m.income) || 0,
+      expense: Number(m.expense) || 0,
+      balance: Number(m.balance) || 0,
+    }));
+  },
 };
