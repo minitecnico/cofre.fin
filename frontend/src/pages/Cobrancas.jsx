@@ -1674,16 +1674,6 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
                 <span className="text-xs text-ink-700 truncate flex-1 min-w-0 ml-1" title={link}>
                   {link.replace(/^https?:\/\//, '')}
                 </span>
-                <a
-                  href={link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-lg text-ink-600 hover:bg-white hover:text-ink-900 flex items-center justify-center flex-shrink-0 transition-colors"
-                  title="Abrir extrato"
-                  aria-label="Abrir extrato"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
                 <button
                   onClick={copy}
                   className="h-10 px-3 rounded-lg bg-white shadow-soft text-ink-800 font-bold text-xs hover:bg-ink-100 flex items-center gap-1.5 flex-shrink-0 transition-colors"
@@ -1703,16 +1693,26 @@ function ShareStatementModal({ debtor, charges, getLink, onClose }) {
               )}
             </div>
 
-            {/* Enviar */}
-            <div className="flex gap-2">
-              <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1 min-h-[48px] flex items-center justify-center gap-2">
-                <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp
+            {/* Ações: enviar ao devedor e conferir o extrato como ele vai ver */}
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <a href={waLink(debtor?.phone, message)} target="_blank" rel="noopener noreferrer" className="btn-accent flex-1 min-h-[48px] flex items-center justify-center gap-2">
+                  <MessageCircle className="w-5 h-5" /> Enviar no WhatsApp
+                </a>
+                {typeof navigator !== 'undefined' && navigator.share && (
+                  <button onClick={share} className="btn-ghost min-h-[48px] w-12 px-0 flex items-center justify-center" title="Compartilhar" aria-label="Compartilhar">
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full min-h-[48px] px-6 rounded-full border border-ink-300 bg-white text-ink-900 font-bold text-sm md:text-base shadow-soft hover:bg-ink-50 hover:border-ink-400 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-5 h-5" /> Abrir extrato
               </a>
-              {typeof navigator !== 'undefined' && navigator.share && (
-                <button onClick={share} className="btn-ghost min-h-[48px] w-12 px-0 flex items-center justify-center" title="Compartilhar" aria-label="Compartilhar">
-                  <Share2 className="w-4 h-4" />
-                </button>
-              )}
             </div>
 
             {/* Trocar o link — invalida o anterior, por isso fica separado */}
