@@ -49,7 +49,9 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
+          // !mt-0: dentro de um pai com space-y-*, o fixo herdava a margem do topo e
+          // o fundo começava 24px abaixo (a barra do topo ficava sem escurecer).
+          className="fixed inset-0 z-50 !mt-0 flex items-end md:items-center justify-center md:p-4"
           onClick={onClose}
         >
           {/* Backdrop com blur moderno — fade independente do conteúdo */}

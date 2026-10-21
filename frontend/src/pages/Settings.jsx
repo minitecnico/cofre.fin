@@ -269,7 +269,7 @@ export default function Settings() {
 
       {/* Toast flutuante de sucesso */}
       {toast && (
-        <div className="fixed top-4 md:top-6 left-1/2 -translate-x-1/2 z-[60] animate-fade-in px-2 max-w-md w-full">
+        <div className="fixed top-4 md:top-6 !mt-0 left-1/2 -translate-x-1/2 z-[60] animate-fade-in px-2 max-w-md w-full">
           <div className="bg-gradient-accent text-ink-900 px-4 py-3 rounded-2xl shadow-soft-lg flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-ink-900 flex items-center justify-center flex-shrink-0">
               <CheckCircle2 className="w-5 h-5 text-accent" strokeWidth={2.5} />

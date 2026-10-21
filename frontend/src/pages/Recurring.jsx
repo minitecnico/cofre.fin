@@ -934,7 +934,7 @@ export default function RecurringPage() {
 
       {/* Feedback flutuante (toast) — pill com link opcional */}
       {bulkFeedback && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full shadow-soft-xl animate-fade-in bg-ink-950 text-white max-w-md mx-2">
+        <div className="fixed top-20 !mt-0 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full shadow-soft-xl animate-fade-in bg-ink-950 text-white max-w-md mx-2">
           <div className="flex items-center gap-3 text-sm font-medium">
             <span>{bulkFeedback.text}</span>
             {bulkFeedback.link && (

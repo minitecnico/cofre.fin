@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown,
+  ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown, Lock,
 } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -24,6 +24,8 @@ function passesFilters(values, filters, except) {
  * destacar e pronto: cada planilha vira uma cotação salva e cada destaque é
  * gravado na hora. Várias pessoas na mesma conta podem marcar juntas — os
  * destaques dos outros aparecem ao vivo (Realtime) e ninguém apaga o de ninguém.
+ * Item marcado fica TRAVADO: desmarcar (ou limpar todos) pede confirmação,
+ * pra ninguém soltar sem querer o que outra pessoa marcou.
  *
  * Filtros como os do Excel: em cada coluna, ordenar e marcar quais valores
  * aparecem (a lista respeita os filtros das outras colunas); e escolher quais
@@ -135,9 +137,27 @@ export default function Cotacao() {
     setMenu((m) => (m?.type === type && m.col === col ? null : { type, col, anchor: currentTarget }));
   }
 
+  /**
+   * Marcar é imediato; item marcado fica travado — desmarcar pede confirmação.
+   * (Mesma conta pra todos: o banco não sabe quem marcou, então vale pra todos.)
+   */
+  function toggle(index, values) {
+    if (!highlighted.has(index)) { setMark(index, true); return; }
+    setConfirmReq({
+      title: 'Desmarcar item?',
+      message: (
+        <>
+          <b className="text-ink-900">{values.filter(Boolean).slice(0, 2).join(' · ') || 'Este item'}</b> está marcado e travado.
+          {' '}Ele volta a ficar livre para todos.
+        </>
+      ),
+      confirmLabel: 'Desmarcar',
+      onConfirm: () => setMark(index, false),
+    });
+  }
+
   /** Na tela na hora; no banco só aquela linha (desfaz se falhar). */
-  async function toggle(index) {
-    const on = !highlighted.has(index);
+  async function setMark(index, on) {
     const flip = (value) => setHighlighted((prev) => {
       const next = new Set(prev);
       value ? next.add(index) : next.delete(index);
@@ -150,6 +170,17 @@ export default function Cotacao() {
       flip(!on);
       setError('Não foi possível salvar o destaque. Tente de novo.');
     }
+  }
+
+  function askClearAll() {
+    const n = highlighted.size;
+    setConfirmReq({
+      title: 'Limpar todos os destaques?',
+      message: <><b className="text-ink-900">{n} {n === 1 ? 'item marcado volta' : 'itens marcados voltam'}</b> a ficar livres para todos.</>,
+      confirmLabel: 'Limpar destaques',
+      tone: 'danger',
+      onConfirm: clearAll,
+    });
   }
 
   async function clearAll() {
@@ -219,7 +250,7 @@ export default function Cotacao() {
             <ClipboardList className="w-7 h-7 md:w-10 md:h-10 flex-shrink-0" strokeWidth={2.25} />
             Cotação
           </h1>
-          <p className="text-sm md:text-base text-ink-500 mt-1">Envie a planilha do cliente e toque nos itens para destacar. Fica tudo salvo.</p>
+          <p className="text-sm md:text-base text-ink-500 mt-1">Envie a planilha do cliente e toque nos itens para marcar. Item marcado fica travado e tudo fica salvo.</p>
         </div>
         <label className={`btn-accent self-stretch sm:self-end flex-shrink-0 ${busy === 'upload' ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}>
           {busy === 'upload' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
@@ -271,7 +302,7 @@ export default function Cotacao() {
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               {highlighted.size > 0 && (
-                <button onClick={clearAll} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
+                <button onClick={askClearAll} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
                   <Eraser className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Limpar destaques</span>
                 </button>
               )}
@@ -328,6 +359,7 @@ export default function Cotacao() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
+                  <th className="sticky top-0 z-[1] bg-ink-50 w-10 border-b border-ink-200" aria-label="Travado" />
                   {cols.map((i) => {
                     const active = !!filters[i] || sort?.col === i;
                     const SortIcon = sort?.dir === 'asc' ? ArrowUp : ArrowDown;
@@ -358,14 +390,17 @@ export default function Cotacao() {
                   return (
                     <tr
                       key={index}
-                      onClick={() => toggle(index)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(index); } }}
+                      onClick={() => toggle(index, values)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(index, values); } }}
                       tabIndex={0}
                       aria-pressed={on}
                       className={`cursor-pointer border-b border-ink-100 last:border-0 transition-colors outline-none focus-visible:bg-ink-50 ${
                         on ? 'bg-accent/30 font-semibold shadow-[inset_4px_0_0_#9bc92e] hover:bg-accent/40' : 'hover:bg-ink-50'
                       }`}
                     >
+                      <td className="pl-3 py-2.5 align-top w-10">
+                        {on && <Lock className="w-3.5 h-3.5 mt-0.5 text-ink-700" strokeWidth={2.5} aria-label="Travado" />}
+                      </td>
                       {cols.map((i) => (
                         <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{values[i]}</td>
                       ))}

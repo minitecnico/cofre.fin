@@ -71,7 +71,7 @@ export default function InstallBanner() {
       {/* Modal de instruções iOS */}
       {showIOSInstructions && (
         <div
-          className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-50 !mt-0 flex items-end md:items-center justify-center p-4 animate-fade-in"
           onClick={() => setShowIOSInstructions(false)}
         >
           <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" />
