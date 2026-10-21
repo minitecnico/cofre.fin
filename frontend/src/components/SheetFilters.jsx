@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowDownAZ, ArrowDownZA, Search, Check } from 'lucide-react';
+import { ArrowDownAZ, ArrowDownZA, Search, Check, Filter, ChevronRight } from 'lucide-react';
 
 /**
  * Filtros estilo Excel pra tabela da Cotação: menu de cada coluna (ordenar +
@@ -11,11 +11,52 @@ import { ArrowDownAZ, ArrowDownZA, Search, Check } from 'lucide-react';
 
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
-/** '1.234,56' / 'R$ 10,00' / '120' → número; resto → null. */
-function toNumber(v) {
+/**
+ * Texto da célula → número, aceitando os dois jeitos que chegam aqui: digitado
+ * no padrão BR ('1.234,56', '0,12') ou formatado pelo leitor de planilha no
+ * padrão americano ('0.12', '1,234.56'). Códigos como '1.1.2' não são número.
+ */
+function parseNumber(v) {
   const s = String(v).replace(/^R\$\s*/, '').trim();
-  if (!/^-?[\d.]+(,\d+)?$/.test(s)) return null;
-  return Number(s.replace(/\./g, '').replace(',', '.'));
+  if (/^-?\d+$/.test(s)) return Number(s);
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s) && !/^-?0\./.test(s)) return Number(s.replace(/\./g, '').replace(',', '.'));
+  if (/^-?\d+,\d+$/.test(s)) return Number(s.replace(',', '.'));
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return Number(s.replace(/,/g, ''));
+  if (/^-?\d+\.\d+$/.test(s)) return Number(s);
+  return null;
+}
+
+const MONEY_HEADER = /pre[çc]o|valor|r\$|custo|unit[áa]rio|total/i;
+
+/**
+ * Tipo de cada coluna, pra alinhar e formatar como no Excel:
+ *   money  → valores em reais (≥ 80% com "R$", ou números com cabeçalho de preço/valor)
+ *   number → ≥ 80% números (quantidade, item)
+ *   long   → texto comprido (descrição) · text → texto curto (lote, unidade)
+ */
+export function columnKinds(columns, rows) {
+  return columns.map((header, i) => {
+    const vals = rows.map((r) => r[i]).filter(Boolean);
+    if (!vals.length) return 'text';
+    const share = (fn) => vals.filter(fn).length / vals.length;
+    const numeric = share((v) => parseNumber(v) !== null);
+    if (share((v) => v.includes('R$')) >= 0.8 || (numeric >= 0.8 && MONEY_HEADER.test(header))) return 'money';
+    if (numeric >= 0.8) return 'number';
+    return vals.reduce((s, v) => s + v.length, 0) / vals.length > 24 ? 'long' : 'text';
+  });
+}
+
+/**
+ * Como a célula aparece: reais com 2 casas ('0.12' → '0,12'), inteiros com
+ * ponto de milhar ('200000' → '200.000'). Decimal fora de coluna de dinheiro
+ * fica como veio (pode ser código de item, '1.1').
+ */
+export function displayCell(value, kind) {
+  if (!value) return '';
+  const n = kind === 'money' || kind === 'number' ? parseNumber(value) : null;
+  if (kind === 'money' && n !== null) return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (kind === 'number' && n !== null && Number.isInteger(n)) return n.toLocaleString('pt-BR');
+  return formatCell(value);
 }
 
 const MONEY = /R\$\s?(-?\d{1,3}(?:\.\d{3})+|-?\d+)(?:,(\d+))?/g;
@@ -35,8 +76,8 @@ export function formatCell(text) {
 /** Ordem do Excel: números como números, texto em ordem alfabética, vazio por último. */
 export function compareCells(a, b) {
   if (!a !== !b) return a ? -1 : 1;
-  const na = toNumber(a);
-  const nb = toNumber(b);
+  const na = parseNumber(a);
+  const nb = parseNumber(b);
   if (na !== null && nb !== null) return na - nb;
   return collator.compare(a, b);
 }
@@ -123,14 +164,14 @@ const LIST_LIMIT = 500;
  * Excel). `values` = valores distintos [{ value, count }] dos itens que passam
  * nos filtros das OUTRAS colunas; `selected` = Set atual ou null (sem filtro).
  */
-export function ColumnFilterMenu({ anchor, title, values, selected, sortDir, onSort, onApply, onClose }) {
+export function ColumnFilterMenu({ anchor, title, values, selected, sortDir, onSort, onApply, onClose, format = formatCell }) {
   const [term, setTerm] = useState('');
   const [draft, setDraft] = useState(() => new Set(selected ?? values.map((v) => v.value)));
 
   const shown = useMemo(() => {
     const t = term.trim().toLowerCase();
-    return t ? values.filter((v) => (formatCell(v.value) || '(vazias)').toLowerCase().includes(t)) : values;
-  }, [values, term]);
+    return t ? values.filter((v) => (format(v.value) || '(vazias)').toLowerCase().includes(t)) : values;
+  }, [values, term, format]);
   const allChecked = shown.length > 0 && shown.every((v) => draft.has(v.value));
   // Com busca, valem só os marcados entre os encontrados (igual ao Excel).
   const chosen = (term.trim() ? shown : values).filter((v) => draft.has(v.value));
@@ -187,7 +228,7 @@ export function ColumnFilterMenu({ anchor, title, values, selected, sortDir, onS
         </CheckRow>
         {shown.slice(0, LIST_LIMIT).map((v) => (
           <CheckRow key={v.value} checked={draft.has(v.value)} onChange={() => flip(v.value)} count={v.count}>
-            {formatCell(v.value) || <i className="text-ink-400">(Vazias)</i>}
+            {format(v.value) || <i className="text-ink-400">(Vazias)</i>}
           </CheckRow>
         ))}
         {shown.length > LIST_LIMIT && (
@@ -228,6 +269,29 @@ export function ColumnsMenu({ anchor, columns, hidden, onChange, onClose }) {
           Mostrar todas
         </button>
       )}
+    </Popover>
+  );
+}
+
+/** Celular (sem cabeçalho de tabela): escolhe a coluna e abre o filtro dela. */
+export function ColumnPickerMenu({ anchor, columns, cols, active, onPick, onClose }) {
+  return (
+    <Popover anchor={anchor} onClose={onClose}>
+      <p className="px-2 pt-1 pb-2 text-[10px] uppercase tracking-widest font-semibold text-ink-500">Filtrar ou ordenar por</p>
+      <div className="min-h-0 flex-1 overflow-y-auto max-h-80">
+        {cols.map((i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onPick(i)}
+            className="w-full flex items-center gap-2.5 px-2 min-h-[44px] rounded-lg hover:bg-ink-50 text-sm text-left"
+          >
+            <Filter className={`w-4 h-4 flex-shrink-0 ${active(i) ? 'text-ink-900' : 'text-ink-300'}`} />
+            <span className={`min-w-0 flex-1 truncate ${active(i) ? 'font-semibold' : ''}`}>{columns[i]}</span>
+            <ChevronRight className="w-4 h-4 text-ink-300 flex-shrink-0" />
+          </button>
+        ))}
+      </div>
     </Popover>
   );
 }

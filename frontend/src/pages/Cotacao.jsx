@@ -4,7 +4,9 @@ import {
 } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { ColumnFilterMenu, ColumnsMenu, compareCells, formatCell } from '../components/SheetFilters';
+import {
+  ColumnFilterMenu, ColumnsMenu, ColumnPickerMenu, compareCells, columnKinds, displayCell,
+} from '../components/SheetFilters';
 
 /** Colunas escondidas, por cotação — preferência deste aparelho. */
 const hiddenKey = (id) => `cofre_cotacao_colunas_${id}`;
@@ -211,20 +213,22 @@ export default function Cotacao() {
     });
   }
 
+  const kinds = useMemo(() => (current ? columnKinds(current.columns, current.rows) : []), [current]);
+
   const visibleRows = useMemo(() => {
     if (!current) return [];
     const term = search.trim().toLowerCase();
     const rows = current.rows
       .map((values, index) => ({ values, index }))
       .filter((r) => (!onlyHighlighted || highlighted.has(r.index))
-        && (!term || r.values.some((v) => formatCell(v).toLowerCase().includes(term)))
+        && (!term || r.values.some((v, i) => displayCell(v, kinds[i]).toLowerCase().includes(term)))
         && passesFilters(r.values, filters, -1));
     if (sort) {
       const dir = sort.dir === 'asc' ? 1 : -1;
       rows.sort((a, b) => dir * compareCells(a.values[sort.col] ?? '', b.values[sort.col] ?? ''));
     }
     return rows;
-  }, [current, search, onlyHighlighted, highlighted, filters, sort]);
+  }, [current, kinds, search, onlyHighlighted, highlighted, filters, sort]);
 
   // Valores distintos da coluna do menu aberto, com contagem.
   const menuValues = useMemo(() => {
@@ -239,6 +243,9 @@ export default function Cotacao() {
   }, [menu, current, filters]);
 
   const cols = current ? current.columns.map((_, i) => i).filter((i) => !hidden.has(i)) : [];
+  // Cartão do celular: o texto mais descritivo vira o título; o resto, campos.
+  const titleCol = cols.find((i) => kinds[i] === 'long') ?? cols.find((i) => kinds[i] === 'text') ?? cols[0];
+  const isNumeric = (i) => kinds[i] === 'money' || kinds[i] === 'number';
   const filtering = Object.keys(filters).length > 0 || !!sort;
 
   return (
@@ -328,19 +335,28 @@ export default function Cotacao() {
                 </button>
               )}
             </div>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setOnlyHighlighted((v) => !v)}
               aria-pressed={onlyHighlighted}
-              className={`inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold transition-colors ${
+              className={`flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold transition-colors ${
                 onlyHighlighted ? 'bg-gradient-dark text-white shadow-soft' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
               }`}
             >
               <Star className="w-3.5 h-3.5" /> Só destacados
             </button>
             <button
+              onClick={(e) => openMenu(e, 'picker')}
+              aria-expanded={menu?.type === 'picker'}
+              className="md:hidden flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
+            >
+              <Filter className="w-3.5 h-3.5" /> Filtrar
+              {Object.keys(filters).length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-ink-900 text-white text-[10px]">{Object.keys(filters).length}</span>}
+            </button>
+            <button
               onClick={(e) => openMenu(e, 'columns')}
               aria-expanded={menu?.type === 'columns'}
-              className="inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
+              className="flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
             >
               <Columns3 className="w-3.5 h-3.5" /> Colunas
               {hidden.size > 0 && <span className="px-1.5 py-0.5 rounded-full bg-ink-900 text-white text-[10px]">{cols.length}/{current.columns.length}</span>}
@@ -348,14 +364,46 @@ export default function Cotacao() {
             {filtering && (
               <button
                 onClick={() => { setFilters({}); setSort(null); }}
-                className="inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold bg-accent/30 text-ink-900 hover:bg-accent/50 transition-colors"
+                className="flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-accent/30 text-ink-900 hover:bg-accent/50 transition-colors"
               >
                 <FilterX className="w-3.5 h-3.5" /> Limpar filtros
               </button>
             )}
+            </div>
           </div>
 
-          <div className="overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
+          {/* Celular: um cartão por item, sem rolar pro lado */}
+          <ul className="md:hidden rounded-xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+            {visibleRows.map(({ values, index }) => {
+              const on = highlighted.has(index);
+              return (
+                <li key={index}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(index, values)}
+                    aria-pressed={on}
+                    className={`w-full text-left p-3 transition-colors ${on ? 'bg-accent/30 shadow-[inset_4px_0_0_#9bc92e]' : 'active:bg-ink-50'}`}
+                  >
+                    <span className="flex items-start gap-2">
+                      {on && <Lock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-ink-700" strokeWidth={2.5} aria-label="Travado" />}
+                      <span className={`text-sm text-ink-900 ${on ? 'font-bold' : 'font-semibold'}`}>{displayCell(values[titleCol], kinds[titleCol]) || '—'}</span>
+                    </span>
+                    <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {cols.filter((i) => i !== titleCol).map((i) => (
+                        <span key={i} className="min-w-0">
+                          <span className="block text-[10px] uppercase tracking-wide text-ink-400 truncate">{current.columns[i]}</span>
+                          <span className={`block text-xs text-ink-800 break-words ${isNumeric(i) ? 'tabular-nums' : ''}`}>{displayCell(values[i], kinds[i]) || '—'}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Desktop: tabela; números e reais alinhados à direita, como no Excel */}
+          <div className="hidden md:block overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
@@ -364,15 +412,15 @@ export default function Cotacao() {
                     const active = !!filters[i] || sort?.col === i;
                     const SortIcon = sort?.dir === 'asc' ? ArrowUp : ArrowDown;
                     return (
-                      <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 text-left text-xs font-semibold text-ink-600 whitespace-nowrap border-b border-ink-200">
-                        <span className="inline-flex items-center gap-1.5">
-                          {current.columns[i]}
+                      <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 align-bottom text-xs font-semibold text-ink-600 border-b border-ink-200">
+                        <span className={`flex items-end gap-1.5 ${isNumeric(i) ? 'justify-end text-right' : 'text-left'}`}>
+                          <span className="line-clamp-2 max-w-[11rem]" title={current.columns[i]}>{current.columns[i]}</span>
                           <button
                             type="button"
                             onClick={(e) => openMenu(e, 'filter', i)}
                             aria-label={`Filtrar ${current.columns[i]}`}
                             aria-expanded={menu?.type === 'filter' && menu.col === i}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
                               active ? 'bg-ink-900 text-accent' : 'text-ink-400 hover:bg-ink-200 hover:text-ink-900'
                             }`}
                           >
@@ -402,19 +450,27 @@ export default function Cotacao() {
                         {on && <Lock className="w-3.5 h-3.5 mt-0.5 text-ink-700" strokeWidth={2.5} aria-label="Travado" />}
                       </td>
                       {cols.map((i) => (
-                        <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{formatCell(values[i])}</td>
+                        <td
+                          key={i}
+                          className={`px-3 py-2.5 text-ink-800 align-top ${
+                            isNumeric(i) ? 'text-right tabular-nums whitespace-nowrap'
+                              : kinds[i] === 'long' ? 'min-w-[16rem]' : 'whitespace-nowrap'
+                          }`}
+                        >
+                          {displayCell(values[i], kinds[i])}
+                        </td>
                       ))}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {visibleRows.length === 0 && (
-              <p className="p-6 text-sm text-ink-500 text-center">
-                {filtering ? 'Nenhum item com esses filtros.' : onlyHighlighted ? 'Nenhum item destacado ainda.' : 'Nenhum item encontrado.'}
-              </p>
-            )}
           </div>
+          {visibleRows.length === 0 && (
+            <p className="p-6 text-sm text-ink-500 text-center">
+              {filtering ? 'Nenhum item com esses filtros.' : onlyHighlighted ? 'Nenhum item destacado ainda.' : 'Nenhum item encontrado.'}
+            </p>
+          )}
         </div>
       ) : quotes?.length === 0 && !error && (
         <div className="card-flat p-8 md:p-12 text-center">
@@ -429,11 +485,22 @@ export default function Cotacao() {
           key={menu.col}
           anchor={menu.anchor}
           title={current.columns[menu.col]}
+          format={(v) => displayCell(v, kinds[menu.col])}
           values={menuValues}
           selected={filters[menu.col] || null}
           sortDir={sort?.col === menu.col ? sort.dir : null}
           onSort={(dir) => { setSort(dir ? { col: menu.col, dir } : null); setMenu(null); }}
           onApply={(values) => applyFilter(menu.col, values)}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {menu?.type === 'picker' && current && (
+        <ColumnPickerMenu
+          anchor={menu.anchor}
+          columns={current.columns}
+          cols={cols}
+          active={(i) => !!filters[i] || sort?.col === i}
+          onPick={(col) => setMenu({ type: 'filter', col, anchor: menu.anchor })}
           onClose={() => setMenu(null)}
         />
       )}
