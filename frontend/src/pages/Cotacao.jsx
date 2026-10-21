@@ -1,7 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser } from 'lucide-react';
+import {
+  ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown,
+} from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { ColumnFilterMenu, ColumnsMenu, compareCells } from '../components/SheetFilters';
+
+/** Colunas escondidas, por cotação — preferência deste aparelho. */
+const hiddenKey = (id) => `cofre_cotacao_colunas_${id}`;
+function loadHidden(id) {
+  try { return new Set(JSON.parse(localStorage.getItem(hiddenKey(id))) || []); } catch { return new Set(); }
+}
+
+/** A linha passa nos filtros de coluna, menos o da coluna `except` (pro menu dela). */
+function passesFilters(values, filters, except) {
+  return Object.entries(filters).every(([c, set]) => Number(c) === except || set.has(values[c] ?? ''));
+}
 
 /**
  * Cotação — a planilha do cliente com os itens destacados.
@@ -10,6 +24,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
  * destacar e pronto: cada planilha vira uma cotação salva e cada destaque é
  * gravado na hora. Várias pessoas na mesma conta podem marcar juntas — os
  * destaques dos outros aparecem ao vivo (Realtime) e ninguém apaga o de ninguém.
+ *
+ * Filtros como os do Excel: em cada coluna, ordenar e marcar quais valores
+ * aparecem (a lista respeita os filtros das outras colunas); e escolher quais
+ * colunas mostrar.
  */
 export default function Cotacao() {
   const [quotes, setQuotes] = useState(null);   // lista (sem as linhas)
@@ -20,6 +38,10 @@ export default function Cotacao() {
   const [busy, setBusy] = useState(''); // 'upload' | 'open'
   const [error, setError] = useState('');
   const [confirmReq, setConfirmReq] = useState(null);
+  const [filters, setFilters] = useState({}); // coluna → Set dos valores que aparecem
+  const [sort, setSort] = useState(null);     // { col, dir: 'asc' | 'desc' }
+  const [hidden, setHidden] = useState(new Set());
+  const [menu, setMenu] = useState(null);     // { type: 'filter' | 'columns', col?, anchor }
 
   useEffect(() => {
     quoteService.list()
@@ -56,8 +78,7 @@ export default function Cotacao() {
       const q = await quoteService.get(id);
       setCurrent(q);
       setHighlighted(new Set(q.highlighted));
-      setSearch('');
-      setOnlyHighlighted(false);
+      resetView(q.id);
     } catch (err) {
       console.error(err);
       setError('Não foi possível abrir a cotação.');
@@ -78,13 +99,40 @@ export default function Cotacao() {
       setQuotes((list) => [{ ...q, marks: 0 }, ...(list || [])]);
       setCurrent(q);
       setHighlighted(new Set());
-      setSearch('');
-      setOnlyHighlighted(false);
+      resetView(q.id);
     } catch (err) {
       setError(err.message || 'Não foi possível salvar a cotação.');
     } finally {
       setBusy('');
     }
+  }
+
+  function resetView(quoteId) {
+    setSearch('');
+    setOnlyHighlighted(false);
+    setFilters({});
+    setSort(null);
+    setMenu(null);
+    setHidden(loadHidden(quoteId));
+  }
+
+  function changeHidden(next) {
+    setHidden(next);
+    try { localStorage.setItem(hiddenKey(current.id), JSON.stringify([...next])); } catch { /* só não lembra */ }
+  }
+
+  function applyFilter(col, values) {
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (values) next[col] = values; else delete next[col];
+      return next;
+    });
+    setMenu(null);
+  }
+
+  function openMenu(e, type, col) {
+    const { currentTarget } = e;
+    setMenu((m) => (m?.type === type && m.col === col ? null : { type, col, anchor: currentTarget }));
   }
 
   /** Na tela na hora; no banco só aquela linha (desfaz se falhar). */
@@ -135,11 +183,32 @@ export default function Cotacao() {
   const visibleRows = useMemo(() => {
     if (!current) return [];
     const term = search.trim().toLowerCase();
-    return current.rows
+    const rows = current.rows
       .map((values, index) => ({ values, index }))
       .filter((r) => (!onlyHighlighted || highlighted.has(r.index))
-        && (!term || r.values.some((v) => String(v).toLowerCase().includes(term))));
-  }, [current, search, onlyHighlighted, highlighted]);
+        && (!term || r.values.some((v) => String(v).toLowerCase().includes(term)))
+        && passesFilters(r.values, filters, -1));
+    if (sort) {
+      const dir = sort.dir === 'asc' ? 1 : -1;
+      rows.sort((a, b) => dir * compareCells(a.values[sort.col] ?? '', b.values[sort.col] ?? ''));
+    }
+    return rows;
+  }, [current, search, onlyHighlighted, highlighted, filters, sort]);
+
+  // Valores distintos da coluna do menu aberto, com contagem.
+  const menuValues = useMemo(() => {
+    if (menu?.type !== 'filter' || !current) return [];
+    const counts = new Map();
+    for (const values of current.rows) {
+      if (!passesFilters(values, filters, menu.col)) continue;
+      const v = values[menu.col] ?? '';
+      counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    return [...counts].map(([value, count]) => ({ value, count })).sort((a, b) => compareCells(a.value, b.value));
+  }, [menu, current, filters]);
+
+  const cols = current ? current.columns.map((_, i) => i).filter((i) => !hidden.has(i)) : [];
+  const filtering = Object.keys(filters).length > 0 || !!sort;
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -237,17 +306,50 @@ export default function Cotacao() {
             >
               <Star className="w-3.5 h-3.5" /> Só destacados
             </button>
+            <button
+              onClick={(e) => openMenu(e, 'columns')}
+              aria-expanded={menu?.type === 'columns'}
+              className="inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
+            >
+              <Columns3 className="w-3.5 h-3.5" /> Colunas
+              {hidden.size > 0 && <span className="px-1.5 py-0.5 rounded-full bg-ink-900 text-white text-[10px]">{cols.length}/{current.columns.length}</span>}
+            </button>
+            {filtering && (
+              <button
+                onClick={() => { setFilters({}); setSort(null); }}
+                className="inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold bg-accent/30 text-ink-900 hover:bg-accent/50 transition-colors"
+              >
+                <FilterX className="w-3.5 h-3.5" /> Limpar filtros
+              </button>
+            )}
           </div>
 
           <div className="overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
-                  {current.columns.map((c, i) => (
-                    <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2.5 text-left text-xs font-semibold text-ink-600 whitespace-nowrap border-b border-ink-200">
-                      {c}
-                    </th>
-                  ))}
+                  {cols.map((i) => {
+                    const active = !!filters[i] || sort?.col === i;
+                    const SortIcon = sort?.dir === 'asc' ? ArrowUp : ArrowDown;
+                    return (
+                      <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 text-left text-xs font-semibold text-ink-600 whitespace-nowrap border-b border-ink-200">
+                        <span className="inline-flex items-center gap-1.5">
+                          {current.columns[i]}
+                          <button
+                            type="button"
+                            onClick={(e) => openMenu(e, 'filter', i)}
+                            aria-label={`Filtrar ${current.columns[i]}`}
+                            aria-expanded={menu?.type === 'filter' && menu.col === i}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              active ? 'bg-ink-900 text-accent' : 'text-ink-400 hover:bg-ink-200 hover:text-ink-900'
+                            }`}
+                          >
+                            {sort?.col === i && !filters[i] ? <SortIcon className="w-3.5 h-3.5" /> : <Filter className="w-3.5 h-3.5" />}
+                          </button>
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -264,7 +366,7 @@ export default function Cotacao() {
                         on ? 'bg-accent/30 font-semibold shadow-[inset_4px_0_0_#9bc92e] hover:bg-accent/40' : 'hover:bg-ink-50'
                       }`}
                     >
-                      {current.columns.map((_, i) => (
+                      {cols.map((i) => (
                         <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{values[i]}</td>
                       ))}
                     </tr>
@@ -274,7 +376,7 @@ export default function Cotacao() {
             </table>
             {visibleRows.length === 0 && (
               <p className="p-6 text-sm text-ink-500 text-center">
-                {onlyHighlighted ? 'Nenhum item destacado ainda.' : 'Nenhum item encontrado.'}
+                {filtering ? 'Nenhum item com esses filtros.' : onlyHighlighted ? 'Nenhum item destacado ainda.' : 'Nenhum item encontrado.'}
               </p>
             )}
           </div>
@@ -285,6 +387,23 @@ export default function Cotacao() {
           <p className="font-display text-lg md:text-xl font-bold mb-1">Nenhuma cotação ainda</p>
           <p className="text-sm text-ink-500">Envie a planilha do cliente (.xlsx, .xls ou .csv). Depois é só tocar nas linhas para destacar.</p>
         </div>
+      )}
+
+      {menu?.type === 'filter' && current && (
+        <ColumnFilterMenu
+          key={menu.col}
+          anchor={menu.anchor}
+          title={current.columns[menu.col]}
+          values={menuValues}
+          selected={filters[menu.col] || null}
+          sortDir={sort?.col === menu.col ? sort.dir : null}
+          onSort={(dir) => { setSort(dir ? { col: menu.col, dir } : null); setMenu(null); }}
+          onApply={(values) => applyFilter(menu.col, values)}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {menu?.type === 'columns' && current && (
+        <ColumnsMenu anchor={menu.anchor} columns={current.columns} hidden={hidden} onChange={changeHidden} onClose={() => setMenu(null)} />
       )}
 
       <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
