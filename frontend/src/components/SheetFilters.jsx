@@ -18,6 +18,20 @@ function toNumber(v) {
   return Number(s.replace(/\./g, '').replace(',', '.'));
 }
 
+const MONEY = /R\$\s?(-?\d{1,3}(?:\.\d{3})+|-?\d+)(?:,(\d+))?/g;
+
+/**
+ * Valores em reais sempre com 2 casas: 'R$ 0,0960 a R$ 0,1440' → 'R$ 0,10 a
+ * R$ 0,14'; 'R$ 10' → 'R$ 10,00'. Só pra exibir — o texto da planilha fica
+ * intacto (ordenar e filtrar usam o valor exato).
+ */
+export function formatCell(text) {
+  return String(text).replace(MONEY, (_, int, dec) => {
+    const n = Number(`${int.replace(/\./g, '')}.${dec || '0'}`);
+    return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  });
+}
+
 /** Ordem do Excel: números como números, texto em ordem alfabética, vazio por último. */
 export function compareCells(a, b) {
   if (!a !== !b) return a ? -1 : 1;
@@ -115,7 +129,7 @@ export function ColumnFilterMenu({ anchor, title, values, selected, sortDir, onS
 
   const shown = useMemo(() => {
     const t = term.trim().toLowerCase();
-    return t ? values.filter((v) => (v.value || '(vazias)').toLowerCase().includes(t)) : values;
+    return t ? values.filter((v) => (formatCell(v.value) || '(vazias)').toLowerCase().includes(t)) : values;
   }, [values, term]);
   const allChecked = shown.length > 0 && shown.every((v) => draft.has(v.value));
   // Com busca, valem só os marcados entre os encontrados (igual ao Excel).
@@ -173,7 +187,7 @@ export function ColumnFilterMenu({ anchor, title, values, selected, sortDir, onS
         </CheckRow>
         {shown.slice(0, LIST_LIMIT).map((v) => (
           <CheckRow key={v.value} checked={draft.has(v.value)} onChange={() => flip(v.value)} count={v.count}>
-            {v.value || <i className="text-ink-400">(Vazias)</i>}
+            {formatCell(v.value) || <i className="text-ink-400">(Vazias)</i>}
           </CheckRow>
         ))}
         {shown.length > LIST_LIMIT && (

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { ColumnFilterMenu, ColumnsMenu, compareCells } from '../components/SheetFilters';
+import { ColumnFilterMenu, ColumnsMenu, compareCells, formatCell } from '../components/SheetFilters';
 
 /** Colunas escondidas, por cotação — preferência deste aparelho. */
 const hiddenKey = (id) => `cofre_cotacao_colunas_${id}`;
@@ -217,7 +217,7 @@ export default function Cotacao() {
     const rows = current.rows
       .map((values, index) => ({ values, index }))
       .filter((r) => (!onlyHighlighted || highlighted.has(r.index))
-        && (!term || r.values.some((v) => String(v).toLowerCase().includes(term)))
+        && (!term || r.values.some((v) => formatCell(v).toLowerCase().includes(term)))
         && passesFilters(r.values, filters, -1));
     if (sort) {
       const dir = sort.dir === 'asc' ? 1 : -1;
@@ -402,7 +402,7 @@ export default function Cotacao() {
                         {on && <Lock className="w-3.5 h-3.5 mt-0.5 text-ink-700" strokeWidth={2.5} aria-label="Travado" />}
                       </td>
                       {cols.map((i) => (
-                        <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{values[i]}</td>
+                        <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{formatCell(values[i])}</td>
                       ))}
                     </tr>
                   );
