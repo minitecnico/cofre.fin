@@ -68,6 +68,7 @@ export function CategoryChart({ data = [] }) {
                 outerRadius="100%"
                 paddingAngle={data.length > 1 ? 2 : 0}
                 stroke="none"
+                isAnimationActive={false}
               >
                 {data.map((entry, i) => (
                   <Cell key={i} fill={entry.color || FALLBACK} />

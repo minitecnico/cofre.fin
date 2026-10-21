@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
+  Home, ArrowDownCircle, ArrowUpCircle, CreditCard,
   MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +9,7 @@ import { motion, useReducedMotion } from 'motion/react';
 
 // Itens fixos na barra inferior (mobile) — os de uso diário.
 const primary = [
-  { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Início', icon: Home, end: true },
   { to: '/incomes', label: 'Receitas', icon: ArrowUpCircle },
   { to: '/expenses', label: 'Despesas', icon: ArrowDownCircle },
   { to: '/cobrancas', label: 'Cobranças', icon: HandCoins },

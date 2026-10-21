@@ -1,219 +1,194 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Wallet, TrendingUp, TrendingDown, Search, X, Clock, Check, ReceiptText, ChevronRight,
+  ArrowDownCircle, ArrowUpCircle, HandCoins, ReceiptText, CreditCard, Target,
+  AlertCircle, AlertTriangle, Clock, CheckCircle2, ChevronRight, Check, Loader2,
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
-import StatCard from '../components/StatCard';
-import { CategoryChart, MonthlyChart } from '../components/Charts';
-import TransactionList from '../components/TransactionList';
+import { useAlerts } from '../hooks/useAlerts';
 import { useTransactions } from '../hooks/useTransactions';
+import { useAuth } from '../context/AuthContext';
+import { useMonth } from '../context/MonthContext';
+import { CategoryChart, MonthlyChart } from '../components/Charts';
 import InstallBanner from '../components/InstallBanner';
 import MonthSelector from '../components/MonthSelector';
 import Modal from '../components/Modal';
 import MonthSummary from '../components/MonthSummary';
-import { useMonth } from '../context/MonthContext';
+import TransactionForm from '../components/TransactionForm';
+import CobrancaQuickForm from '../components/CobrancaQuickForm';
+import { formatCurrency } from '../utils/format';
 
-const STATUS_OPTIONS = [
-  { id: 'all', label: 'Todas' },
-  { id: 'pending', label: 'Pendentes', icon: Clock },
-  { id: 'paid', label: 'Pagas', icon: Check },
-];
-
+/**
+ * Início — o que fazer agora, sem repetir as páginas de Receitas/Despesas:
+ *   1. Acesso rápido: ações de um toque (lançar, cobrar, enviar o resumo).
+ *   2. Precisa de atenção: contas vencidas/vencendo e cartões no limite
+ *      (os mesmos alertas do sino), com "Pagar" direto na linha.
+ *   3. Seu consumo: mês a mês e gastos por categoria do mês selecionado.
+ */
 export default function Dashboard() {
-  const { data, loading, refresh } = useDashboard('month');
-  const {
-    items: rawItems, loading: itemsLoading, refresh: refreshList, remove: removeTx, togglePaid: togglePaidTx,
-  } = useTransactions({ limit: 200 });
-  const { label: monthLabel } = useMonth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [summaryOpen, setSummaryOpen] = useState(false);
+  const { user } = useAuth();
+  const { data, refresh } = useDashboard('month');
+  const { alerts, loading: alertsLoading, payExpense } = useAlerts();
+  const [modal, setModal] = useState(null); // 'expense' | 'income' | 'cobranca' | 'summary'
+  const [payingId, setPayingId] = useState(null);
 
-  function refreshAll() {
-    refresh();
-    refreshList();
+  const firstName = (user?.name || '').split(' ')[0];
+  const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const close = () => setModal(null);
+  const saved = () => { setModal(null); refresh(); };
+
+  async function pay(alert) {
+    setPayingId(alert.id);
+    try { await payExpense(alert); } finally { setPayingId(null); }
   }
 
-  // Busca + status, e ordem por vencimento: despesas pendentes (as que vencem
-  // antes no topo) → receitas → despesas pagas (mais recentes primeiro).
-  const filteredItems = useMemo(() => {
-    let items = [...rawItems];
-
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase().trim();
-      items = items.filter((t) =>
-        (t.description || '').toLowerCase().includes(q)
-        || (t.category?.name || '').toLowerCase().includes(q));
-    }
-
-    if (statusFilter === 'pending') items = items.filter((t) => t.type === 'expense' && !t.paid);
-    else if (statusFilter === 'paid') items = items.filter((t) => t.type === 'expense' && t.paid);
-
-    const bucket = (t) => (t.type === 'expense' ? (t.paid ? 2 : 0) : 1);
-    items.sort((a, b) => {
-      if (bucket(a) !== bucket(b)) return bucket(a) - bucket(b);
-      return bucket(a) === 0 ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date);
-    });
-
-    return items;
-  }, [rawItems, searchTerm, statusFilter]);
-
-  const pendingCount = useMemo(
-    () => rawItems.filter((t) => t.type === 'expense' && !t.paid).length,
-    [rawItems]
-  );
-
-  if (loading && !data) {
-    return (
-      <div className="space-y-4 md:space-y-6">
-        <div className="h-14 bg-ink-100 animate-pulse rounded-2xl" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-32 md:h-40 bg-ink-100 animate-pulse rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  // O mês fica "no vermelho" quando se gasta mais do que se ganha.
-  const income = data.periodSummary.income;
-  const expense = data.periodSummary.expense;
-  const hasFilters = searchTerm.trim() || statusFilter !== 'all';
+  const actions = [
+    { id: 'expense', icon: ArrowDownCircle, label: 'Nova despesa', hint: 'Conta, compra ou cartão', tone: 'bg-red-50 text-negative' },
+    { id: 'income', icon: ArrowUpCircle, label: 'Nova receita', hint: 'Salário, venda, Pix', tone: 'bg-emerald-50 text-positive' },
+    { id: 'cobranca', icon: HandCoins, label: 'Nova cobrança', hint: 'Quem está te devendo', tone: 'bg-accent/30 text-ink-900' },
+    { id: 'summary', icon: ReceiptText, label: 'Enviar resumo', hint: 'O mês pronto pro WhatsApp', tone: 'bg-ink-900 text-accent' },
+    { to: '/cards', icon: CreditCard, label: 'Faturas', hint: 'Limite e pagar fatura', tone: 'bg-blue-50 text-blue-600' },
+    { to: '/goals', icon: Target, label: 'Guardar na meta', hint: 'Depósito e comprovante', tone: 'bg-amber-50 text-amber-600' },
+  ];
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <div data-tour="month">
-        <MonthSelector />
+    <div className="space-y-5 md:space-y-7">
+      <div>
+        <p className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">{today}</p>
+        <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mt-1 leading-tight tracking-tight">
+          Olá{firstName ? `, ${firstName}` : ''}
+        </h1>
       </div>
+
       <InstallBanner />
 
-      <div data-tour="stats" className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
-        <StatCard
-          label="Saldo do mês"
-          sublabel={monthLabel}
-          value={data.balance.balance}
-          variant="balance"
-          status={data.balance.balance < 0 ? 'danger' : 'safe'}
-          icon={Wallet}
-          trend={data.comparison?.balanceChange}
-        />
-        <StatCard
-          label="Receitas"
-          sublabel={monthLabel}
-          value={income}
-          variant="income"
-          icon={TrendingUp}
-          trend={data.comparison?.incomeChange}
-        />
-        <StatCard
-          label="Despesas"
-          sublabel={monthLabel}
-          value={expense}
-          variant="expense"
-          status={expense > income ? 'danger' : 'safe'}
-          icon={TrendingDown}
-          trend={data.comparison?.expenseChange}
-        />
-      </div>
-
-      {/* Resumo do mês pra mandar pra alguém */}
-      <button
-        onClick={() => setSummaryOpen(true)}
-        className="w-full card-flat p-4 flex items-center gap-3 text-left hover:shadow-soft-md transition-shadow"
-      >
-        <span className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center flex-shrink-0">
-          <ReceiptText className="w-5 h-5 text-ink-900" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-bold text-sm md:text-base text-ink-900">Resumo de {monthLabel}</span>
-          <span className="block text-xs text-ink-500">Receitas, despesas, contas em aberto e saldo — pronto pra enviar</span>
-        </span>
-        <ChevronRight className="w-5 h-5 text-ink-400 flex-shrink-0" />
-      </button>
-
-      {/* Gráficos lado a lado no desktop; empilhados no celular */}
-      <div className={`grid grid-cols-1 gap-3 md:gap-4 items-stretch ${data.byCategory.length > 0 ? 'lg:grid-cols-2' : ''}`}>
-        <MonthlyChart refreshKey={data} />
-        {data.byCategory.length > 0 && <CategoryChart data={data.byCategory} />}
-      </div>
-
-      {/* Transações do mês */}
-      <div className="space-y-3">
-        <h3 className="font-display text-xl md:text-2xl font-bold tracking-tight">
-          Transações
-          <span className="ml-2 text-sm font-mono font-medium text-ink-500">
-            ({filteredItems.length}{filteredItems.length !== rawItems.length && ` de ${rawItems.length}`})
-          </span>
-        </h3>
-
-        <div className="card-flat p-3 md:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar descrição ou categoria…"
-              className="input-field !min-h-[42px] !py-2 pl-10 pr-10"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 rounded-lg transition-colors"
-                aria-label="Limpar busca"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {STATUS_OPTIONS.map(({ id, label, icon: Icon }) => {
-              const active = statusFilter === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setStatusFilter(id)}
-                  className={`inline-flex items-center gap-1.5 px-3 min-h-[36px] rounded-full text-xs font-bold transition-colors ${
-                    active ? 'bg-gradient-dark text-white shadow-soft' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
-                  }`}
-                >
-                  {Icon && <Icon className="w-3.5 h-3.5" />}
-                  {label}
-                  {id === 'pending' && pendingCount > 0 && (
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${active ? 'bg-accent text-ink-900' : 'bg-negative text-white'}`}>
-                      {pendingCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* 1 · Acesso rápido */}
+      <section data-tour="quick" className="space-y-3">
+        <h2 className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">Acesso rápido</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          {actions.map((a) => <QuickAction key={a.id || a.to} {...a} onClick={() => setModal(a.id)} />)}
         </div>
+      </section>
 
-        <TransactionList
-          items={filteredItems}
-          loading={false}
-          onChange={refreshAll}
-          onDelete={async (id) => {
-            await removeTx(id);
-            refresh();
-          }}
-          onTogglePaid={togglePaidTx}
-          emptyMessage={
-            hasFilters
-              ? 'Nenhuma transação corresponde à busca.'
-              : `Nenhuma transação em ${monthLabel}. Use o botão "+" para adicionar.`
-          }
-        />
-      </div>
+      {/* 2 · Precisa de atenção */}
+      <section className="card-flat overflow-hidden">
+        <div className="px-4 md:px-5 py-3 flex items-center justify-between gap-3 border-b border-ink-100">
+          <h2 className="font-display font-bold text-base md:text-lg tracking-tight">Precisa de atenção</h2>
+          {alerts.length > 5 && <span className="text-xs text-ink-500">+{alerts.length - 5} no sino</span>}
+        </div>
+        {alertsLoading ? (
+          <div className="p-4 space-y-2">
+            {[...Array(2)].map((_, i) => <div key={i} className="h-12 bg-ink-100 animate-pulse rounded-xl" />)}
+          </div>
+        ) : alerts.length === 0 ? (
+          <p className="px-4 md:px-5 py-5 flex items-center gap-3 text-sm text-ink-600">
+            <CheckCircle2 className="w-5 h-5 text-positive flex-shrink-0" />
+            Tudo em dia — nenhuma conta vencida ou vencendo nos próximos dias.
+          </p>
+        ) : (
+          <ul className="divide-y divide-ink-100">
+            {alerts.slice(0, 5).map((a) => (
+              <AttentionRow key={a.id} alert={a} paying={payingId === a.id} onPay={() => pay(a)} />
+            ))}
+          </ul>
+        )}
+      </section>
 
-      <Modal isOpen={summaryOpen} onClose={() => setSummaryOpen(false)} title="Resumo do mês">
-        <MonthSummary items={rawItems} loading={itemsLoading} monthLabel={monthLabel} />
+      {/* 3 · Seu consumo */}
+      <section className="space-y-3">
+        <h2 className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">Seu consumo</h2>
+        <div data-tour="month">
+          <MonthSelector />
+        </div>
+        {data && (
+          <div className={`grid grid-cols-1 gap-3 md:gap-4 items-stretch ${data.byCategory.length > 0 ? 'lg:grid-cols-2' : ''}`}>
+            <MonthlyChart refreshKey={data} />
+            {data.byCategory.length > 0 && <CategoryChart data={data.byCategory} />}
+          </div>
+        )}
+      </section>
+
+      <Modal
+        isOpen={modal === 'expense' || modal === 'income'}
+        onClose={close}
+        title={modal === 'income' ? 'Nova receita' : 'Nova despesa'}
+      >
+        {(modal === 'expense' || modal === 'income') && (
+          <TransactionForm key={modal} defaultType={modal} onSaved={saved} onCancel={close} />
+        )}
+      </Modal>
+      <Modal isOpen={modal === 'cobranca'} onClose={close} title="Nova cobrança">
+        {modal === 'cobranca' && <CobrancaQuickForm onSaved={saved} onCancel={close} />}
+      </Modal>
+      <Modal isOpen={modal === 'summary'} onClose={close} title="Resumo do mês">
+        {modal === 'summary' && <MonthSummaryLoader />}
       </Modal>
     </div>
   );
+}
+
+/** Ação de um toque: abre um formulário (onClick) ou vai pra uma página (to). */
+function QuickAction({ icon: Icon, label, hint, tone, to, onClick }) {
+  const className = 'group card-flat p-4 min-h-[112px] flex flex-col items-start gap-3 text-left hover:shadow-soft-md hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200';
+  const content = (
+    <>
+      <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${tone}`}>
+        <Icon className="w-5 h-5" strokeWidth={2.25} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-bold text-ink-900">{label}</span>
+        <span className="block text-xs text-ink-500 leading-snug">{hint}</span>
+      </span>
+    </>
+  );
+  return to
+    ? <Link to={to} className={className}>{content}</Link>
+    : <button type="button" onClick={onClick} className={className}>{content}</button>;
+}
+
+const SEVERITY = {
+  critical: { icon: AlertCircle, tone: 'bg-red-50 text-negative' },
+  warning: { icon: AlertTriangle, tone: 'bg-yellow-50 text-yellow-700' },
+  info: { icon: Clock, tone: 'bg-ink-100 text-ink-600' },
+};
+
+function AttentionRow({ alert, paying, onPay }) {
+  const { icon: Icon, tone } = SEVERITY[alert.severity] || SEVERITY.info;
+  return (
+    <li className="px-4 md:px-5 py-3 flex items-center gap-3">
+      <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${tone}`}>
+        <Icon className="w-[18px] h-[18px]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-ink-900 truncate">{alert.title}</p>
+        <p className="text-xs text-ink-500 truncate">{alert.message}</p>
+      </div>
+      {alert.amount > 0 && (
+        <span className="hidden sm:block text-sm font-semibold text-ink-900 tabular-nums whitespace-nowrap">
+          {formatCurrency(alert.amount)}
+        </span>
+      )}
+      {alert.meta?.txId ? (
+        <button
+          onClick={onPay}
+          disabled={paying}
+          className="inline-flex items-center gap-1 px-3 min-h-[36px] rounded-full bg-ink-900 text-white text-xs font-bold hover:bg-ink-800 transition-colors disabled:opacity-60 flex-shrink-0"
+        >
+          {paying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" strokeWidth={3} />} Pagar
+        </button>
+      ) : (
+        // Alertas de orçamento apontam pra "/", que agora é esta página → Despesas.
+        <Link to={alert.link && alert.link !== '/' ? alert.link : '/expenses'} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100 flex-shrink-0" aria-label="Ver">
+          <ChevronRight className="w-4 h-4" />
+        </Link>
+      )}
+    </li>
+  );
+}
+
+/** O resumo precisa dos lançamentos do mês — só busca quando o modal abre. */
+function MonthSummaryLoader() {
+  const { items, loading } = useTransactions({ limit: 500 });
+  const { label } = useMonth();
+  return <MonthSummary items={items} loading={loading} monthLabel={label} />;
 }

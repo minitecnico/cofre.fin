@@ -83,7 +83,6 @@ frontend/
     │   ├── ProtectedRoute.jsx      # redireciona /login se !user
     │   ├── Modal.jsx               # modal base (bottom-sheet no mobile, centered no desktop)
     │   ├── MonthSelector.jsx       # navegação ◀ mês ▶
-    │   ├── StatCard.jsx            # card de KPI (balance|income|expense)
     │   ├── Charts.jsx              # MonthlyChart (mês a mês) + CategoryChart (Recharts)
     │   ├── MonthSummary.jsx        # resumo do mês pra enviar (WhatsApp/copiar)
     │   ├── TransactionForm.jsx     # form principal (suporta parcelamento e recorrência)
@@ -98,7 +97,7 @@ frontend/
     │   └── Toast.jsx               # toast top-right (desktop) / top (mobile)
     ├── pages/
     │   ├── Login.jsx
-    │   ├── Dashboard.jsx           # rota /
+    │   ├── Dashboard.jsx           # rota / — "Início": acesso rápido, atenção, gráficos
     │   ├── TransactionListPage.jsx # /incomes e /expenses (mesma page, prop type)
     │   ├── Cards.jsx               # cartões + faturas + ciclos
     │   ├── Categories.jsx
@@ -218,7 +217,7 @@ Todas as tabelas têm uma única policy `for all using (auth.uid() = user_id) wi
 ### Estilo e nomenclatura
 
 - Arquivos `.jsx` para componentes React, `.js` para utilitários/hooks/services.
-- Componentes em **PascalCase** (`StatCard.jsx`), exportados como `default`.
+- Componentes em **PascalCase** (`MonthSummary.jsx`), exportados como `default`.
 - Hooks com prefixo `use` em camelCase (`useDashboard.js`), exportados como **named export**.
 - Services exportados como objeto: `export const transactionService = { list, create, update, remove }`.
 - Comentários em português, em blocos JSDoc-style explicando o "por quê", não o "o quê".

@@ -30,9 +30,9 @@ const STEPS = [
     content: 'Saldos, listas e gráficos respeitam o mês selecionado. Navegue ◀ ▶ pra ver outros meses sem perder contexto.',
   },
   {
-    route: '/', target: '[data-tour="stats"]',
-    title: 'Seu panorama do mês',
-    content: 'Saldo, receitas e despesas. As cores mudam: ficam vermelhas quando você gasta mais do que ganha.',
+    route: '/', target: '[data-tour="quick"]',
+    title: 'Acesso rápido',
+    content: 'Lance despesa ou receita, crie uma cobrança e mande o resumo do mês em um toque. Logo abaixo, o que precisa da sua atenção.',
   },
   {
     // FAB fica no canto inferior; balão vai ACIMA (top-end) pra não jogar os
