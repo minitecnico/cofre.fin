@@ -75,8 +75,8 @@ frontend/
     │   ├── importExport.js     # CSV/XLSX
     │   └── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
     ├── components/
-    │   ├── Layout.jsx              # Sidebar + Header + Outlet + BottomNav + FAB
-    │   ├── Sidebar.jsx             # desktop md+
+    │   ├── Layout.jsx              # TopNav + Header + Outlet + BottomNav + FAB
+    │   ├── TopNav.jsx              # navegação no topo, desktop md+ (grupos com menu)
     │   ├── MobileHeader.jsx        # mobile only
     │   ├── BottomNav.jsx           # mobile only
     │   ├── FloatingAddButton.jsx   # FAB de adicionar
@@ -296,7 +296,7 @@ Borda: `border` (1px) em `hairline-light`/`ink-200`; selecionado = `border-ink-9
 ### Responsividade
 
 - **Mobile-first.** Breakpoints: `sm` 640, `md` 768, `lg` 1024, `xl` 1280.
-- Mobile usa `BottomNav` + `MobileHeader`; desktop usa `Sidebar`.
+- Mobile usa `BottomNav` + `MobileHeader`; desktop usa `TopNav` (barra no topo).
 - Modais são **bottom sheet no mobile, centered no desktop** (`items-end md:items-center`).
 - Inputs com `font-size: 16px` no mobile (evita zoom do iOS).
 - `min-h-[44px]` em alvos de toque (acessibilidade iOS).

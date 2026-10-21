@@ -1,7 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import Sidebar from './Sidebar';
+import TopNav from './TopNav';
 import MobileHeader from './MobileHeader';
 import BottomNav from './BottomNav';
 import FloatingAddButton from './FloatingAddButton';
@@ -39,12 +39,12 @@ export default function Layout() {
 
   return (
     <TourProvider>
-    <div className="min-h-screen md:flex">
-      <Sidebar />
+    <div className="min-h-screen flex flex-col">
+      <TopNav />
 
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader />
-        <main className="flex-1 p-4 sm:p-5 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] w-full mx-auto md:mx-0">
+        <main className="flex-1 p-4 sm:p-5 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] w-full mx-auto">
           {reduceMotion ? (
             <Outlet key={tick} />
           ) : (

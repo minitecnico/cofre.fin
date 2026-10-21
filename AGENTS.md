@@ -19,19 +19,19 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 | `/pix/:code` | `PixPay.jsx` | página de pagamento PIX (QR + copia-e-cola + valor) | pública |
 | `/compartilhar` | `ShareReceipt.jsx` (lazy) | destino do **Compartilhar do Android** (Web Share Target): comprovante vai pro extrato lembrado no aparelho (credor) ou, logado, pra uma meta | pública |
 | `/extrato/:code` | `DebtorStatement.jsx` (lazy) | **Central de pagamentos** do DEVEDOR, ao vivo: total, pago, a pagar, parcelas, PIX do saldo, **envio do comprovante do banco** | pública |
-| `/` | `Dashboard.jsx` | **Início**: acesso rápido (nova despesa/receita/cobrança, enviar resumo do mês, faturas, metas), "Precisa de atenção" (alertas do sino com "Pagar" na linha) e "Seu consumo" (mês a mês + gastos por categoria) | Sidebar + BottomNav |
-| `/incomes` | `TransactionListPage.jsx` (type=income) | conta do mês (Receitas − Despesas = Saldo) + lista/CRUD receitas | Sidebar + BottomNav |
-| `/expenses` | `TransactionListPage.jsx` (type=expense) | conta do mês + pagamento das despesas (pago × a pagar) + lista/CRUD, swipe-to-delete | Sidebar + BottomNav |
-| `/recurring` | `Recurring.jsx` | modelos recorrentes (aluguel, assinaturas), lazy-gen por mês | Sidebar + "Mais" |
-| `/cards` | `Cards.jsx` | cartões, faturas, ciclos, limite inteligente | Sidebar + BottomNav |
-| `/cobrancas` | `Cobrancas.jsx` (lazy) | quem te deve, PIX/QR, WhatsApp, PDF, **parcelamento** | Sidebar + "Mais" |
-| `/admin` | `Admin.jsx` (lazy) | **Central do administrador**: visão geral (usuários, ativos 1/7/30d, saúde, base), usuários, páginas mais usadas, logs (app + auth) — só pra quem está em `app_admins` | Sidebar + "Mais" (só admin) |
-| `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | Sidebar + "Mais" |
-| `/categories` | `Categories.jsx` | CRUD categorias | Sidebar + "Mais" |
+| `/` | `Dashboard.jsx` | **Início**: acesso rápido (nova despesa/receita/cobrança, enviar resumo do mês, faturas, metas), "Precisa de atenção" (alertas do sino com "Pagar" na linha) e "Seu consumo" (mês a mês + gastos por categoria) | TopNav + BottomNav |
+| `/incomes` | `TransactionListPage.jsx` (type=income) | conta do mês (Receitas − Despesas = Saldo) + lista/CRUD receitas | TopNav + BottomNav |
+| `/expenses` | `TransactionListPage.jsx` (type=expense) | conta do mês + pagamento das despesas (pago × a pagar) + lista/CRUD, swipe-to-delete | TopNav + BottomNav |
+| `/recurring` | `Recurring.jsx` | modelos recorrentes (aluguel, assinaturas), lazy-gen por mês | TopNav + "Mais" |
+| `/cards` | `Cards.jsx` | cartões, faturas, ciclos, limite inteligente | TopNav + BottomNav |
+| `/cobrancas` | `Cobrancas.jsx` (lazy) | quem te deve, PIX/QR, WhatsApp, PDF, **parcelamento** | TopNav + "Mais" |
+| `/admin` | `Admin.jsx` (lazy) | **Central do administrador**: visão geral (usuários, ativos 1/7/30d, saúde, base), usuários, páginas mais usadas, logs (app + auth) — só pra quem está em `app_admins` | TopNav "Mais" + "Mais" (só admin) |
+| `/goals` | `Goals.jsx` | desafio 52 semanas, metas, notas | TopNav + "Mais" |
+| `/categories` | `Categories.jsx` | CRUD categorias | TopNav + "Mais" |
 | `/import-export` | `ImportExport.jsx` | CSV/XLSX import/export, backup JSON | via Settings |
-| `/settings` | `Settings.jsx` | conta, senha, preferências | Sidebar + "Mais" |
+| `/settings` | `Settings.jsx` | conta, senha, preferências | TopNav + "Mais" |
 
-**Navegação mobile:** `BottomNav` = 4 fixos (Início, Receitas, Despesas, Cobranças) + botão **"Mais"** (folha com Cartões, Recorrências, Objetivos, Categorias, Tabela FIPE, Ajustes). `Sidebar` (desktop) lista tudo.
+**Navegação mobile:** `BottomNav` = 4 fixos (Início, Receitas, Despesas, Cobranças) + botão **"Mais"** (folha com Cartões, Recorrências, Objetivos, Categorias, Tabela FIPE, Ajustes). `TopNav` (desktop, barra no topo): Início · Finanças ▾ (Receitas, Despesas, Recorrências, Cartões) · Cobranças · Objetivos · Mais ▾ (Categorias, Tabela FIPE, Admin) + sino + menu da conta (Ajustes, Sair).
 
 ---
 
@@ -83,6 +83,7 @@ App de controle financeiro pessoal. **React puro + Supabase** (RLS é a seguran�
 
 ## Changelog (alimentar a cada mudança)
 
+- **2026-10-21** — **Navegação do desktop foi pro topo** (`TopNav.jsx` substitui `Sidebar.jsx`). Mesmas cores (gradiente escuro, ativo com sublinhado `accent`); logo à esquerda, páginas no centro, sino + menu da conta à direita. 11 páginas não cabem numa linha: Finanças ▾ e Mais ▾ abrem painel no clique (fecha com clique fora, Esc ou troca de página); Ajustes foi pro menu da conta. Layout virou coluna e o conteúdo centraliza (`max-w-[1400px] mx-auto`). Mobile sem mudança. Conferido no Chrome headless a 1366px e 768px.
 - **2026-10-21** — **Dashboard virou "Início"** (Sidebar/BottomNav com ícone `Home`). Saíram os 3 cards Saldo/Receitas/Despesas (agora em cada página de Receitas/Despesas), o card do resumo e a lista de transações com busca/status. Entraram: saudação com a data; **Acesso rápido** (6 atalhos: Nova despesa/receita → `TransactionForm` com `defaultType`, Nova cobrança → `CobrancaQuickForm`, Enviar resumo → `MonthSummary` que só busca os lançamentos ao abrir, Faturas → /cards, Guardar na meta → /goals); **Precisa de atenção** (`useAlerts`, até 5, "Pagar" na linha via `payExpense`; alertas de orçamento que apontavam pra "/" vão pra /expenses); **Seu consumo** (MonthSelector + `MonthlyChart` + `CategoryChart`, rosca sem animação). `StatCard.jsx` removido (órfão). Tour: passo "stats" virou "Acesso rápido" (`data-tour="quick"`). Conferido no Chrome headless (1366px e 390px).
 - **2026-10-20** — **Receitas/Despesas: a conta do mês no topo** (`MonthBalance.jsx`). Receitas − Despesas = Saldo com números do servidor (`get_monthly_summary` de 1 mês, via `useMonthlySummary`) — os mesmos do Dashboard. Desktop (`lg+`): 3 quadros com os sinais entre eles e o saldo em destaque escuro ("Sobrou/Faltou no mês"); abaixo disso, extrato em linhas. Despesas ganha "Pagamento das despesas" (`PaymentProgress`: % pago, pago × a pagar, sobre o mês inteiro). O total da busca (antes "· filtrado" no card) virou uma linha embaixo do campo. Saíram os cards "Total gasto/recebido no mês" e "Ainda a pagar". Conferido no Chrome headless em 1366/1024/800/390px, sem valor cortado.
 - **2026-10-20** — **Gráfico "Mês a mês" no Dashboard** (`MonthlyChart` em `Charts.jsx`, hook `useMonthlySummary`, `dashboardService.monthly`). Barras agrupadas receita/despesa/saldo por mês, terminando no mês do `MonthContext`; botões Trimestre/Semestre/Ano (3/6/12, lembrado no localStorage `cofre_grafico_periodo`). Paleta validada com o script da skill dataviz (`#059669` / `#ef4444` / `#3b82f6`: CVD ΔE 9,6, contraste ≥ 3:1), legenda com o total do período, linha do zero quando há saldo negativo, tooltip com os 3 valores, sem animação. No desktop fica lado a lado com "Gastos por categoria" (`lg:grid-cols-2`). Nova RPC `get_monthly_summary(p_end_month, p_months)` (`migration_monthly_summary.sql`) — a antiga `get_monthly_history` foi removida na limpeza dos relatórios e contava a partir de hoje. Conferido no Chrome headless (390px e 1366px, os 3 períodos). ⚠️ Rodar a migration.

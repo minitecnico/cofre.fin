@@ -125,7 +125,7 @@ export default function AlertCenter({ variant = 'compact', onCloseSidebar }) {
       </button>
 
       {/* Painel — desktop: dropdown ancorado / mobile: sheet inferior.
-          Portal no <body>: o sino mora na Sidebar/MobileHeader, que são
+          Portal no <body>: o sino mora na TopNav/MobileHeader, que são
           `sticky` (criam camada própria) — dali o z-50 não passava dos cards
           animados do dashboard nem da BottomNav/FAB. */}
       {open && createPortal(
