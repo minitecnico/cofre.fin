@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown, Lock,
+  ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown, Lock, Copy, Check,
 } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -46,6 +46,7 @@ export default function Cotacao() {
   const [sort, setSort] = useState(null);     // { col, dir: 'asc' | 'desc' }
   const [hidden, setHidden] = useState(new Set());
   const [menu, setMenu] = useState(null);     // { type: 'filter' | 'columns', col?, anchor }
+  const [copied, setCopied] = useState(null); // célula copiada agora ("linha-coluna")
 
   useEffect(() => {
     quoteService.list()
@@ -132,6 +133,18 @@ export default function Cotacao() {
       return next;
     });
     setMenu(null);
+  }
+
+  /** Copia o texto da célula sem marcar a linha (o clique não chega no <tr>). */
+  async function copyCell(e, key, text) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((k) => (k === key ? null : k)), 1500);
+    } catch {
+      setError('Não foi possível copiar. Selecione o texto e copie manualmente.');
+    }
   }
 
   function openMenu(e, type, col) {
@@ -378,15 +391,20 @@ export default function Cotacao() {
               const on = highlighted.has(index);
               return (
                 <li key={index}>
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggle(index, values)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(index, values); } }}
                     aria-pressed={on}
-                    className={`w-full text-left p-3 transition-colors ${on ? 'bg-accent/30 shadow-[inset_4px_0_0_#9bc92e]' : 'active:bg-ink-50'}`}
+                    className={`w-full text-left p-3 cursor-pointer transition-colors ${on ? 'bg-accent/30 shadow-[inset_4px_0_0_#9bc92e]' : 'active:bg-ink-50'}`}
                   >
                     <span className="flex items-start gap-2">
                       {on && <Lock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-ink-700" strokeWidth={2.5} aria-label="Travado" />}
-                      <span className={`text-sm text-ink-900 ${on ? 'font-bold' : 'font-semibold'}`}>{displayCell(values[titleCol], kinds[titleCol]) || '—'}</span>
+                      <span className={`min-w-0 flex-1 text-sm text-ink-900 ${on ? 'font-bold' : 'font-semibold'}`}>{displayCell(values[titleCol], kinds[titleCol]) || '—'}</span>
+                      {values[titleCol] && (
+                        <CopyButton done={copied === `${index}-${titleCol}`} onClick={(e) => copyCell(e, `${index}-${titleCol}`, values[titleCol])} />
+                      )}
                     </span>
                     <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {cols.filter((i) => i !== titleCol).map((i) => (
@@ -396,7 +414,7 @@ export default function Cotacao() {
                         </span>
                       ))}
                     </span>
-                  </button>
+                  </div>
                 </li>
               );
             })}
@@ -452,12 +470,19 @@ export default function Cotacao() {
                       {cols.map((i) => (
                         <td
                           key={i}
-                          className={`px-3 py-2.5 text-ink-800 align-top ${
+                          className={`group/cell px-3 py-2.5 text-ink-800 align-top ${
                             isNumeric(i) ? 'text-right tabular-nums whitespace-nowrap'
                               : kinds[i] === 'long' ? 'min-w-[16rem]' : 'whitespace-nowrap'
                           }`}
                         >
                           {displayCell(values[i], kinds[i])}
+                          {kinds[i] === 'long' && values[i] && (
+                            <CopyButton
+                              hover
+                              done={copied === `${index}-${i}`}
+                              onClick={(e) => copyCell(e, `${index}-${i}`, values[i])}
+                            />
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -510,5 +535,29 @@ export default function Cotacao() {
 
       <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
     </div>
+  );
+}
+
+/**
+ * "Copiar" do nome do item. No desktop (hover) só aparece com o mouse em cima
+ * da célula; no cartão do celular fica sempre à vista.
+ */
+function CopyButton({ done, onClick, hover = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Copiar"
+      aria-label={done ? 'Copiado' : 'Copiar nome'}
+      // Na tabela, mesma altura da linha de texto (h-5): invisível, não empurra o nome.
+      className={`ml-2 inline-flex items-center gap-1 align-middle border text-[11px] font-semibold flex-shrink-0 transition-all ${
+        hover ? 'h-5 px-1.5 rounded-md' : 'px-2 min-h-[28px] rounded-lg'
+      } ${
+        done ? 'bg-positive border-positive text-white' : 'bg-white border-ink-200 text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft'
+      } ${hover && !done ? 'opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100' : ''}`}
+    >
+      {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : <Copy className="w-3.5 h-3.5" />}
+      {done ? 'Copiado' : 'Copiar'}
+    </button>
   );
 }
