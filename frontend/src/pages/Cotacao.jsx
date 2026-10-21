@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -6,9 +6,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 /**
  * Cotação — a planilha do cliente com os itens destacados.
  *
- * Envia .xlsx/.xls/.csv (lido no navegador), toca na linha pra destacar e
- * pronto: cada planilha vira uma cotação salva (tabela quotes) e os
- * destaques são gravados sozinhos, então dá pra fechar e voltar depois.
+ * Envia .xlsx/.xls/.csv (lido e limpo no navegador), toca na linha pra
+ * destacar e pronto: cada planilha vira uma cotação salva e cada destaque é
+ * gravado na hora. Várias pessoas na mesma conta podem marcar juntas — os
+ * destaques dos outros aparecem ao vivo (Realtime) e ninguém apaga o de ninguém.
  */
 export default function Cotacao() {
   const [quotes, setQuotes] = useState(null);   // lista (sem as linhas)
@@ -19,7 +20,6 @@ export default function Cotacao() {
   const [busy, setBusy] = useState(''); // 'upload' | 'open'
   const [error, setError] = useState('');
   const [confirmReq, setConfirmReq] = useState(null);
-  const saveTimer = useRef(null);
 
   useEffect(() => {
     quoteService.list()
@@ -31,10 +31,25 @@ export default function Cotacao() {
           ? 'Falta rodar a migration supabase/migration_quotes.sql no Supabase.'
           : 'Não foi possível carregar as cotações.');
       });
-    return () => clearTimeout(saveTimer.current);
   }, []);
 
+  // Destaques feitos em outros aparelhos (mesma conta) entram na hora.
+  const currentId = current?.id;
+  useEffect(() => {
+    if (!currentId) return undefined;
+    return quoteService.subscribe(currentId, (index, on) => {
+      setHighlighted((prev) => {
+        if (prev.has(index) === on) return prev;
+        const next = new Set(prev);
+        on ? next.add(index) : next.delete(index);
+        return next;
+      });
+    });
+  }, [currentId]);
+
   async function open(id) {
+    // A contagem do chip da cotação que está saindo fica com o valor atual.
+    if (current) setQuotes((list) => list.map((q) => (q.id === current.id ? { ...q, marks: highlighted.size } : q)));
     setBusy('open');
     setError('');
     try {
@@ -60,7 +75,7 @@ export default function Cotacao() {
     try {
       const { columns, rows } = await parseSpreadsheet(file);
       const q = await quoteService.create({ name: file.name, columns, rows });
-      setQuotes((list) => [q, ...(list || [])]);
+      setQuotes((list) => [{ ...q, marks: 0 }, ...(list || [])]);
       setCurrent(q);
       setHighlighted(new Set());
       setSearch('');
@@ -72,22 +87,32 @@ export default function Cotacao() {
     }
   }
 
-  /** Atualiza na hora e grava depois de uma pausa (vários toques = 1 gravação). */
-  function commit(next) {
-    setHighlighted(next);
-    const id = current.id;
-    const ids = [...next].sort((a, b) => a - b);
-    setQuotes((list) => list.map((q) => (q.id === id ? { ...q, highlighted: ids } : q)));
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      quoteService.setHighlighted(id, ids).catch(() => setError('Não foi possível salvar os destaques.'));
-    }, 600);
+  /** Na tela na hora; no banco só aquela linha (desfaz se falhar). */
+  async function toggle(index) {
+    const on = !highlighted.has(index);
+    const flip = (value) => setHighlighted((prev) => {
+      const next = new Set(prev);
+      value ? next.add(index) : next.delete(index);
+      return next;
+    });
+    flip(on);
+    try {
+      await quoteService.mark(current.id, index, on);
+    } catch {
+      flip(!on);
+      setError('Não foi possível salvar o destaque. Tente de novo.');
+    }
   }
 
-  function toggle(index) {
-    const next = new Set(highlighted);
-    next.has(index) ? next.delete(index) : next.add(index);
-    commit(next);
+  async function clearAll() {
+    const before = highlighted;
+    setHighlighted(new Set());
+    try {
+      await quoteService.clearMarks(current.id);
+    } catch {
+      setHighlighted(before);
+      setError('Não foi possível limpar os destaques.');
+    }
   }
 
   function askRemove() {
@@ -153,9 +178,9 @@ export default function Cotacao() {
                 title={q.name}
               >
                 <span className="truncate">{q.name}</span>
-                {q.highlighted?.length > 0 && (
+                {(active ? highlighted.size : q.marks) > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${active ? 'bg-accent text-ink-900' : 'bg-accent/30 text-ink-900'}`}>
-                    {q.highlighted.length}
+                    {active ? highlighted.size : q.marks}
                   </span>
                 )}
               </button>
@@ -177,7 +202,7 @@ export default function Cotacao() {
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               {highlighted.size > 0 && (
-                <button onClick={() => commit(new Set())} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
+                <button onClick={clearAll} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
                   <Eraser className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Limpar destaques</span>
                 </button>
               )}
