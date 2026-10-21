@@ -8,10 +8,28 @@ import {
   ColumnFilterMenu, ColumnsMenu, ColumnPickerMenu, compareCells, columnKinds, displayCell,
 } from '../components/SheetFilters';
 
-/** Colunas escondidas, por cotação — preferência deste aparelho. */
-const hiddenKey = (id) => `cofre_cotacao_colunas_${id}`;
-function loadHidden(id) {
-  try { return new Set(JSON.parse(localStorage.getItem(hiddenKey(id))) || []); } catch { return new Set(); }
+/**
+ * Como a pessoa deixou cada cotação (colunas, filtros, ordem, "só destacados")
+ * e qual estava aberta — preferências deste aparelho, voltam no dia seguinte.
+ * (Os destaques em si ficam no banco, pra equipe toda.)
+ */
+const viewKey = (id) => `cofre_cotacao_vista_${id}`;
+const LAST_KEY = 'cofre_cotacao_ultima';
+function loadView(id) {
+  try {
+    const v = JSON.parse(localStorage.getItem(viewKey(id))) || {};
+    return {
+      hidden: new Set(v.hidden || []),
+      filters: Object.fromEntries(Object.entries(v.filters || {}).map(([c, vals]) => [c, new Set(vals)])),
+      sort: v.sort || null,
+      onlyHighlighted: !!v.onlyHighlighted,
+    };
+  } catch {
+    return { hidden: new Set(), filters: {}, sort: null, onlyHighlighted: false };
+  }
+}
+function remember(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* storage bloqueado: só não lembra */ }
 }
 
 /** A linha passa nos filtros de coluna, menos o da coluna `except` (pro menu dela). */
@@ -47,10 +65,18 @@ export default function Cotacao() {
   const [hidden, setHidden] = useState(new Set());
   const [menu, setMenu] = useState(null);     // { type: 'filter' | 'columns', col?, anchor }
   const [copied, setCopied] = useState(null); // célula copiada agora ("linha-coluna")
+  const [undo, setUndo] = useState(null);     // { quoteId, indexes } após "Limpar destaques"
 
   useEffect(() => {
     quoteService.list()
-      .then((list) => { setQuotes(list); if (list[0]) open(list[0].id); })
+      .then((list) => {
+        setQuotes(list);
+        // Volta pra cotação em que a pessoa estava trabalhando neste aparelho.
+        let last = null;
+        try { last = localStorage.getItem(LAST_KEY); } catch { /* sem storage */ }
+        const pick = list.find((q) => q.id === last) || list[0];
+        if (pick) open(pick.id);
+      })
       .catch((err) => {
         console.error(err);
         setQuotes([]);
@@ -73,6 +99,40 @@ export default function Cotacao() {
       });
     });
   }, [currentId]);
+
+  // Aba que ficou aberta (computador dormiu, rede caiu) pode ter perdido
+  // destaques ao vivo: ao voltar pra ela ou a rede voltar, relê do banco.
+  useEffect(() => {
+    if (!currentId) return undefined;
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return;
+      quoteService.marks(currentId).then((ids) => setHighlighted(new Set(ids))).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', resync);
+    window.addEventListener('online', resync);
+    return () => {
+      document.removeEventListener('visibilitychange', resync);
+      window.removeEventListener('online', resync);
+    };
+  }, [currentId]);
+
+  // Guarda a vista desta cotação a cada mudança.
+  useEffect(() => {
+    if (!currentId) return;
+    remember(viewKey(currentId), JSON.stringify({
+      hidden: [...hidden],
+      filters: Object.fromEntries(Object.entries(filters).map(([c, set]) => [c, [...set]])),
+      sort,
+      onlyHighlighted,
+    }));
+  }, [currentId, hidden, filters, sort, onlyHighlighted]);
+
+  // "Desfazer" do Limpar destaques fica disponível por 15s.
+  useEffect(() => {
+    if (!undo) return undefined;
+    const t = setTimeout(() => setUndo(null), 15000);
+    return () => clearTimeout(t);
+  }, [undo]);
 
   async function open(id) {
     // A contagem do chip da cotação que está saindo fica com o valor atual.
@@ -113,17 +173,15 @@ export default function Cotacao() {
   }
 
   function resetView(quoteId) {
+    const view = loadView(quoteId);
     setSearch('');
-    setOnlyHighlighted(false);
-    setFilters({});
-    setSort(null);
+    setOnlyHighlighted(view.onlyHighlighted);
+    setFilters(view.filters);
+    setSort(view.sort);
+    setHidden(view.hidden);
     setMenu(null);
-    setHidden(loadHidden(quoteId));
-  }
-
-  function changeHidden(next) {
-    setHidden(next);
-    try { localStorage.setItem(hiddenKey(current.id), JSON.stringify([...next])); } catch { /* só não lembra */ }
+    setUndo(null);
+    remember(LAST_KEY, quoteId);
   }
 
   function applyFilter(col, values) {
@@ -203,9 +261,21 @@ export default function Cotacao() {
     setHighlighted(new Set());
     try {
       await quoteService.clearMarks(current.id);
+      setUndo({ quoteId: current.id, indexes: [...before] });
     } catch {
       setHighlighted(before);
       setError('Não foi possível limpar os destaques.');
+    }
+  }
+
+  async function undoClear() {
+    const { quoteId, indexes } = undo;
+    setUndo(null);
+    try {
+      await quoteService.restoreMarks(quoteId, indexes);
+      if (current?.id === quoteId) setHighlighted((prev) => new Set([...prev, ...indexes]));
+    } catch {
+      setError('Não foi possível desfazer. Tente de novo.');
     }
   }
 
@@ -213,7 +283,12 @@ export default function Cotacao() {
     const q = current;
     setConfirmReq({
       title: 'Excluir cotação?',
-      message: <><b className="text-ink-900">{q.name}</b> e os itens destacados serão apagados.</>,
+      message: (
+        <>
+          <b className="text-ink-900">{q.name}</b>
+          {highlighted.size > 0 ? ` e os ${highlighted.size} itens marcados` : ''} serão apagados para toda a equipe. Não dá para desfazer.
+        </>
+      ),
       confirmLabel: 'Excluir',
       tone: 'danger',
       onConfirm: async () => {
@@ -331,6 +406,15 @@ export default function Cotacao() {
               </button>
             </div>
           </div>
+
+          {undo?.quoteId === current.id && (
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-ink-900 text-white text-sm animate-fade-in">
+              <span>{undo.indexes.length} {undo.indexes.length === 1 ? 'destaque limpo' : 'destaques limpos'}.</span>
+              <button onClick={undoClear} className="px-3 min-h-[36px] rounded-full bg-accent text-ink-900 text-xs font-bold hover:bg-accent-light transition-colors">
+                Desfazer
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
@@ -530,7 +614,7 @@ export default function Cotacao() {
         />
       )}
       {menu?.type === 'columns' && current && (
-        <ColumnsMenu anchor={menu.anchor} columns={current.columns} hidden={hidden} onChange={changeHidden} onClose={() => setMenu(null)} />
+        <ColumnsMenu anchor={menu.anchor} columns={current.columns} hidden={hidden} onChange={setHidden} onClose={() => setMenu(null)} />
       )}
 
       <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />

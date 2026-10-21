@@ -79,13 +79,29 @@ export const quoteService = {
 
   /** Cotação inteira + índices das linhas destacadas. */
   async get(id) {
-    const [quote, marks] = await Promise.all([
+    const [quote, highlighted] = await Promise.all([
       supabase.from('quotes').select('*').eq('id', id).single(),
-      supabase.from('quote_marks').select('row_index').eq('quote_id', id),
+      this.marks(id),
     ]);
     if (quote.error) throw quote.error;
-    if (marks.error) throw marks.error;
-    return { ...quote.data, highlighted: marks.data.map((m) => m.row_index) };
+    return { ...quote.data, highlighted };
+  },
+
+  /** Só os destaques — pra ressincronizar sem baixar a planilha de novo. */
+  async marks(quoteId) {
+    const { data, error } = await supabase.from('quote_marks').select('row_index').eq('quote_id', quoteId);
+    if (error) throw error;
+    return data.map((m) => m.row_index);
+  },
+
+  /** Devolve destaques apagados (o "Desfazer" do Limpar destaques). */
+  async restoreMarks(quoteId, rowIndexes) {
+    if (!rowIndexes.length) return;
+    const { error } = await supabase.from('quote_marks').upsert(
+      rowIndexes.map((i) => ({ quote_id: quoteId, row_index: i })),
+      { onConflict: 'quote_id,row_index', ignoreDuplicates: true },
+    );
+    if (error) throw error;
   },
 
   async create({ name, columns, rows }) {
