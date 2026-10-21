@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, ArrowDownCircle, ArrowUpCircle, CreditCard,
-  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck,
+  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, useReducedMotion } from 'motion/react';
@@ -23,6 +23,7 @@ const secondary = [
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
   { to: '/categories', label: 'Categorias', icon: Tag },
   { to: '/fipe', label: 'Tabela FIPE', icon: Car },
+  { to: '/cotacao', label: 'Cotação', icon: ClipboardList },
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ];
 

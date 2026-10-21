@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home, ArrowDownCircle, ArrowUpCircle, CreditCard, Tag, LogOut, Wallet, Repeat, Settings,
-  Car, ShieldCheck, ChevronDown,
+  Car, ShieldCheck, ChevronDown, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AlertCenter from './AlertCenter';
@@ -26,6 +26,7 @@ const NAV = [
     items: [
       { to: '/categories', label: 'Categorias', icon: Tag, hint: 'Receitas e despesas' },
       { to: '/fipe', label: 'Tabela FIPE', icon: Car, hint: 'Preço de veículos' },
+      { to: '/cotacao', label: 'Cotação', icon: ClipboardList, hint: 'Planilha do cliente com destaques' },
     ],
   },
 ];

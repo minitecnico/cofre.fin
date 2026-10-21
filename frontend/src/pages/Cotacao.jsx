@@ -1,0 +1,268 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser } from 'lucide-react';
+import { quoteService, parseSpreadsheet } from '../services/quotes';
+import ConfirmDialog from '../components/ConfirmDialog';
+
+/**
+ * Cotação — a planilha do cliente com os itens destacados.
+ *
+ * Envia .xlsx/.xls/.csv (lido no navegador), toca na linha pra destacar e
+ * pronto: cada planilha vira uma cotação salva (tabela quotes) e os
+ * destaques são gravados sozinhos, então dá pra fechar e voltar depois.
+ */
+export default function Cotacao() {
+  const [quotes, setQuotes] = useState(null);   // lista (sem as linhas)
+  const [current, setCurrent] = useState(null); // cotação aberta (com linhas)
+  const [highlighted, setHighlighted] = useState(new Set());
+  const [search, setSearch] = useState('');
+  const [onlyHighlighted, setOnlyHighlighted] = useState(false);
+  const [busy, setBusy] = useState(''); // 'upload' | 'open'
+  const [error, setError] = useState('');
+  const [confirmReq, setConfirmReq] = useState(null);
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    quoteService.list()
+      .then((list) => { setQuotes(list); if (list[0]) open(list[0].id); })
+      .catch((err) => {
+        console.error(err);
+        setQuotes([]);
+        setError(err?.code === '42P01' || err?.code === 'PGRST205'
+          ? 'Falta rodar a migration supabase/migration_quotes.sql no Supabase.'
+          : 'Não foi possível carregar as cotações.');
+      });
+    return () => clearTimeout(saveTimer.current);
+  }, []);
+
+  async function open(id) {
+    setBusy('open');
+    setError('');
+    try {
+      const q = await quoteService.get(id);
+      setCurrent(q);
+      setHighlighted(new Set(q.highlighted));
+      setSearch('');
+      setOnlyHighlighted(false);
+    } catch (err) {
+      console.error(err);
+      setError('Não foi possível abrir a cotação.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy('upload');
+    setError('');
+    try {
+      const { columns, rows } = await parseSpreadsheet(file);
+      const q = await quoteService.create({ name: file.name, columns, rows });
+      setQuotes((list) => [q, ...(list || [])]);
+      setCurrent(q);
+      setHighlighted(new Set());
+      setSearch('');
+      setOnlyHighlighted(false);
+    } catch (err) {
+      setError(err.message || 'Não foi possível salvar a cotação.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  /** Atualiza na hora e grava depois de uma pausa (vários toques = 1 gravação). */
+  function commit(next) {
+    setHighlighted(next);
+    const id = current.id;
+    const ids = [...next].sort((a, b) => a - b);
+    setQuotes((list) => list.map((q) => (q.id === id ? { ...q, highlighted: ids } : q)));
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      quoteService.setHighlighted(id, ids).catch(() => setError('Não foi possível salvar os destaques.'));
+    }, 600);
+  }
+
+  function toggle(index) {
+    const next = new Set(highlighted);
+    next.has(index) ? next.delete(index) : next.add(index);
+    commit(next);
+  }
+
+  function askRemove() {
+    const q = current;
+    setConfirmReq({
+      title: 'Excluir cotação?',
+      message: <><b className="text-ink-900">{q.name}</b> e os itens destacados serão apagados.</>,
+      confirmLabel: 'Excluir',
+      tone: 'danger',
+      onConfirm: async () => {
+        await quoteService.remove(q.id);
+        const rest = quotes.filter((x) => x.id !== q.id);
+        setQuotes(rest);
+        setCurrent(null);
+        if (rest[0]) open(rest[0].id);
+      },
+    });
+  }
+
+  const visibleRows = useMemo(() => {
+    if (!current) return [];
+    const term = search.trim().toLowerCase();
+    return current.rows
+      .map((values, index) => ({ values, index }))
+      .filter((r) => (!onlyHighlighted || highlighted.has(r.index))
+        && (!term || r.values.some((v) => String(v).toLowerCase().includes(term))));
+  }, [current, search, onlyHighlighted, highlighted]);
+
+  return (
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <p className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold">Ferramentas</p>
+          <h1 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mt-1 leading-tight tracking-tight flex items-center gap-2 md:gap-3">
+            <ClipboardList className="w-7 h-7 md:w-10 md:h-10 flex-shrink-0" strokeWidth={2.25} />
+            Cotação
+          </h1>
+          <p className="text-sm md:text-base text-ink-500 mt-1">Envie a planilha do cliente e toque nos itens para destacar. Fica tudo salvo.</p>
+        </div>
+        <label className={`btn-accent self-stretch sm:self-end flex-shrink-0 ${busy === 'upload' ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}>
+          {busy === 'upload' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+          {busy === 'upload' ? 'Lendo planilha…' : 'Enviar planilha'}
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="sr-only" disabled={busy === 'upload'} />
+        </label>
+      </div>
+
+      {error && <div className="px-4 py-3 bg-red-50 border border-negative text-negative text-sm rounded-xl">{error}</div>}
+
+      {/* Cotações salvas */}
+      {quotes === null ? (
+        <div className="h-12 bg-ink-100 animate-pulse rounded-2xl" />
+      ) : quotes.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
+          {quotes.map((q) => {
+            const active = current?.id === q.id;
+            return (
+              <button
+                key={q.id}
+                onClick={() => !active && open(q.id)}
+                className={`flex-shrink-0 max-w-[260px] px-4 min-h-[44px] rounded-full text-left text-sm font-semibold flex items-center gap-2 transition-colors ${
+                  active ? 'bg-gradient-dark text-white shadow-soft' : 'bg-white border border-hairline-light text-ink-700 hover:bg-ink-50'
+                }`}
+                title={q.name}
+              >
+                <span className="truncate">{q.name}</span>
+                {q.highlighted?.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${active ? 'bg-accent text-ink-900' : 'bg-accent/30 text-ink-900'}`}>
+                    {q.highlighted.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {busy === 'open' && !current ? (
+        <div className="h-72 bg-ink-100 animate-pulse rounded-2xl" />
+      ) : current ? (
+        <div className="card-flat p-4 md:p-5 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-display font-bold text-base md:text-lg text-ink-900 truncate">{current.name}</p>
+              <p className="text-xs text-ink-500">
+                {visibleRows.length} de {current.rows.length} itens · <b className="text-ink-900">{highlighted.size}</b> {highlighted.size === 1 ? 'destacado' : 'destacados'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {highlighted.size > 0 && (
+                <button onClick={() => commit(new Set())} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
+                  <Eraser className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Limpar destaques</span>
+                </button>
+              )}
+              <button onClick={askRemove} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-400 hover:text-negative hover:bg-red-50 transition-colors" title="Excluir cotação" aria-label="Excluir cotação">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Pesquisar item…"
+                className="input-field !min-h-[44px] !py-2 pl-10 pr-10"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-900 hover:bg-ink-100" aria-label="Limpar busca">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setOnlyHighlighted((v) => !v)}
+              aria-pressed={onlyHighlighted}
+              className={`inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-xs font-bold transition-colors ${
+                onlyHighlighted ? 'bg-gradient-dark text-white shadow-soft' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
+              }`}
+            >
+              <Star className="w-3.5 h-3.5" /> Só destacados
+            </button>
+          </div>
+
+          <div className="overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr>
+                  {current.columns.map((c, i) => (
+                    <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2.5 text-left text-xs font-semibold text-ink-600 whitespace-nowrap border-b border-ink-200">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map(({ values, index }) => {
+                  const on = highlighted.has(index);
+                  return (
+                    <tr
+                      key={index}
+                      onClick={() => toggle(index)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(index); } }}
+                      tabIndex={0}
+                      aria-pressed={on}
+                      className={`cursor-pointer border-b border-ink-100 last:border-0 transition-colors outline-none focus-visible:bg-ink-50 ${
+                        on ? 'bg-accent/30 font-semibold shadow-[inset_4px_0_0_#9bc92e] hover:bg-accent/40' : 'hover:bg-ink-50'
+                      }`}
+                    >
+                      {current.columns.map((_, i) => (
+                        <td key={i} className="px-3 py-2.5 text-ink-800 align-top">{values[i]}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {visibleRows.length === 0 && (
+              <p className="p-6 text-sm text-ink-500 text-center">
+                {onlyHighlighted ? 'Nenhum item destacado ainda.' : 'Nenhum item encontrado.'}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : quotes?.length === 0 && !error && (
+        <div className="card-flat p-8 md:p-12 text-center">
+          <ClipboardList className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-3 text-ink-300" strokeWidth={1.75} />
+          <p className="font-display text-lg md:text-xl font-bold mb-1">Nenhuma cotação ainda</p>
+          <p className="text-sm text-ink-500">Envie a planilha do cliente (.xlsx, .xls ou .csv). Depois é só tocar nas linhas para destacar.</p>
+        </div>
+      )}
+
+      <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
+    </div>
+  );
+}
