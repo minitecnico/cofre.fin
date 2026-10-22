@@ -82,7 +82,7 @@ export function compareCells(a, b) {
   return collator.compare(a, b);
 }
 
-function Popover({ anchor, onClose, width = 288, children }) {
+export function Popover({ anchor, onClose, width = 288, children }) {
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
   const [sheet] = useState(() => window.innerWidth < 640);

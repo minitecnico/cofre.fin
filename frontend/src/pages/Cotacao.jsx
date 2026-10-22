@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardList, Upload, Search, X, Trash2, Loader2, Star, Eraser, Filter, FilterX, Columns3, ArrowUp, ArrowDown, Lock, Copy, Check,
+  MoreHorizontal,
 } from 'lucide-react';
 import { quoteService, parseSpreadsheet } from '../services/quotes';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
-  ColumnFilterMenu, ColumnsMenu, ColumnPickerMenu, compareCells, columnKinds, displayCell,
+  ColumnFilterMenu, ColumnsMenu, ColumnPickerMenu, Popover, compareCells, columnKinds, displayCell,
 } from '../components/SheetFilters';
+
+/** Botões da barra da tabela: discretos, só ganham fundo no hover ou quando ligados. */
+const toolBtn = 'flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] rounded-full text-xs font-semibold transition-colors';
+const toolIdle = 'text-ink-500 hover:text-ink-900 hover:bg-ink-100';
 
 /**
  * Como a pessoa deixou cada cotação (colunas, filtros, ordem, "só destacados")
@@ -395,16 +400,15 @@ export default function Cotacao() {
                 {visibleRows.length} de {current.rows.length} itens · <b className="text-ink-900">{highlighted.size}</b> {highlighted.size === 1 ? 'destacado' : 'destacados'}
               </p>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {highlighted.size > 0 && (
-                <button onClick={askClearAll} className="btn-pill-sm !min-h-[36px]" title="Tirar todos os destaques">
-                  <Eraser className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Limpar destaques</span>
-                </button>
-              )}
-              <button onClick={askRemove} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-400 hover:text-negative hover:bg-red-50 transition-colors" title="Excluir cotação" aria-label="Excluir cotação">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={(e) => openMenu(e, 'actions')}
+              aria-expanded={menu?.type === 'actions'}
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-ink-400 hover:text-ink-900 hover:bg-ink-100 transition-colors"
+              title="Mais ações"
+              aria-label="Mais ações"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
           </div>
 
           {undo?.quoteId === current.id && (
@@ -432,20 +436,18 @@ export default function Cotacao() {
                 </button>
               )}
             </div>
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setOnlyHighlighted((v) => !v)}
               aria-pressed={onlyHighlighted}
-              className={`flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold transition-colors ${
-                onlyHighlighted ? 'bg-gradient-dark text-white shadow-soft' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
-              }`}
+              className={`${toolBtn} ${onlyHighlighted ? 'bg-accent/30 text-ink-900 hover:bg-accent/50' : toolIdle}`}
             >
-              <Star className="w-3.5 h-3.5" /> Só destacados
+              <Star className={`w-3.5 h-3.5 ${onlyHighlighted ? 'fill-current' : ''}`} /> Só destacados
             </button>
             <button
               onClick={(e) => openMenu(e, 'picker')}
               aria-expanded={menu?.type === 'picker'}
-              className="md:hidden flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
+              className={`md:hidden ${toolBtn} ${toolIdle}`}
             >
               <Filter className="w-3.5 h-3.5" /> Filtrar
               {Object.keys(filters).length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-ink-900 text-white text-[10px]">{Object.keys(filters).length}</span>}
@@ -453,7 +455,7 @@ export default function Cotacao() {
             <button
               onClick={(e) => openMenu(e, 'columns')}
               aria-expanded={menu?.type === 'columns'}
-              className="flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-ink-100 text-ink-600 hover:bg-ink-200 transition-colors"
+              className={`${toolBtn} ${toolIdle}`}
             >
               <Columns3 className="w-3.5 h-3.5" /> Colunas
               {hidden.size > 0 && <span className="px-1.5 py-0.5 rounded-full bg-ink-900 text-white text-[10px]">{cols.length}/{current.columns.length}</span>}
@@ -461,7 +463,7 @@ export default function Cotacao() {
             {filtering && (
               <button
                 onClick={() => { setFilters({}); setSort(null); }}
-                className="flex-1 sm:flex-none whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 min-h-[44px] rounded-full text-xs font-bold bg-accent/30 text-ink-900 hover:bg-accent/50 transition-colors"
+                className={`${toolBtn} ${toolIdle}`}
               >
                 <FilterX className="w-3.5 h-3.5" /> Limpar filtros
               </button>
@@ -615,6 +617,26 @@ export default function Cotacao() {
       )}
       {menu?.type === 'columns' && current && (
         <ColumnsMenu anchor={menu.anchor} columns={current.columns} hidden={hidden} onChange={setHidden} onClose={() => setMenu(null)} />
+      )}
+      {menu?.type === 'actions' && current && (
+        <Popover anchor={menu.anchor} width={220} onClose={() => setMenu(null)}>
+          {highlighted.size > 0 && (
+            <button
+              type="button"
+              onClick={() => { setMenu(null); askClearAll(); }}
+              className="w-full flex items-center gap-2.5 px-2 min-h-[44px] rounded-lg hover:bg-ink-50 text-sm text-left"
+            >
+              <Eraser className="w-4 h-4 text-ink-500" /> Limpar destaques
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setMenu(null); askRemove(); }}
+            className="w-full flex items-center gap-2.5 px-2 min-h-[44px] rounded-lg hover:bg-red-50 text-sm text-left text-negative"
+          >
+            <Trash2 className="w-4 h-4" /> Excluir cotação
+          </button>
+        </Popover>
       )}
 
       <ConfirmDialog request={confirmReq} onClose={() => setConfirmReq(null)} />
