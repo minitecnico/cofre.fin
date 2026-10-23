@@ -1156,7 +1156,7 @@ function BulkActionBar({ count, processing, onPause, onResume, onDelete }) {
 // ─────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────
-// Configuração visual de cada aba — aplica a linguagem do DESIGN.md:
+// Configuração visual de cada aba — aplica o design system do CLAUDE.md:
 // canvas dark p/ storytelling, accent verde-limão como "stamp" da marca,
 // e variações de neutros pra hierarquia. Identidade de cores preservada.
 // ─────────────────────────────────────────────────────────────────────────

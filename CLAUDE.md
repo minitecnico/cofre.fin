@@ -2,6 +2,8 @@
 
 App de controle financeiro pessoal. **Frontend React puro conversando direto com Supabase** (sem servidor Node intermediário). Auth, RLS, lógica de negócio em RPCs PL/pgSQL. PWA instalável.
 
+Única exceção ao "sem backend": a função serverless `frontend/api/push-notify.js` (Vercel), que envia o Web Push do aviso de pagamento.
+
 A segurança vem das **policies de Row Level Security** do Postgres — nunca de esconder dados. A `anon key` do Supabase é pública por design.
 
 ---
@@ -249,7 +251,7 @@ Todas as tabelas têm uma única policy `for all using (auth.uid() = user_id) wi
 
 ## Design system (estado atual)
 
-> ⚠️ **README e alguns comentários antigos descrevem "neo-brutalismo" (bordas grossas, sombras `4px 4px 0`).**
+> ⚠️ **Alguns comentários antigos descrevem "neo-brutalismo" (bordas grossas, sombras `4px 4px 0`).**
 > **O design FOI atualizado** para um estilo moderno minimalista. Os últimos artefatos do brutalismo (borda preta grossa, cantos retos) saíram em 2026-10-20.
 >
 > Ao criar UI nova, siga o estilo MODERNO descrito abaixo, não o brutalista.
@@ -376,10 +378,9 @@ npm run preview      # serve dist/ localmente
 ## Dívidas técnicas conhecidas (oportunidades de melhoria)
 
 1. **`TransactionForm.jsx` e `ChangePasswordModal.jsx` chamam `supabase` diretamente** — devem passar pelos services.
-2. **`README.md` descreve aesthetic neo-brutalista** — desatualizado.
-3. Não há `.env.example` no repo.
-4. Migrations não têm numeração — recomendável renomear para `001_paid.sql`, `002_monthly.sql`, etc.
-5. Lógica grande em alguns componentes (`Recurring.jsx` ~48KB, `Cards.jsx` ~36KB, `BatchTransactionForm.jsx` ~24KB). Considerar quebrar em subcomponentes.
+2. Não há `.env.example` no repo.
+3. Migrations não têm numeração — recomendável renomear para `001_paid.sql`, `002_monthly.sql`, etc.
+4. Lógica grande em alguns componentes (`Recurring.jsx` ~48KB, `Cards.jsx` ~36KB, `BatchTransactionForm.jsx` ~24KB). Considerar quebrar em subcomponentes.
 
 ---
 

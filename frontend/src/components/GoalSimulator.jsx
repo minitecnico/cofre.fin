@@ -16,7 +16,7 @@ import {
  * o valor restante a alcançar é (target_amount - current_amount).
  *
  * Componente é PURO de cálculo — não chama service, não persiste.
- * Estilo segue DESIGN.md (pills, hairline cards, accent verde-limão).
+ * Estilo segue o design system do CLAUDE.md (pills, hairline cards, accent verde-limão).
  */
 export default function GoalSimulator({ goal }) {
   // Faltante: alvo - guardado. Se já passou, faltante = 0.
