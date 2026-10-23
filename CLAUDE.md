@@ -129,7 +129,8 @@ supabase/
     ├── migration_installments.sql          # parcelamento (installment_group_id)
     ├── migration_recurring.sql             # tabela recurring_transactions + lazy gen
     ├── migration_recurring_kind.sql        # kind: 'recurring' | 'subscription'
-    └── migration_card_smart_limit.sql      # limite do cartão considera só não-pagas
+    ├── migration_card_smart_limit.sql      # limite do cartão considera só não-pagas
+    └── migration_card_bill_by_month.sql    # fatura = lançamentos do mês (versiona as RPCs de cartão)
 ```
 
 ---
@@ -158,11 +159,12 @@ A pessoa pode navegar entre meses sem perder contexto — recorrências são ger
 
 - `closing_day`: dia do mês em que a fatura fecha.
 - `due_day`: dia em que vence.
-- **Limite ocupado** = soma das compras NÃO PAGAS do cartão dentro do ciclo atual.
-- Ao marcar uma compra como paga, ela deixa de ocupar limite (como o app do banco).
-- Compras parceladas: só a parcela do ciclo atual ocupa limite; as futuras não.
+- **Fatura do mês M = despesas do cartão datadas em M** (vence em M no `due_day`). O usuário lança o total da fatura como uma despesa por cartão por mês, perto do vencimento — a data NÃO é tratada como dia da compra (não empurra pra fatura seguinte depois do fechamento).
+- **Fatura atual** = a primeira que ainda não venceu.
+- **Limite ocupado** = o que falta pagar da fatura atual.
+- Ao marcar uma despesa do cartão como paga, ela deixa de ocupar limite.
 
-A lógica vive em `get_card_summary()`, `get_card_bills()`, `pay_card_bill()` no SQL.
+A lógica vive em `card_bill_dates()`, `get_card_summary()`, `get_card_bills()`, `get_card_bill_transactions()`, `pay_card_bill()` no SQL (`migration_card_bill_by_month.sql`). O sino (`alerts.js`) avisa despesa de cartão pelo vencimento da fatura, não pela data do lançamento.
 
 ### Parcelamento
 
@@ -386,6 +388,6 @@ npm run preview      # serve dist/ localmente
 
 ## Quando pedir mais contexto
 
-- Antes de mexer em RPC SQL: leia `schema.sql` + a migration mais recente do tema (e.g. `migration_card_smart_limit.sql` antes de mexer em cartão).
+- Antes de mexer em RPC SQL: leia `schema.sql` + a migration mais recente do tema (e.g. `migration_card_bill_by_month.sql` antes de mexer em cartão).
 - Antes de mexer em form de transação: revisitar a interação entre parcelamento, recorrência e pagamento via cartão (estes são mutuamente exclusivos em alguns casos).
 - Antes de mexer em datas/timezone: ler os comentários em `utils/format.js` sobre o bug clássico UTC-3.

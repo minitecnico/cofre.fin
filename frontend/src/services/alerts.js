@@ -50,15 +50,28 @@ function fmtMoney(n) {
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
+ * Vencimento da fatura do cartão no mês de 'YYYY-MM-DD' — mesma regra de
+ * card_bill_dates() no SQL: due_day do mês; além do fim do mês → último dia.
+ */
+function billDueDate(str, dueDay) {
+  const [y, m] = str.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, Math.min(dueDay, new Date(y, m, 0).getDate()));
+}
+
+/**
  * Despesas vencidas (de QUALQUER mês), vencendo hoje, ou em até 5 dias.
  * Recebe uma lista de despesas não-pagas global (não filtrada por mês) — é o
  * que torna o sino realmente útil: conta esquecida de meses passados aparece.
+ *
+ * Despesa no cartão vence junto com a fatura do mês dela (due_day do cartão),
+ * não na data do lançamento.
  */
-function detectDueDateAlerts(transactions, t0) {
+function detectDueDateAlerts(transactions, t0, dueDayByCard) {
   const alerts = [];
   for (const tx of transactions || []) {
     if (tx.type !== 'expense' || tx.paid) continue;
-    const d = parseLocalDate(tx.date);
+    const dueDay = dueDayByCard[tx.credit_card_id];
+    const d = dueDay ? billDueDate(tx.date, dueDay) : parseLocalDate(tx.date);
     if (!d) continue;
     const diff = daysBetween(t0, d);
 
@@ -252,7 +265,8 @@ export async function detectAllAlerts() {
   const transactions = txRes.data || [];
 
   // Detecta cada categoria
-  const dueAlerts = detectDueDateAlerts(transactions, t0);
+  const dueDayByCard = Object.fromEntries((cardsRes || []).map((s) => [s.card.id, s.card.due_day]));
+  const dueAlerts = detectDueDateAlerts(transactions, t0, dueDayByCard);
   const cardAlerts = detectCardAlerts(cardsRes, t0);
   const budgetAlerts = detectBudgetAlerts(dashData);
 
