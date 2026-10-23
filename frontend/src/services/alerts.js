@@ -401,7 +401,7 @@ export function showNativeNotification(alert) {
     const notif = new Notification(alert.title, {
       body: alert.message,
       icon: '/icons/icon.svg',
-      badge: '/icons/icon.svg',
+      badge: '/icons/badge-96.png',
       tag: alert.id, // substitui notificação anterior com mesmo id
       requireInteraction: alert.severity === 'critical',
     });

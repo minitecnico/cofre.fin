@@ -11,7 +11,7 @@
  */
 export async function showSystemNotification({ title, body, tag, url = '/' }) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/icon-96.png', data: { url } };
+  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', data: { url } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) { await reg.showNotification(title, options); return; }
