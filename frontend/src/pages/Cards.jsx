@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, ChevronLeft, ChevronRight, Landmark } from 'lucide-react';
 import { cardService } from '../services';
 import { formatCurrency, formatDate } from '../utils/format';
@@ -261,21 +261,33 @@ function formatBillMonthShort(dateStr) {
 }
 
 /**
- * CardBillsView — mostra as faturas do cartão com navegação ◀ ▶
+ * CardBillsView — faturas do cartão, separadas em "Em aberto" e "Pagas".
  *
- * Lista faturas que têm transações (incluindo as futuras com parcelas pendentes).
- * Cada fatura mostra:
- *   - Status (paga ✓ / aberta / futura)
- *   - Total, fechamento, vencimento
- *   - Lista de transações daquela fatura
- *   - Botão "Pagar fatura" se ainda tiver compras pendentes
+ * Fatura paga não pede ação: por padrão só aparecem as em aberto (inclusive
+ * fechadas sem pagar e futuras). As pagas ficam na outra aba, pra consulta.
+ * A faixa de meses só aparece quando a aba tem mais de uma fatura; ◀ ▶ do
+ * detalhe navegam dentro da aba.
  */
 function CardBillsView({ cardId, onPayBill, payingBillKey }) {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('open'); // 'open' | 'paid'
   const [selectedBillMonth, setSelectedBillMonth] = useState(null);
   const [billTxs, setBillTxs] = useState([]);
   const [txsLoading, setTxsLoading] = useState(false);
+  const chipsRef = useRef(null);
+
+  const openBills = bills.filter((b) => !b.isFullyPaid);
+  const paidBills = bills.filter((b) => b.isFullyPaid);
+  const list = tab === 'open' ? openBills : paidBills;
+
+  // Troca de aba já escolhendo a fatura: em aberto → a mais antiga (próxima a
+  // pagar); pagas → a mais recente.
+  function pickTab(next, source = bills) {
+    const items = source.filter((b) => (next === 'open' ? !b.isFullyPaid : b.isFullyPaid));
+    setTab(next);
+    setSelectedBillMonth(items.length ? items[next === 'open' ? 0 : items.length - 1].billMonth : null);
+  }
 
   // Carrega lista de faturas
   useEffect(() => {
@@ -284,16 +296,11 @@ function CardBillsView({ cardId, onPayBill, payingBillKey }) {
     cardService.bills(cardId).then((data) => {
       if (!alive) return;
       setBills(data);
-      // Seleciona automaticamente a fatura "atual" (a mais antiga não totalmente paga)
-      if (data.length > 0) {
-        const firstUnpaid = data.find((b) => !b.isFullyPaid);
-        setSelectedBillMonth(firstUnpaid ? firstUnpaid.billMonth : data[data.length - 1].billMonth);
-      } else {
-        setSelectedBillMonth(null);
-      }
+      pickTab('open', data);
       setLoading(false);
     }).catch(() => setLoading(false));
     return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId]);
 
   // Carrega transações da fatura selecionada
@@ -305,6 +312,14 @@ function CardBillsView({ cardId, onPayBill, payingBillKey }) {
       .finally(() => setTxsLoading(false));
   }, [cardId, selectedBillMonth]);
 
+  // Mantém o mês escolhido visível na faixa (◀ ▶ podem levá-lo pra fora).
+  // scrollLeft em vez de scrollIntoView pra não rolar o modal junto.
+  useEffect(() => {
+    const row = chipsRef.current;
+    const chip = row?.querySelector('[aria-pressed="true"]');
+    if (chip) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+  }, [selectedBillMonth, tab]);
+
   if (loading) return <div className="h-32 bg-ink-100 animate-pulse rounded-2xl" />;
   if (bills.length === 0) {
     return (
@@ -314,49 +329,68 @@ function CardBillsView({ cardId, onPayBill, payingBillKey }) {
     );
   }
 
-  const selectedBill = bills.find((b) => b.billMonth === selectedBillMonth);
-  const selectedIdx = bills.findIndex((b) => b.billMonth === selectedBillMonth);
-  const canPrev = selectedIdx > 0;
-  const canNext = selectedIdx < bills.length - 1;
+  const selectedIdx = list.findIndex((b) => b.billMonth === selectedBillMonth);
+  const selectedBill = list[selectedIdx];
 
   function go(delta) {
-    const newIdx = selectedIdx + delta;
-    if (newIdx < 0 || newIdx >= bills.length) return;
-    setSelectedBillMonth(bills[newIdx].billMonth);
+    const next = list[selectedIdx + delta];
+    if (next) setSelectedBillMonth(next.billMonth);
   }
 
   return (
     <div className="space-y-3">
-      {/* Carrossel de faturas (chips horizontais) */}
-      <div className="card-flat p-3">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
-          {bills.map((b) => {
-            const active = b.billMonth === selectedBillMonth;
-            return (
-              <BillChip
-                key={b.billMonth}
-                bill={b}
-                active={active}
-                onClick={() => setSelectedBillMonth(b.billMonth)}
-              />
-            );
-          })}
+      {/* Abas: só faz sentido quando existe alguma paga pra esconder */}
+      {paidBills.length > 0 && (
+        <div className="grid grid-cols-2 gap-1 p-1 bg-ink-100 rounded-xl">
+          {[['open', 'Em aberto', openBills.length], ['paid', 'Pagas', paidBills.length]].map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => pickTab(key)}
+              aria-pressed={tab === key}
+              className={`flex items-center justify-center gap-1.5 min-h-[40px] rounded-lg text-sm font-bold transition-colors ${
+                tab === key ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-700'
+              }`}
+            >
+              {label}
+              <span className="text-xs font-semibold text-ink-400">{count}</span>
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Detalhes da fatura selecionada */}
-      {selectedBill && (
+      {/* Faixa de meses da aba (só com 2+ faturas) */}
+      {list.length > 1 && (
+        <div ref={chipsRef} className="relative flex items-center gap-2 overflow-x-auto py-1" style={{ scrollbarWidth: 'thin' }}>
+          {list.map((b) => (
+            <BillChip
+              key={b.billMonth}
+              bill={b}
+              active={b.billMonth === selectedBillMonth}
+              onClick={() => setSelectedBillMonth(b.billMonth)}
+            />
+          ))}
+        </div>
+      )}
+
+      {selectedBill ? (
         <BillDetail
           bill={selectedBill}
           transactions={billTxs}
           loading={txsLoading}
-          canPrev={canPrev}
-          canNext={canNext}
+          canPrev={selectedIdx > 0}
+          canNext={selectedIdx < list.length - 1}
           onPrev={() => go(-1)}
           onNext={() => go(1)}
           onPayBill={() => onPayBill(selectedBill)}
           isPaying={payingBillKey === `${cardId}::${selectedBill.billMonth}`}
         />
+      ) : (
+        <div className="card-flat p-6 md:p-8 text-center">
+          <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-positive" />
+          <p className="font-display font-bold">Nenhuma fatura em aberto</p>
+          <p className="text-xs text-ink-500 mt-1">As faturas já pagas ficam na aba Pagas.</p>
+        </div>
       )}
     </div>
   );
@@ -380,8 +414,10 @@ function BillChip({ bill, active, onClick }) {
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all duration-200 ${
+      aria-pressed={active}
+      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold uppercase tracking-wider border transition-all duration-200 ${
         active
           ? 'bg-gradient-dark text-white border-ink-900 shadow-soft'
           : `${statusClass} hover:scale-105`
@@ -400,6 +436,12 @@ function BillChip({ bill, active, onClick }) {
 
 // Detalhe completo da fatura: header com totais + lista de compras
 function BillDetail({ bill, transactions, loading, canPrev, canNext, onPrev, onNext, onPayBill, isPaying }) {
+  const single = !canPrev && !canNext; // fatura única na aba: setas somem, título segue centralizado
+  const boxes = bill.paidAmount > 0 && bill.unpaidAmount > 0
+    ? [['Total', bill.totalAmount, 'bg-ink-50', 'text-ink-500'], ['Pago', bill.paidAmount, 'bg-positive/10', 'text-positive'], ['A pagar', bill.unpaidAmount, 'bg-red-50', 'text-negative']]
+    : bill.unpaidAmount > 0
+      ? [['A pagar', bill.unpaidAmount, 'bg-red-50', 'text-negative']]
+      : [['Total pago', bill.paidAmount, 'bg-positive/10', 'text-positive']];
   const monthLabel = formatBillMonth(bill.billMonth);
 
   let statusBadge;
@@ -430,7 +472,7 @@ function BillDetail({ bill, transactions, loading, canPrev, canNext, onPrev, onN
         <button
           onClick={onPrev}
           disabled={!canPrev}
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-700 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          className={`w-9 h-9 rounded-lg flex items-center justify-center text-ink-700 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all ${single ? 'invisible' : ''}`}
           aria-label="Fatura anterior"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -449,40 +491,28 @@ function BillDetail({ bill, transactions, loading, canPrev, canNext, onPrev, onN
         <button
           onClick={onNext}
           disabled={!canNext}
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-700 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          className={`w-9 h-9 rounded-lg flex items-center justify-center text-ink-700 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all ${single ? 'invisible' : ''}`}
           aria-label="Próxima fatura"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Resumo numérico */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <div className="rounded-xl bg-ink-50 p-2.5">
-          <p className="text-[10px] uppercase tracking-widest font-bold text-ink-500">Total</p>
-          <p className="font-display font-bold text-base md:text-lg mt-0.5">
-            {formatCurrency(bill.totalAmount)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-positive/10 p-2.5">
-          <p className="text-[10px] uppercase tracking-widest font-bold text-positive">Pago</p>
-          <p className="font-display font-bold text-base md:text-lg mt-0.5">
-            {formatCurrency(bill.paidAmount)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-red-50 p-2.5 col-span-2 sm:col-span-1">
-          <p className="text-[10px] uppercase tracking-widest font-bold text-negative">A pagar</p>
-          <p className="font-display font-bold text-base md:text-lg mt-0.5">
-            {formatCurrency(bill.unpaidAmount)}
-          </p>
-        </div>
+      {/* Resumo numérico: as três caixas só quando está paga em parte. Senão
+          uma só — "Pago R$ 0,00" ou "A pagar R$ 0,00" não dizem nada. */}
+      <div className={`grid gap-2 ${boxes.length === 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'}`}>
+        {boxes.map(([label, value, bg, tone], i) => (
+          <div key={label} className={`rounded-xl p-2.5 ${bg} ${i === 2 ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <p className={`text-[10px] uppercase tracking-widest font-bold ${tone}`}>{label}</p>
+            <p className="font-display font-bold text-base md:text-lg mt-0.5">{formatCurrency(value)}</p>
+          </div>
+        ))}
       </div>
 
       {/* Datas */}
-      <div className="flex items-center justify-between text-[11px] text-ink-500 font-medium">
-        <span>📅 Fecha em {formatDate(bill.closesOn, 'long')}</span>
-        <span>💰 Vence em {formatDate(bill.dueOn, 'long')}</span>
-      </div>
+      <p className="text-xs text-ink-500 font-medium text-center">
+        Fecha {formatDate(bill.closesOn)} · Vence {formatDate(bill.dueOn)}
+      </p>
 
       {/* Botão pagar (só se houver saldo) */}
       {bill.unpaidAmount > 0 && (
