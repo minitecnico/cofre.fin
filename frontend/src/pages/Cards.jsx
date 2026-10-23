@@ -182,9 +182,8 @@ function CardForm({ initial, onSaved, onCancel }) {
 /**
  * CardRow — uma linha da lista de cartões.
  *
- * Fatura atual à direita; embaixo, o limite livre. O limite ocupado inclui as
- * parcelas futuras não pagas (como no app do banco), então pode ser bem maior
- * que a fatura. A linha inteira abre o detalhe (faturas, pagar, editar, excluir).
+ * Fatura atual à direita; embaixo, o limite livre. A linha inteira abre o
+ * detalhe (faturas, pagar, editar, excluir).
  *
  * Mobile: [logo | nome | fatura] e o limite na linha de baixo.
  * Desktop: tudo numa linha só, com o limite em coluna própria.
@@ -751,9 +750,6 @@ export default function CardsPage() {
                   <div className="mt-2 h-1.5 bg-black/25 rounded-full overflow-hidden">
                     <div className="h-full bg-white rounded-full" style={{ width: `${Math.min(detailCard.utilizationPercent, 100)}%` }} />
                   </div>
-                  <p className="text-[11px] opacity-80 mt-2">
-                    Em uso {formatCurrency(detailCard.usedLimit)}: inclui as parcelas futuras. Cada fatura paga libera o limite dela.
-                  </p>
                 </div>
               )}
             </div>
