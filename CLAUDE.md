@@ -129,7 +129,8 @@ supabase/
     ├── migration_installments.sql          # parcelamento (installment_group_id)
     ├── migration_recurring.sql             # tabela recurring_transactions + lazy gen
     ├── migration_recurring_kind.sql        # kind: 'recurring' | 'subscription'
-    └── migration_card_smart_limit.sql      # limite do cartão considera só não-pagas
+    ├── migration_card_smart_limit.sql      # limite do cartão considera só não-pagas
+    └── migration_card_limit_installments.sql # limite = todas as não pagas (parcelas futuras inclusas)
 ```
 
 ---
@@ -158,9 +159,10 @@ A pessoa pode navegar entre meses sem perder contexto — recorrências são ger
 
 - `closing_day`: dia do mês em que a fatura fecha.
 - `due_day`: dia em que vence.
-- **Limite ocupado** = soma das compras NÃO PAGAS do cartão dentro do ciclo atual.
-- Ao marcar uma compra como paga, ela deixa de ocupar limite (como o app do banco).
-- Compras parceladas: só a parcela do ciclo atual ocupa limite; as futuras não.
+- **Limite ocupado** = soma de TODAS as compras NÃO PAGAS do cartão, de qualquer data.
+- Compras parceladas prendem o limite pelo valor total (todas as parcelas, inclusive as futuras), como no banco.
+- Ao pagar a fatura (ou marcar uma compra como paga), as parcelas dela deixam de ocupar limite.
+- **Fatura atual** (`open_bill`) = só o que falta pagar no ciclo de hoje; é diferente do limite ocupado.
 
 A lógica vive em `get_card_summary()`, `get_card_bills()`, `pay_card_bill()` no SQL.
 
@@ -386,6 +388,6 @@ npm run preview      # serve dist/ localmente
 
 ## Quando pedir mais contexto
 
-- Antes de mexer em RPC SQL: leia `schema.sql` + a migration mais recente do tema (e.g. `migration_card_smart_limit.sql` antes de mexer em cartão).
+- Antes de mexer em RPC SQL: leia `schema.sql` + a migration mais recente do tema (e.g. `migration_card_limit_installments.sql` antes de mexer em cartão).
 - Antes de mexer em form de transação: revisitar a interação entre parcelamento, recorrência e pagamento via cartão (estes são mutuamente exclusivos em alguns casos).
 - Antes de mexer em datas/timezone: ler os comentários em `utils/format.js` sobre o bug clássico UTC-3.

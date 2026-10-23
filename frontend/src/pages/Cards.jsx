@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, Sparkles, ChevronLeft, ChevronRight, Landmark } from 'lucide-react';
+import { CreditCard as CardIcon, Plus, Calendar, AlertTriangle, Trash2, Pencil, CheckCircle2, Wallet, ChevronLeft, ChevronRight, Landmark } from 'lucide-react';
 import { cardService } from '../services';
-import { formatCurrency, formatPercent, formatDate } from '../utils/format';
+import { formatCurrency, formatDate } from '../utils/format';
 import Modal from '../components/Modal';
 import Select from '../components/Select';
 import BankLogo from '../components/BankLogo';
@@ -180,138 +180,75 @@ function CardForm({ initial, onSaved, onCancel }) {
 }
 
 /**
- * CardItem — face minimalista do cartão.
+ * CardRow — uma linha da lista de cartões.
  *
- * Mostra só o essencial: nome, número, fatura aberta em destaque, disponível
- * discreto e uma barra de uso fininha. O card inteiro é clicável e abre o
- * detalhe (faturas + compras + pagamento) num modal — sem rolar a página.
- * Editar/excluir ficam discretos no topo; param a propagação do clique.
+ * Fatura atual à direita; embaixo, o limite livre. O limite ocupado inclui as
+ * parcelas futuras não pagas (como no app do banco), então pode ser bem maior
+ * que a fatura. A linha inteira abre o detalhe (faturas, pagar, editar, excluir).
+ *
+ * Mobile: [logo | nome | fatura] e o limite na linha de baixo.
+ * Desktop: tudo numa linha só, com o limite em coluna própria.
  */
-function CardItem({ summary, onEdit, onDelete, onOpen }) {
-  const {
-    card,
-    available,
-    openBill,
-    cardLimit,
-    utilizationPercent,
-    unpaidCount,
-    purchaseCount,
-  } = summary;
+function CardRow({ summary, onOpen }) {
+  const { card, openBill, purchaseCount, available, cardLimit, utilizationPercent } = summary;
   const isHighUsage = utilizationPercent > 80;
-  const hasOpenBill = openBill > 0;
 
   return (
     <button
       type="button"
       onClick={() => onOpen(card.id)}
-      className="group relative w-full text-left rounded-2xl shadow-soft-md transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-soft-lg hover:-translate-y-0.5 focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/60"
+      className="w-full text-left grid grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-[auto_minmax(0,1fr)_9rem_minmax(0,15rem)_auto] items-center gap-x-3 md:gap-x-5 gap-y-2 px-4 py-3 hover:bg-ink-50 focus:outline-none focus-visible:bg-ink-50 transition-colors"
     >
-      {/* Fundo gradiente baseado na cor do cartão */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}dd 60%, ${card.color}99 100%)`,
-        }}
+      <BankLogo
+        name={card.name}
+        size={40}
+        fallback={
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: card.color }}>
+            <CardIcon className="w-5 h-5 text-white" />
+          </span>
+        }
       />
-      {/* Brilho decorativo */}
-      <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Conteúdo */}
-      <div className="relative p-4 md:p-5 text-white">
-        {/* Header: bandeira + nome + número | ações discretas */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <BankLogo name={card.name} size={16} />
-              <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">
-                {card.brand}
-              </p>
-            </div>
-            <h3 className="font-display text-lg md:text-xl font-bold mt-0.5 truncate tracking-tight">
-              {card.name}
-            </h3>
-            <p className="font-mono text-[11px] tracking-[0.2em] opacity-70 mt-1">
-              •••• {card.last_digits || '----'}
-            </p>
-          </div>
+      <div className="min-w-0">
+        <p className="font-semibold text-sm md:text-base text-ink-900 truncate">{card.name}</p>
+        <p className="text-xs text-ink-500 truncate">
+          {card.last_digits && <span className="hidden sm:inline">•••• {card.last_digits} · </span>}
+          Fecha dia {card.closing_day} · vence dia {card.due_day}
+        </p>
+      </div>
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); onEdit(card); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(card); } }}
-              className="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer"
-              title="Editar cartão"
-              aria-label="Editar cartão"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); onDelete(summary); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onDelete(summary); } }}
-              className="w-8 h-8 rounded-lg bg-white/15 hover:bg-negative backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer"
-              title="Excluir cartão"
-              aria-label="Excluir cartão"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </span>
-          </div>
-        </div>
+      <div className="text-right">
+        {openBill > 0 ? (
+          <>
+            <p className="font-display font-bold text-sm md:text-base text-ink-900 whitespace-nowrap">{formatCurrency(openBill)}</p>
+            <p className="text-[11px] text-ink-500">fatura atual</p>
+          </>
+        ) : purchaseCount > 0 ? (
+          <p className="inline-flex items-center gap-1 text-xs font-semibold text-positive whitespace-nowrap">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Fatura paga
+          </p>
+        ) : (
+          <p className="text-xs text-ink-400 whitespace-nowrap">Sem compras</p>
+        )}
+      </div>
 
-        {/* Fatura aberta em destaque + disponível discreto */}
-        <div className="flex items-end justify-between gap-3 mb-3">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold mb-0.5">
-              {hasOpenBill ? 'Fatura aberta' : 'Fatura'}
-            </p>
-            {hasOpenBill ? (
-              <p className="font-display font-bold text-2xl md:text-3xl break-all leading-none">
-                {formatCurrency(openBill)}
-              </p>
-            ) : (
-              <p className="font-display font-bold text-xl md:text-2xl leading-none inline-flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 flex-shrink-0" />
-                {purchaseCount > 0 ? 'Zerada' : 'Sem compras'}
-              </p>
-            )}
-            {hasOpenBill && unpaidCount > 0 && (
-              <p className="text-[10px] opacity-70 mt-1">
-                {unpaidCount} {unpaidCount === 1 ? 'compra pendente' : 'compras pendentes'}
-              </p>
-            )}
-          </div>
-          <div className="text-right flex-shrink-0">
-            <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold mb-0.5">Disponível</p>
-            <p className="font-display font-bold text-sm md:text-base break-all">
-              {formatCurrency(available)}
-            </p>
-            <p className="text-[10px] opacity-60 mt-0.5">de {formatCurrency(cardLimit)}</p>
-          </div>
-        </div>
-
-        {/* Barra de uso fininha + % + alerta discreto */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
+      {cardLimit > 0 ? (
+        <div className="col-start-2 col-span-2 md:col-start-auto md:col-span-1 min-w-0">
+          <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 rounded-full ${isHighUsage ? 'bg-warn' : 'bg-accent'}`}
+              className={`h-full rounded-full transition-all duration-500 ${isHighUsage ? 'bg-warn' : 'bg-accent-dark'}`}
               style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
             />
           </div>
-          <span className="font-mono text-[11px] font-bold opacity-80">{formatPercent(utilizationPercent)}</span>
-          {isHighUsage && (
-            <AlertTriangle className="w-3.5 h-3.5 text-warn flex-shrink-0" aria-label="Limite quase no topo" />
-          )}
+          <p className="text-[11px] text-ink-500 mt-1 truncate">
+            Livre <span className="font-semibold text-ink-900">{formatCurrency(available)}</span> de {formatCurrency(cardLimit)}
+          </p>
         </div>
+      ) : (
+        <span className="hidden md:block" />
+      )}
 
-        {/* Affordance: clique abre as faturas */}
-        <div className="mt-3 flex items-center justify-end gap-1 text-[11px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">
-          <span>Ver faturas e compras</span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </div>
-      </div>
+      <ChevronRight className="hidden md:block w-4 h-4 text-ink-400" />
     </button>
   );
 }
@@ -731,9 +668,15 @@ export default function CardsPage() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-hairline-light shadow-soft overflow-hidden divide-y divide-ink-100">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-60 bg-ink-100 rounded-2xl animate-pulse" />
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <div className="w-10 h-10 rounded-xl bg-ink-100 animate-pulse" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-1/3 bg-ink-100 rounded-full animate-pulse" />
+                <div className="h-2.5 w-1/2 bg-ink-100 rounded-full animate-pulse" />
+              </div>
+            </div>
           ))}
         </div>
       ) : cards.length === 0 ? (
@@ -748,19 +691,11 @@ export default function CardsPage() {
           </button>
         </div>
       ) : (
-        <>
-          <div data-tour="cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {cards.map((summary) => (
-              <CardItem
-                key={summary.card.id}
-                summary={summary}
-                onEdit={(c) => { setEditing(c); open(); }}
-                onDelete={requestDelete}
-                onOpen={setDetailCardId}
-              />
-            ))}
-          </div>
-        </>
+        <div data-tour="cards" className="bg-white rounded-2xl border border-hairline-light shadow-soft overflow-hidden divide-y divide-ink-100">
+          {cards.map((summary) => (
+            <CardRow key={summary.card.id} summary={summary} onOpen={setDetailCardId} />
+          ))}
+        </div>
       )}
 
       {/* Modal: detalhe do cartão (faturas + compras + pagamento) */}
@@ -772,22 +707,55 @@ export default function CardsPage() {
       >
         {detailCard && (
           <div className="space-y-4">
-            {/* Mini-resumo do cartão no topo do modal */}
+            {/* Mini-resumo do cartão no topo do modal: limite + editar/excluir */}
             <div
               className="rounded-2xl p-4 text-white relative overflow-hidden"
               style={{ background: `linear-gradient(135deg, ${detailCard.card.color} 0%, ${detailCard.card.color}cc 100%)` }}
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold">{detailCard.card.brand}</p>
                   <p className="font-mono text-xs tracking-[0.2em] opacity-80 mt-0.5">•••• {detailCard.card.last_digits || '----'}</p>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold">Disponível</p>
-                  <p className="font-display font-bold text-lg">{formatCurrency(detailCard.available)}</p>
-                  <p className="text-[10px] opacity-70">de {formatCurrency(detailCard.cardLimit)}</p>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { setDetailCardId(null); setEditing(detailCard.card); open(); }}
+                    className="w-9 h-9 rounded-lg bg-white/15 hover:bg-white/30 flex items-center justify-center transition-colors"
+                    title="Editar cartão"
+                    aria-label="Editar cartão"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDetailCardId(null); requestDelete(detailCard); }}
+                    className="w-9 h-9 rounded-lg bg-white/15 hover:bg-negative flex items-center justify-center transition-colors"
+                    title="Excluir cartão"
+                    aria-label="Excluir cartão"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
+
+              {detailCard.cardLimit > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold">Limite livre</p>
+                      <p className="font-display font-bold text-xl leading-tight">{formatCurrency(detailCard.available)}</p>
+                    </div>
+                    <p className="text-xs opacity-80 text-right">de {formatCurrency(detailCard.cardLimit)}</p>
+                  </div>
+                  <div className="mt-2 h-1.5 bg-black/25 rounded-full overflow-hidden">
+                    <div className="h-full bg-white rounded-full" style={{ width: `${Math.min(detailCard.utilizationPercent, 100)}%` }} />
+                  </div>
+                  <p className="text-[11px] opacity-80 mt-2">
+                    Em uso {formatCurrency(detailCard.usedLimit)}: inclui as parcelas futuras. Cada fatura paga libera o limite dela.
+                  </p>
+                </div>
+              )}
             </div>
 
             <CardBillsView

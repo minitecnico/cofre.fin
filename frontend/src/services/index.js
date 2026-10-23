@@ -273,22 +273,16 @@ export const cardService = {
           card,
           // Limite total
           cardLimit: Number(s.card_limit || card.card_limit || 0),
-          // Compras não pagas (ocupam limite) — agora considera TODAS as faturas não pagas
+          // Limite ocupado: TODAS as compras não pagas, inclusive parcelas futuras
+          usedLimit: Number(s.used_limit || 0),
+          available: Number(s.available ?? card.card_limit ?? 0),
+          utilizationPercent: Number(s.utilization_percent || 0),
+          // Fatura atual (ciclo de hoje): o que falta pagar
           openBill: Number(s.open_bill || 0),
-          // Compras já pagas no ciclo (referência)
-          paidInCycle: Number(s.paid_in_cycle || 0),
-          // Compatibilidade com nomes antigos
-          currentBill: Number(s.open_bill || 0),
-          totalUsed: Number(s.total_used || 0),
-          available: Number(s.available || card.card_limit || 0),
           purchaseCount: Number(s.purchase_count || 0),
           unpaidCount: Number(s.unpaid_count || 0),
           cycleStart: s.cycle_start,
           cycleEnd: s.cycle_end,
-          utilizationPercent: Number(s.utilization_percent || 0),
-          // Fatura "atual" (mais antiga não paga) — usado pelo botão "Pagar fatura"
-          currentBillMonth: s.current_bill_month || null,
-          currentBillAmount: Number(s.current_bill_amount || 0),
         };
       })
     );
