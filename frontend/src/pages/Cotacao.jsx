@@ -506,10 +506,11 @@ export default function Cotacao() {
             })}
           </ul>
 
-          {/* Desktop: tabela; números e reais alinhados à direita, como no Excel.
-              Colunas na largura do texto (autoajuste); texto além de ~26rem quebra linha. */}
+          {/* Desktop: tabela na largura da tela, sem rolar pro lado — as colunas dividem
+              o espaço conforme o texto e o texto longo quebra linha. Reais à direita
+              (como no Excel), números (item, quantidade) centralizados. */}
           <div className="hidden md:block overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
-            <table className="min-w-full w-max text-sm border-collapse">
+            <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
                   <th className="sticky top-0 z-[1] bg-ink-50 w-10 border-b border-ink-200" aria-label="Travado" />
@@ -518,7 +519,10 @@ export default function Cotacao() {
                     const SortIcon = sort?.dir === 'asc' ? ArrowUp : ArrowDown;
                     return (
                       <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 align-bottom text-xs font-semibold text-ink-600 border-b border-l border-ink-200">
-                        <span className={`flex items-end gap-1.5 ${isNumeric(i) ? 'justify-end text-right' : 'text-left'}`}>
+                        {/* flex-wrap: sem espaço, o filtro desce pra baixo do título em vez de alargar a coluna */}
+                        <span className={`flex flex-wrap items-end gap-1.5 ${
+                          kinds[i] === 'money' ? 'justify-end text-right' : kinds[i] === 'number' ? 'justify-center text-center' : 'text-left'
+                        }`}>
                           <span className="line-clamp-2 max-w-[11rem]" title={current.columns[i]}>{current.columns[i]}</span>
                           <button
                             type="button"
@@ -558,19 +562,18 @@ export default function Cotacao() {
                         <td
                           key={i}
                           className={`group/cell relative px-3 py-2.5 text-ink-800 align-top border-l border-ink-100 ${
-                            isNumeric(i) ? 'text-right tabular-nums whitespace-nowrap' : ''
+                            kinds[i] === 'money' ? 'text-right tabular-nums whitespace-nowrap'
+                              : kinds[i] === 'number' ? 'text-center tabular-nums whitespace-nowrap' : ''
                           }`}
                         >
-                          <div className={isNumeric(i) ? '' : 'max-w-[26rem]'}>
-                            {displayCell(values[i], kinds[i])}
-                            {kinds[i] === 'long' && values[i] && (
-                              <CopyButton
-                                hover
-                                done={copied === `${index}-${i}`}
-                                onClick={(e) => copyCell(e, `${index}-${i}`, values[i])}
-                              />
-                            )}
-                          </div>
+                          {displayCell(values[i], kinds[i])}
+                          {kinds[i] === 'long' && values[i] && (
+                            <CopyButton
+                              hover
+                              done={copied === `${index}-${i}`}
+                              onClick={(e) => copyCell(e, `${index}-${i}`, values[i])}
+                            />
+                          )}
                         </td>
                       ))}
                     </tr>
