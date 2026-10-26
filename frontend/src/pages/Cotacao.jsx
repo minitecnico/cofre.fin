@@ -506,9 +506,10 @@ export default function Cotacao() {
             })}
           </ul>
 
-          {/* Desktop: tabela; números e reais alinhados à direita, como no Excel */}
+          {/* Desktop: tabela; números e reais alinhados à direita, como no Excel.
+              Colunas na largura do texto (autoajuste); texto além de ~26rem quebra linha. */}
           <div className="hidden md:block overflow-auto max-h-[70vh] rounded-xl border border-ink-200">
-            <table className="w-full text-sm border-collapse">
+            <table className="min-w-full w-max text-sm border-collapse">
               <thead>
                 <tr>
                   <th className="sticky top-0 z-[1] bg-ink-50 w-10 border-b border-ink-200" aria-label="Travado" />
@@ -516,7 +517,7 @@ export default function Cotacao() {
                     const active = !!filters[i] || sort?.col === i;
                     const SortIcon = sort?.dir === 'asc' ? ArrowUp : ArrowDown;
                     return (
-                      <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 align-bottom text-xs font-semibold text-ink-600 border-b border-ink-200">
+                      <th key={i} className="sticky top-0 z-[1] bg-ink-50 px-3 py-2 align-bottom text-xs font-semibold text-ink-600 border-b border-l border-ink-200">
                         <span className={`flex items-end gap-1.5 ${isNumeric(i) ? 'justify-end text-right' : 'text-left'}`}>
                           <span className="line-clamp-2 max-w-[11rem]" title={current.columns[i]}>{current.columns[i]}</span>
                           <button
@@ -556,19 +557,20 @@ export default function Cotacao() {
                       {cols.map((i) => (
                         <td
                           key={i}
-                          className={`group/cell px-3 py-2.5 text-ink-800 align-top ${
-                            isNumeric(i) ? 'text-right tabular-nums whitespace-nowrap'
-                              : kinds[i] === 'long' ? 'min-w-[16rem]' : 'whitespace-nowrap'
+                          className={`group/cell relative px-3 py-2.5 text-ink-800 align-top border-l border-ink-100 ${
+                            isNumeric(i) ? 'text-right tabular-nums whitespace-nowrap' : ''
                           }`}
                         >
-                          {displayCell(values[i], kinds[i])}
-                          {kinds[i] === 'long' && values[i] && (
-                            <CopyButton
-                              hover
-                              done={copied === `${index}-${i}`}
-                              onClick={(e) => copyCell(e, `${index}-${i}`, values[i])}
-                            />
-                          )}
+                          <div className={isNumeric(i) ? '' : 'max-w-[26rem]'}>
+                            {displayCell(values[i], kinds[i])}
+                            {kinds[i] === 'long' && values[i] && (
+                              <CopyButton
+                                hover
+                                done={copied === `${index}-${i}`}
+                                onClick={(e) => copyCell(e, `${index}-${i}`, values[i])}
+                              />
+                            )}
+                          </div>
                         </td>
                       ))}
                     </tr>
@@ -655,9 +657,9 @@ function CopyButton({ done, onClick, hover = false }) {
       onClick={onClick}
       title="Copiar"
       aria-label={done ? 'Copiado' : 'Copiar nome'}
-      // Na tabela, mesma altura da linha de texto (h-5): invisível, não empurra o nome.
-      className={`ml-2 inline-flex items-center gap-1 align-middle border text-[11px] font-semibold flex-shrink-0 transition-all ${
-        hover ? 'h-5 px-1.5 rounded-md' : 'px-2 min-h-[28px] rounded-lg'
+      // Na tabela, flutua no canto da célula (h-5, altura da linha): não ocupa largura da coluna.
+      className={`inline-flex items-center gap-1 align-middle border text-[11px] font-semibold flex-shrink-0 transition-all ${
+        hover ? 'absolute top-2.5 right-2 h-5 px-1.5 rounded-md' : 'ml-2 px-2 min-h-[28px] rounded-lg'
       } ${
         done ? 'bg-positive border-positive text-white' : 'bg-white border-ink-200 text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft'
       } ${hover && !done ? 'opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100' : ''}`}
