@@ -38,8 +38,9 @@ export function useTrips() {
 }
 
 /**
- * Uma viagem: dados + lugares + gastos, com o que está na fila offline
- * misturado (`pending: true`). Ao abrir e quando a rede volta, envia a fila e
+ * Uma viagem: dados + gastos + lugares (todos os da pessoa — cada um com o
+ * `trip_id` em que foi marcado), com o que está na fila offline misturado
+ * (`pending: true`). Ao abrir e quando a rede volta, envia a fila e
  * recarrega. Lugar/gasto novo salvo com sucesso entra direto na lista local
  * (e no cache) — com sinal fraco o recarregar pode falhar e ele não sumiria.
  */
@@ -110,9 +111,14 @@ export function useTrip(tripId) {
     return queued;
   }
 
-  async function updatePlace(id, fields) {
-    await tripService.updatePlace(id, fields);
-    patchLocal((d) => ({ ...d, places: d.places.map((p) => (p.id === id ? { ...p, ...fields } : p)) }));
+  async function updatePlace(item, fields) {
+    if (item.pending) {
+      travelOutbox.update(item.id, fields);
+      syncQueue();
+      return;
+    }
+    await tripService.updatePlace(item.id, fields);
+    patchLocal((d) => ({ ...d, places: d.places.map((p) => (p.id === item.id ? { ...p, ...fields } : p)) }));
   }
 
   /** @returns {Promise<boolean>} true = ficou na fila (sem internet) */
@@ -124,9 +130,14 @@ export function useTrip(tripId) {
     return queued;
   }
 
-  async function updateExpense(id, fields) {
-    await tripService.updateExpense(id, fields);
-    patchLocal((d) => ({ ...d, expenses: d.expenses.map((e) => (e.id === id ? withCategory({ ...e, ...fields }) : e)) }));
+  async function updateExpense(item, fields) {
+    if (item.pending) {
+      travelOutbox.update(item.id, fields);
+      syncQueue();
+      return;
+    }
+    await tripService.updateExpense(item.id, fields);
+    patchLocal((d) => ({ ...d, expenses: d.expenses.map((e) => (e.id === item.id ? withCategory({ ...e, ...fields }) : e)) }));
   }
 
   /** Item da fila só sai do aparelho; o já enviado é apagado no banco. */

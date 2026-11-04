@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, Trash2 } from 'lucide-react';
 import { parseAmount, toAmountInput } from '../utils/format';
 import { travelErrorMessage } from '../services/travel';
 
 /**
  * Cria/edita a viagem. Só o nome é obrigatório — datas e orçamento ajudam a
  * acompanhar, mas dá pra começar a anotar gastos antes de decidir.
+ * Excluir a viagem fica aqui dentro (`onDelete`), nunca exposto na tela.
  */
-export default function TripForm({ initial = null, onSubmit, onCancel }) {
+export default function TripForm({ initial = null, onSubmit, onCancel, onDelete }) {
   const [form, setForm] = useState({
     name: initial?.name || '',
     destination: initial?.destination || '',
@@ -75,6 +76,11 @@ export default function TripForm({ initial = null, onSubmit, onCancel }) {
           {initial ? 'Salvar' : 'Criar viagem'}
         </button>
       </div>
+      {onDelete && (
+        <button type="button" onClick={onDelete} className="btn-danger w-full">
+          <Trash2 className="w-4 h-4" /> Excluir viagem
+        </button>
+      )}
     </form>
   );
 }

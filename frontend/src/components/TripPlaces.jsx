@@ -17,8 +17,11 @@ import {
  * você está (GPS) ou tocando no mapa. Tudo funciona sem internet: o GPS não
  * precisa de rede, o mapa usa o que foi salvo no aparelho e o lugar novo
  * entra na fila de envio.
+ *
+ * `places` traz todos os lugares da pessoa: os desta viagem e, separados, os
+ * marcados em outras — voltando à mesma cidade, eles estão lá.
  */
-export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove, onConfirm, onNotify }) {
+export default function TripPlaces({ tripId, places, offline, onAdd, onUpdate, onRemove, onConfirm, onNotify }) {
   const { position: me, error: gpsError } = useGeolocation(true);
   const mapRef = useRef(null);
   const [pick, setPick] = useState(null); // ponto tocado no mapa
@@ -37,6 +40,9 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
     const list = places.map((p) => ({ ...p, distance: me ? distanceMeters(me, p) : null }));
     return me ? list.sort((a, b) => a.distance - b.distance) : list;
   }, [places, me]);
+  const tripPlaces = useMemo(() => places.filter((p) => p.trip_id === tripId), [places, tripId]);
+  const mine = sorted.filter((p) => p.trip_id === tripId);
+  const others = sorted.filter((p) => p.trip_id !== tripId);
 
   function focus(p) {
     mapRef.current?.setView([p.lat, p.lng], Math.max(mapRef.current.getZoom(), 17));
@@ -45,7 +51,7 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
 
   async function submit(fields) {
     if (draft.place) {
-      await onUpdate(draft.place.id, fields);
+      await onUpdate(draft.place, fields);
     } else {
       const queued = await onAdd({ ...fields, lat: draft.lat, lng: draft.lng, accuracy_m: draft.accuracy ?? null });
       if (queued) onNotify('Sem internet — o lugar ficou salvo no aparelho e será enviado quando a conexão voltar.');
@@ -55,12 +61,13 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
   }
 
   function askRemove(p) {
+    setDraft(null);
     onConfirm({
-      title: p.pending ? 'Descartar lugar' : 'Apagar lugar',
+      title: p.pending ? 'Descartar lugar' : 'Excluir lugar',
       message: p.pending
         ? `“${p.name}” ainda não foi enviado. Descartar apaga ele deste aparelho.`
-        : `Apagar “${p.name}” do mapa?`,
-      confirmLabel: p.pending ? 'Descartar' : 'Apagar',
+        : `Excluir “${p.name}” do mapa? Ele some também das próximas viagens.`,
+      confirmLabel: p.pending ? 'Descartar' : 'Excluir',
       tone: 'danger',
       onConfirm: async () => {
         await onRemove(p, 'place');
@@ -77,6 +84,7 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
         <div className="relative">
           <TripMap
             places={places}
+            framePlaces={tripPlaces}
             me={me}
             pick={pick}
             onPick={(pt) => { setPick(pt); setSelected(null); }}
@@ -142,50 +150,12 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
           <p className="text-sm text-ink-500">Nenhum lugar marcado. Chegou na pousada? Toque em “Marcar onde estou”.</p>
         </div>
       ) : (
-        <ul className="card-flat overflow-hidden divide-y divide-ink-100">
-          {sorted.map((p) => {
-            const kind = placeKind(p.kind);
-            return (
-              <li key={p.id} className="px-4 py-3 flex items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() => focus(p)}
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                  style={{ background: `${kind.color}22` }}
-                  aria-label="Ver no mapa"
-                >
-                  {kind.emoji}
-                </button>
-                <button type="button" onClick={() => focus(p)} className="min-w-0 flex-1 text-left">
-                  <p className="text-sm font-semibold text-ink-900 truncate">{p.name}</p>
-                  <p className="text-xs text-ink-500">
-                    {kind.label}
-                    {p.distance != null && ` · ${formatDistance(p.distance)} ${compassDirection(me, p)}`}
-                  </p>
-                  {p.notes && <p className="text-xs text-ink-600 mt-0.5 line-clamp-2 whitespace-pre-line">{p.notes}</p>}
-                  {p.pending && (
-                    <p className={`text-[11px] font-semibold mt-0.5 flex items-center gap-1 ${p.sendError ? 'text-negative' : 'text-ink-500'}`}>
-                      <CloudOff className="w-3 h-3" /> {p.sendError ? `Não enviado: ${p.sendError}` : 'Aguardando internet'}
-                    </p>
-                  )}
-                </button>
-                <div className="flex items-center">
-                  <a href={routeUrl(p)} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Rota" title="Rota no Google Maps">
-                    <Navigation className="w-4 h-4" />
-                  </a>
-                  {!p.pending && (
-                    <button type="button" onClick={() => setDraft({ place: p })} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Editar">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button type="button" onClick={() => askRemove(p)} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-red-50 hover:text-negative" aria-label="Apagar">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {mine.length > 0 && <PlaceList title="Nesta viagem" items={mine} me={me} onFocus={focus} onEdit={(p) => setDraft({ place: p })} />}
+          {others.length > 0 && (
+            <PlaceList title="De outras viagens" items={others} me={me} onFocus={focus} onEdit={(p) => setDraft({ place: p })} showTrip />
+          )}
+        </>
       )}
 
       <Modal isOpen={!!draft} onClose={() => setDraft(null)} title={draft?.place ? 'Editar lugar' : 'Marcar lugar'}>
@@ -196,10 +166,60 @@ export default function TripPlaces({ places, offline, onAdd, onUpdate, onRemove,
             fromGps={draft.source === 'gps'}
             onSubmit={submit}
             onCancel={() => setDraft(null)}
+            onDelete={draft.place ? () => askRemove(draft.place) : null}
           />
         )}
       </Modal>
     </div>
+  );
+}
+
+/** Uma seção da lista de lugares. Excluir fica dentro do Editar (com confirmação). */
+function PlaceList({ title, items, me, onFocus, onEdit, showTrip }) {
+  return (
+    <section className="space-y-2">
+      <h3 className="text-[10px] md:text-xs uppercase tracking-widest text-ink-500 font-semibold px-1">{title}</h3>
+      <ul className="card-flat overflow-hidden divide-y divide-ink-100">
+        {items.map((p) => {
+          const kind = placeKind(p.kind);
+          return (
+            <li key={p.id} className="px-4 py-3 flex items-start gap-3">
+              <button
+                type="button"
+                onClick={() => onFocus(p)}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                style={{ background: `${kind.color}22` }}
+                aria-label="Ver no mapa"
+              >
+                {kind.emoji}
+              </button>
+              <button type="button" onClick={() => onFocus(p)} className="min-w-0 flex-1 text-left">
+                <p className="text-sm font-semibold text-ink-900 truncate">{p.name}</p>
+                <p className="text-xs text-ink-500">
+                  {kind.label}
+                  {p.distance != null && ` · ${formatDistance(p.distance)} ${compassDirection(me, p)}`}
+                </p>
+                {showTrip && p.trip?.name && <p className="text-[11px] text-ink-400 truncate">Marcado em: {p.trip.name}</p>}
+                {p.notes && <p className="text-xs text-ink-600 mt-0.5 line-clamp-2 whitespace-pre-line">{p.notes}</p>}
+                {p.pending && (
+                  <p className={`text-[11px] font-semibold mt-0.5 flex items-center gap-1 ${p.sendError ? 'text-negative' : 'text-ink-500'}`}>
+                    <CloudOff className="w-3 h-3" /> {p.sendError ? `Não enviado: ${p.sendError}` : 'Aguardando internet'}
+                  </p>
+                )}
+              </button>
+              <div className="flex items-center">
+                <a href={routeUrl(p)} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Rota" title="Rota no Google Maps">
+                  <Navigation className="w-4 h-4" />
+                </a>
+                <button type="button" onClick={() => onEdit(p)} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Editar">
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -215,7 +235,7 @@ function MapSheet({ onClose, children }) {
   );
 }
 
-function PlaceForm({ initial, point, fromGps, onSubmit, onCancel }) {
+function PlaceForm({ initial, point, fromGps, onSubmit, onCancel, onDelete }) {
   const [name, setName] = useState(initial?.name || '');
   const [kind, setKind] = useState(initial?.kind || 'hospedagem');
   const [notes, setNotes] = useState(initial?.notes || '');
@@ -297,6 +317,11 @@ function PlaceForm({ initial, point, fromGps, onSubmit, onCancel }) {
           Salvar
         </button>
       </div>
+      {onDelete && (
+        <button type="button" onClick={onDelete} className="btn-danger w-full">
+          <Trash2 className="w-4 h-4" /> {initial?.pending ? 'Descartar lugar' : 'Excluir lugar'}
+        </button>
+      )}
     </form>
   );
 }

@@ -63,17 +63,21 @@ export const tripService = {
     return data;
   },
 
-  /** Apaga a viagem e os lugares; os gastos ficam em Despesas, sem o vínculo. */
+  /** Apaga só a viagem: os lugares ficam no mapa e os gastos em Despesas, sem o vínculo. */
   async remove(id) {
     const { error } = await supabase.from('trips').delete().eq('id', id);
     if (error) throw error;
   },
 
-  /** Tudo que a tela da viagem usa — é também o que fica salvo pra abrir offline. */
+  /**
+   * Tudo que a tela da viagem usa — é também o que fica salvo pra abrir offline.
+   * Lugares: TODOS os da pessoa (com o nome da viagem em que foram marcados) —
+   * voltando à mesma cidade, os de viagens anteriores aparecem no mapa.
+   */
   async details(tripId) {
     const [trip, places, expenses, categories, cards] = await withTimeout(Promise.all([
       supabase.from('trips').select('*').eq('id', tripId).single(),
-      supabase.from('trip_places').select('*').eq('trip_id', tripId).order('created_at'),
+      supabase.from('trip_places').select('*, trip:trips(name)').order('created_at'),
       supabase
         .from('transactions')
         .select(EXPENSE_COLUMNS)
@@ -159,6 +163,11 @@ export const travelOutbox = {
 
   discard(id) {
     writeOutbox(readOutbox().filter((i) => i.row.id !== id));
+  },
+
+  /** Corrige um item que ainda não subiu (e tira o erro anotado, pra tentar de novo). */
+  update(id, patch) {
+    writeOutbox(readOutbox().map((i) => (i.row.id === id ? { table: i.table, row: { ...i.row, ...patch } } : i)));
   },
 
   /**

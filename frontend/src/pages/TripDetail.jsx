@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, CloudOff, Receipt, Map as MapIcon, CloudUpload } from 'lucide-react';
+import { ArrowLeft, Pencil, CloudOff, Receipt, Map as MapIcon, CloudUpload } from 'lucide-react';
 import { useTrip } from '../hooks/useTravel';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -29,6 +29,22 @@ export default function TripDetail() {
   const [confirm, setConfirm] = useState(null);
   const [toast, setToast] = useState(null);
   const closeToast = useCallback(() => setToast(null), []);
+
+  const tripPlaceCount = places.filter((p) => p.trip_id === id).length;
+
+  function askRemoveTrip(trip) {
+    setEditingTrip(false);
+    setConfirm({
+      title: 'Excluir viagem',
+      message: `Excluir “${trip.name}”? Os lugares marcados continuam no seu mapa (aparecem nas próximas viagens) e os gastos continuam em Despesas.`,
+      confirmLabel: 'Excluir viagem',
+      tone: 'danger',
+      onConfirm: () => safely(async () => {
+        await removeTrip();
+        navigate('/viagens');
+      }),
+    });
+  }
 
   const total = useMemo(() => expenses.reduce((sum, e) => sum + Number(e.amount), 0), [expenses]);
   const byCategory = useMemo(() => {
@@ -83,28 +99,9 @@ export default function TripDetail() {
             <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight break-words">{trip.name}</h1>
             {subtitle && <p className="text-sm md:text-base text-ink-500 mt-1">{subtitle}</p>}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button type="button" onClick={() => setEditingTrip(true)} className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-600 hover:bg-ink-100" aria-label="Editar viagem">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirm({
-                title: 'Apagar viagem',
-                message: `Apagar “${trip.name}”? Os lugares marcados são apagados. Os gastos continuam em Despesas, só sem a viagem.`,
-                confirmLabel: 'Apagar viagem',
-                tone: 'danger',
-                onConfirm: () => safely(async () => {
-                  await removeTrip();
-                  navigate('/viagens');
-                }),
-              })}
-              className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-600 hover:bg-red-50 hover:text-negative"
-              aria-label="Apagar viagem"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
+          <button type="button" onClick={() => setEditingTrip(true)} className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-600 hover:bg-ink-100 flex-shrink-0" aria-label="Editar viagem">
+            <Pencil className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -149,7 +146,7 @@ export default function TripDetail() {
       <div className="card-flat p-1.5 flex gap-1">
         {[
           { value: 'gastos', label: `Gastos (${expenses.length})`, icon: Receipt },
-          { value: 'mapa', label: `Mapa (${places.length})`, icon: MapIcon },
+          { value: 'mapa', label: `Mapa (${tripPlaceCount})`, icon: MapIcon },
         ].map(({ value, label, icon: Icon }) => (
           <button
             key={value}
@@ -177,6 +174,7 @@ export default function TripDetail() {
         />
       ) : (
         <TripPlaces
+          tripId={id}
           places={places}
           offline={offline}
           onAdd={addPlace}
@@ -193,6 +191,7 @@ export default function TripDetail() {
             initial={trip}
             onSubmit={async (fields) => { await updateTrip(fields); setEditingTrip(false); }}
             onCancel={() => setEditingTrip(false)}
+            onDelete={() => askRemoveTrip(trip)}
           />
         )}
       </Modal>

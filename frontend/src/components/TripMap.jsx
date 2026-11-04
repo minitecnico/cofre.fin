@@ -37,13 +37,14 @@ function placeIcon(place) {
 }
 
 /**
- * Mapa da viagem: lugares marcados, sua posição (bolinha azul + círculo da
- * precisão do GPS) e o ponto escolhido com um toque (`pick`).
+ * Mapa da viagem: lugares marcados (todos os da pessoa), sua posição (bolinha
+ * azul + círculo da precisão do GPS) e o ponto escolhido com um toque (`pick`).
+ * Abre enquadrado em `framePlaces` (os desta viagem).
  *
  * `mapRef` recebe a instância do Leaflet — a página usa pra centralizar e
  * pra saber a área visível ao salvar o mapa offline.
  */
-export default function TripMap({ places, me, pick, onPick, onSelectPlace, mapRef }) {
+export default function TripMap({ places, framePlaces, me, pick, onPick, onSelectPlace, mapRef }) {
   const elRef = useRef(null);
   const map = useRef(null);
   const framed = useRef(false);
@@ -79,17 +80,17 @@ export default function TripMap({ places, me, pick, onPick, onSelectPlace, mapRe
     return () => group.remove();
   }, [places]);
 
-  // Enquadra uma vez: nos lugares marcados ou, sem lugares, na sua posição.
+  // Enquadra uma vez: nos lugares desta viagem ou, sem eles, na sua posição.
   useEffect(() => {
     if (framed.current) return;
-    if (places.length) {
-      map.current.fitBounds(L.latLngBounds(places.map((p) => [p.lat, p.lng])), { padding: [40, 40], maxZoom: 16 });
+    if (framePlaces.length) {
+      map.current.fitBounds(L.latLngBounds(framePlaces.map((p) => [p.lat, p.lng])), { padding: [40, 40], maxZoom: 16 });
       framed.current = true;
     } else if (me) {
       map.current.setView([me.lat, me.lng], 16);
       framed.current = true;
     }
-  }, [places, me]);
+  }, [framePlaces, me]);
 
   useEffect(() => {
     if (!me) return;

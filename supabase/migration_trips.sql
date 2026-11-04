@@ -3,7 +3,9 @@
 -- ============================================================================
 -- trips        → a viagem (nome, destino, datas, orçamento opcional)
 -- trip_places  → pontos marcados no mapa (pousada, restaurante, píer...),
---                com a posição do GPS e a precisão da leitura
+--                com a posição do GPS e a precisão da leitura. O lugar é da
+--                PESSOA, não da viagem: trip_id só diz em qual viagem foi
+--                marcado. Voltando à mesma cidade noutra viagem, ele aparece.
 -- transactions.trip_id → o gasto da viagem é uma DESPESA normal: entra no saldo
 --                no ato (regra mestra), aparece em Despesas e nos gráficos. A
 --                viagem só agrupa — é o "centro de custos".
@@ -15,8 +17,8 @@
 -- O id das linhas pode vir do cliente: o app gera o UUID antes de salvar pra
 -- reenviar sem duplicar o que foi registrado sem internet.
 --
--- Excluir a viagem apaga os lugares; os gastos continuam (aconteceram) e só
--- perdem o vínculo.
+-- Excluir a viagem não apaga nada além dela: os lugares continuam no mapa e
+-- os gastos continuam em Despesas (aconteceram — mexer neles mudaria o saldo).
 --
 -- RLS: cada conta só vê e mexe nas próprias viagens. Idempotente.
 -- ============================================================================
@@ -42,7 +44,7 @@ create policy "trips_dono" on public.trips
 create table if not exists public.trip_places (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
-  trip_id     uuid not null references public.trips(id) on delete cascade,
+  trip_id     uuid references public.trips(id) on delete set null,
   name        text not null check (length(name) between 1 and 120),
   kind        text not null default 'outro'
               check (kind in ('hospedagem','restaurante','praia','passeio','barco','mercado','outro')),
@@ -53,6 +55,13 @@ create table if not exists public.trip_places (
   created_at  timestamptz not null default now()
 );
 create index if not exists idx_trip_places_trip on public.trip_places(trip_id);
+create index if not exists idx_trip_places_user on public.trip_places(user_id);
+
+-- Versão anterior desta migration apagava os lugares junto com a viagem.
+alter table public.trip_places alter column trip_id drop not null;
+alter table public.trip_places drop constraint if exists trip_places_trip_id_fkey;
+alter table public.trip_places add constraint trip_places_trip_id_fkey
+  foreign key (trip_id) references public.trips(id) on delete set null;
 
 alter table public.trip_places enable row level security;
 drop policy if exists "trip_places_dono" on public.trip_places;
@@ -60,7 +69,7 @@ create policy "trip_places_dono" on public.trip_places
   for all using (auth.uid() = user_id)
   with check (
     auth.uid() = user_id
-    and exists (select 1 from public.trips t where t.id = trip_id and t.user_id = auth.uid())
+    and (trip_id is null or exists (select 1 from public.trips t where t.id = trip_id and t.user_id = auth.uid()))
   );
 
 alter table public.transactions

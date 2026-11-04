@@ -17,18 +17,19 @@ export default function TripExpenses({ expenses, categories, cards, onAdd, onUpd
       const queued = await onAdd(fields);
       if (queued) onNotify('Sem internet — o gasto ficou salvo no aparelho e será enviado quando a conexão voltar.');
     } else {
-      await onUpdate(editing.id, fields);
+      await onUpdate(editing, fields);
     }
     setEditing(null);
   }
 
   function askRemove(item) {
+    setEditing(null);
     onConfirm({
-      title: item.pending ? 'Descartar gasto' : 'Apagar gasto',
+      title: item.pending ? 'Descartar gasto' : 'Excluir gasto',
       message: item.pending
         ? `“${item.description}” ainda não foi enviado. Descartar apaga ele deste aparelho.`
-        : `Apagar “${item.description}”? Ele sai também de Despesas e o valor volta para o saldo.`,
-      confirmLabel: item.pending ? 'Descartar' : 'Apagar',
+        : `Excluir “${item.description}”? Ele sai também de Despesas e o valor volta para o saldo.`,
+      confirmLabel: item.pending ? 'Descartar' : 'Excluir',
       tone: 'danger',
       onConfirm: () => onRemove(item, 'expense'),
     });
@@ -67,16 +68,9 @@ export default function TripExpenses({ expenses, categories, cards, onAdd, onUpd
                 )}
               </div>
               <span className="stat-number text-sm text-ink-900 whitespace-nowrap">{formatCurrency(e.amount)}</span>
-              <div className="flex items-center">
-                {!e.pending && (
-                  <button type="button" onClick={() => setEditing(e)} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Editar">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                )}
-                <button type="button" onClick={() => askRemove(e)} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-red-50 hover:text-negative" aria-label="Apagar">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              <button type="button" onClick={() => setEditing(e)} className="w-9 h-9 rounded-lg flex items-center justify-center text-ink-500 hover:bg-ink-100" aria-label="Editar">
+                <Pencil className="w-4 h-4" />
+              </button>
             </li>
           ))}
         </ul>
@@ -90,6 +84,7 @@ export default function TripExpenses({ expenses, categories, cards, onAdd, onUpd
             cards={cards}
             onSubmit={submit}
             onCancel={() => setEditing(null)}
+            onDelete={editing === 'new' ? null : () => askRemove(editing)}
           />
         )}
       </Modal>
@@ -99,9 +94,10 @@ export default function TripExpenses({ expenses, categories, cards, onAdd, onUpd
 
 /**
  * Categorias e cartões vêm do que está salvo da viagem — o form abre sem
- * internet. O cartão é só uma anotação (não entra na fatura).
+ * internet. O cartão é só uma anotação (não entra na fatura). Excluir fica
+ * aqui dentro (com confirmação), nunca exposto na lista.
  */
-function ExpenseForm({ initial, categories, cards, onSubmit, onCancel }) {
+function ExpenseForm({ initial, categories, cards, onSubmit, onCancel, onDelete }) {
   const [form, setForm] = useState({
     description: initial?.description || '',
     amount: toAmountInput(initial?.amount),
@@ -210,6 +206,11 @@ function ExpenseForm({ initial, categories, cards, onSubmit, onCancel }) {
           Salvar
         </button>
       </div>
+      {onDelete && (
+        <button type="button" onClick={onDelete} className="btn-danger w-full">
+          <Trash2 className="w-4 h-4" /> {initial?.pending ? 'Descartar gasto' : 'Excluir gasto'}
+        </button>
+      )}
     </form>
   );
 }
