@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, ArrowDownCircle, ArrowUpCircle, CreditCard,
-  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck, ClipboardList,
+  MoreHorizontal, Repeat, Sparkles, HandCoins, Tag, Settings, X, Car, ShieldCheck, ClipboardList, Plane,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, useReducedMotion } from 'motion/react';
@@ -21,6 +21,7 @@ const secondary = [
   { to: '/cards', label: 'Cartões', icon: CreditCard },
   { to: '/recurring', label: 'Recorrências', icon: Repeat },
   { to: '/goals', label: 'Objetivos', icon: Sparkles },
+  { to: '/viagens', label: 'Viagens', icon: Plane },
   { to: '/categories', label: 'Categorias', icon: Tag },
   { to: '/fipe', label: 'Tabela FIPE', icon: Car },
   { to: '/cotacao', label: 'Cotação', icon: ClipboardList },

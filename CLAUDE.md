@@ -30,6 +30,7 @@ Estas quatro regras valem para qualquer alteração de código. Versão completa
 | Ícones | lucide-react | ^0.383 |
 | Gráficos | Recharts | ^2.12 |
 | Planilhas | xlsx (SheetJS) | ^0.18 |
+| Mapa | Leaflet (sem wrapper React) | ^1.9 |
 | Backend | @supabase/supabase-js | ^2.45 |
 | Deploy | Vercel | — |
 | Banco | Postgres (Supabase) | — |
@@ -67,6 +68,8 @@ frontend/
     │   ├── useDisclosure.js    # open/close/toggle p/ modais
     │   ├── useAlerts.js        # alertas computados de transações/cartões
     │   ├── useAutoRecurring.js # gera recorrências do mês ao mudar de mês
+    │   ├── useTravel.js        # useTrips / useTrip (cache offline + fila de envio)
+    │   ├── useGeolocation.js   # GPS em tempo real (watchPosition)
     │   └── useInstallPrompt.js # PWA install prompt
     ├── services/
     │   ├── supabase.js         # singleton do cliente Supabase
@@ -76,7 +79,9 @@ frontend/
     │   ├── alerts.js           # service puro: gera lista de alertas
     │   ├── quotes.js           # quoteService + parseSpreadsheet (Cotação)
     │   ├── importExport.js     # CSV/XLSX
-    │   └── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
+    │   ├── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
+    │   ├── travel.js           # tripService + travelOutbox (fila offline) + travelCache
+    │   └── mapTiles.js         # tiles do OSM no Cache Storage (mapa offline)
     ├── components/
     │   ├── Layout.jsx              # TopNav + Header + Outlet + BottomNav + FAB
     │   ├── TopNav.jsx              # navegação no topo, desktop md+ (grupos com menu)
@@ -97,6 +102,10 @@ frontend/
     │   ├── WeeklyChallenge.jsx     # desafio 52 semanas
     │   ├── NotesEditor.jsx
     │   ├── InstallBanner.jsx       # banner "instalar app" PWA
+    │   ├── TripMap.jsx             # mapa Leaflet da viagem (camada de tiles offline)
+    │   ├── TripPlaces.jsx          # mapa + marcar onde estou + mapa offline + lugares
+    │   ├── TripExpenses.jsx        # gastos da viagem
+    │   ├── TripForm.jsx / TripBudgetBar.jsx
     │   └── Toast.jsx               # toast top-right (desktop) / top (mobile)
     ├── pages/
     │   ├── Login.jsx
@@ -110,11 +119,14 @@ frontend/
     │   ├── Cotacao.jsx             # /cotacao — planilha do cliente com itens destacados
     │   ├── Admin.jsx               # /admin — central do administrador (só app_admins)
     │   ├── Fipe.jsx                # /fipe — consulta Tabela FIPE (API pública parallelum)
+    │   ├── Trips.jsx               # /viagens — lista de viagens (centro de custos)
+    │   ├── TripDetail.jsx          # /viagens/:id — gastos, orçamento, mapa e lugares
     │   └── Settings.jsx
     ├── constants/
     │   ├── index.js                # constantes do app (prazos, PIX, cartões, PUBLIC_APP_URL)
     │   └── banks.js                # catálogo de bancos BR + findBank() (logos)
     ├── utils/
+    │   ├── geo.js                  # distância, direção (N/NE/L…), link de rota
     │   ├── format.js               # formatCurrency, formatDate, parseAmount, todayISO,
     │   │                           # generateInstallmentDates, splitInstallmentAmount
     │   └── charges.js              # carteira de cobranças (credor e extrato público)
@@ -175,6 +187,12 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 `recurring_transactions` guarda **modelos** (templates). Quando o usuário abre um mês, o hook `useAutoRecurring` chama `recurringService.generateForMonth(month)` que cria as transações faltantes daquele mês — idempotente. Editar o modelo NÃO altera meses já gerados.
 
 `kind` distingue `'recurring'` (aluguel, conta de luz, salário) de `'subscription'` (Netflix, Spotify). Empréstimos NÃO entram aqui — vão por parcelamento.
+
+### Viagens (centro de custos + mapa offline)
+
+`migration_trips.sql`. Gasto da viagem = **despesa normal** em `transactions` com `trip_id` (entra no saldo na hora, aparece em Despesas). `card_label` é só a anotação do cartão usado — **não** é `credit_card_id`, não entra em fatura nem limite (texto e sem FK: uma 2ª FK para `credit_cards` deixaria ambíguo o embed `credit_card:credit_cards`). Lugares em `trip_places` (lat/lng + precisão do GPS).
+
+Feito pra lugar sem sinal: `travelCache` guarda no localStorage a última versão de cada viagem; lugar/gasto criado offline entra no `travelOutbox` e sobe quando a rede volta (UUID gerado no cliente + upsert ignorando duplicado = reenvio não duplica). Tiles do mapa ficam no Cache Storage `cofre-map-tiles` (o SW não apaga). Download em lote limitado ao zoom 16 pela política do tile.openstreetmap.org. As páginas de Viagens ficam fora do lazy de propósito (precisam abrir offline). O `AuthContext` usa o último usuário salvo quando o token venceu e não há rede para renovar.
 
 ---
 

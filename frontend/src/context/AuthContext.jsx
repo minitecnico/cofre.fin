@@ -1,8 +1,32 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { adminService } from '../services/admin';
 
 const AuthContext = createContext(null);
+
+// Último usuário logado neste aparelho — pra o app abrir sem internet.
+const OFFLINE_USER_KEY = 'cofre:offline-user';
+
+function rememberUser(user) {
+  try {
+    if (user) {
+      localStorage.setItem(OFFLINE_USER_KEY, JSON.stringify({ id: user.id, email: user.email, user_metadata: user.user_metadata }));
+    } else {
+      localStorage.removeItem(OFFLINE_USER_KEY);
+    }
+  } catch {
+    // Storage bloqueado: só não abre offline.
+  }
+}
+
+function offlineUser() {
+  try {
+    return JSON.parse(localStorage.getItem(OFFLINE_USER_KEY));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * AuthProvider — envolve o app e expõe estado de autenticação.
@@ -21,14 +45,25 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Carrega sessão atual (se já estiver logado, vem instantâneo do localStorage)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      // Sem internet e com o token vencido (dura 1h), o Supabase não consegue
+      // renovar e devolve null — mas mantém a sessão salva. Abre com o último
+      // usuário (Viagens funciona offline); com a rede de volta o token renova.
+      if (!session && isAuthRetryableFetchError(error)) {
+        setUser(offlineUser());
+      } else {
+        setUser(session?.user ?? null);
+        rememberUser(session?.user);
+      }
       setLoading(false);
     });
 
-    // Escuta mudanças (login/logout em outras abas, refresh, etc)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Escuta mudanças (login/logout em outras abas, refresh, etc). A sessão
+    // inicial fica com o getSession acima, que distingue "sem internet" de "deslogado".
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return;
       setUser(session?.user ?? null);
+      rememberUser(session?.user);
     });
 
     return () => subscription.unsubscribe();

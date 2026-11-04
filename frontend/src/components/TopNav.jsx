@@ -21,6 +21,7 @@ const NAV = [
   },
   { to: '/cobrancas', label: 'Cobranças' },
   { to: '/goals', label: 'Objetivos' },
+  { to: '/viagens', label: 'Viagens' },
   {
     label: 'Mais',
     items: [

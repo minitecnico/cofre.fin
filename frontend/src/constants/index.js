@@ -65,3 +65,19 @@ export const CARD_BRANDS = [
 ];
 
 export const CARD_PRESET_COLORS = ['#820ad1', '#ff7a00', '#1e293b', '#dc2626', '#16a34a', '#0ea5e9', '#f59e0b'];
+
+/**
+ * Tipos de lugar marcados no mapa de Viagens. `value` bate com o check de
+ * trip_places.kind (migration_trips.sql). O emoji vai no próprio marcador do
+ * mapa — não depende de imagem nem de internet.
+ */
+export const PLACE_KINDS = [
+  { value: 'hospedagem', label: 'Pousada / hotel', emoji: '🛏️', color: '#8b5cf6' },
+  { value: 'restaurante', label: 'Restaurante', emoji: '🍽️', color: '#f59e0b' },
+  { value: 'praia', label: 'Praia', emoji: '🏖️', color: '#06b6d4' },
+  { value: 'passeio', label: 'Passeio', emoji: '📸', color: '#ec4899' },
+  { value: 'barco', label: 'Barco / píer', emoji: '⛵', color: '#3b82f6' },
+  { value: 'mercado', label: 'Mercado', emoji: '🛒', color: '#10b981' },
+  { value: 'outro', label: 'Outro', emoji: '📍', color: '#71717a' },
+];
+export const placeKind = (value) => PLACE_KINDS.find((k) => k.value === value) || PLACE_KINDS[PLACE_KINDS.length - 1];

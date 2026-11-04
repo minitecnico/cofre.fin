@@ -15,6 +15,7 @@
     "financial": "^0.2.4",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.383.0",
     "motion": "^12.40.0",
     "qrcode": "^1.5.4",

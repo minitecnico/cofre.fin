@@ -16,6 +16,10 @@ import Goals from './pages/Goals';
 import Fipe from './pages/Fipe';
 import ImportExport from './pages/ImportExport';
 import PixPay from './pages/PixPay';
+// Viagens fica no bundle principal (não lazy): precisa abrir sem internet, e
+// depois de um deploy o chunk lazy novo ainda não estaria no cache do SW.
+import Trips from './pages/Trips';
+import TripDetail from './pages/TripDetail';
 
 // Lazy: Cobranças carrega o jsPDF (pesado) — só baixa quando acessada.
 const Cobrancas = lazy(() => import('./pages/Cobrancas'));
@@ -69,6 +73,8 @@ export default function App() {
               <Route path="fipe" element={<Fipe />} />
               <Route path="settings" element={<Settings />} />
               <Route path="goals" element={<Goals />} />
+              <Route path="viagens" element={<Trips />} />
+              <Route path="viagens/:id" element={<TripDetail />} />
               <Route
                 path="cobrancas"
                 element={

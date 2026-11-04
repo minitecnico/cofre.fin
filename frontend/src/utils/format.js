@@ -59,6 +59,14 @@ export function formatDate(date, pattern = 'short') {
   return d.toLocaleDateString('pt-BR');
 }
 
+/** Período "12 de jan. – 20 de jan." (só ida, só volta ou nenhuma: o que houver). */
+export function formatDateRange(start, end) {
+  if (start && end) return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
+  if (start) return `a partir de ${formatDate(start)}`;
+  if (end) return `até ${formatDate(end)}`;
+  return '';
+}
+
 /**
  * Número → texto pra PREENCHER um input de valor: 16.67 → "16,67".
  * Nunca use String(numero) no input: "16.67" volta pelo parseAmount como 1667
