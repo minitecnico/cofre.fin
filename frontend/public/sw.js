@@ -14,8 +14,6 @@
 const CACHE_VERSION = 'cofre-v2';
 // Arquivo recebido pelo "Compartilhar" do Android (Web Share Target).
 const SHARE_CACHE = 'cofre-share';
-// Mapas offline de Viagens (services/mapTiles.js) — a página grava, nunca apagar aqui.
-const MAP_TILES_CACHE = 'cofre-map-tiles';
 const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icons/icon.svg'];
 
 function isValidAssetResponse(request, response) {
@@ -43,7 +41,7 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => ![CACHE_VERSION, SHARE_CACHE, MAP_TILES_CACHE].includes(k)).map((k) => caches.delete(k)))
+        Promise.all(keys.filter((k) => k !== CACHE_VERSION && k !== SHARE_CACHE).map((k) => caches.delete(k)))
       )
       .then(() => self.clients.claim())
   );

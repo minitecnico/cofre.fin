@@ -3,21 +3,23 @@ import { useAuth } from '../context/AuthContext';
 import { tripService, travelOutbox, travelCache, isNetworkError } from '../services/travel';
 
 /**
- * Lista de viagens. Sem internet mostra a última lista salva no aparelho
- * (`offline` = true).
+ * Lista de viagens (próprias e as que a pessoa participa) + convites
+ * recebidos. Sem internet mostra a última lista salva no aparelho.
  */
 export function useTrips() {
   const { user } = useAuth();
   const key = `${user.id}:trips`;
   const [trips, setTrips] = useState(() => travelCache.read(key));
+  const [invites, setInvites] = useState([]);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
-      const list = await tripService.list();
+      const [list, received] = await Promise.all([tripService.list(), tripService.myInvites()]);
       travelCache.write(key, list);
       setTrips(list);
+      setInvites(received);
       setOffline(false);
       setError(null);
     } catch (err) {
@@ -34,15 +36,19 @@ export function useTrips() {
     return trip;
   }
 
-  return { trips, offline, error, create };
+  async function respondInvite(id, accept) {
+    await tripService.respondInvite(id, accept);
+    await refresh();
+  }
+
+  return { trips, invites, offline, error, create, respondInvite };
 }
 
 /**
- * Uma viagem: dados + gastos + lugares (todos os da pessoa — cada um com o
- * `trip_id` em que foi marcado), com o que está na fila offline misturado
- * (`pending: true`). Ao abrir e quando a rede volta, envia a fila e
- * recarrega. Lugar/gasto novo salvo com sucesso entra direto na lista local
- * (e no cache) — com sinal fraco o recarregar pode falhar e ele não sumiria.
+ * Uma viagem: dados, gastos, viajantes e convites, com o que está na fila
+ * offline misturado (`pending: true`). Ao abrir e quando a rede volta, envia
+ * a fila e recarrega. Gasto novo salvo com sucesso entra direto na lista
+ * local (e no cache) — com sinal fraco o recarregar pode falhar e ele não sumiria.
  */
 export function useTrip(tripId) {
   const { user } = useAuth();
@@ -85,48 +91,17 @@ export function useTrip(tripId) {
     });
   }, [key]);
 
-  const places = useMemo(() => [
-    ...(data?.places || []),
-    ...queue.filter((i) => i.table === 'trip_places').map((i) => ({ ...i.row, pending: true, sendError: i.error })),
-  ], [data, queue]);
-
   const expenses = useMemo(() => [
-    ...queue.filter((i) => i.table === 'transactions').map((i) => ({
-      ...i.row,
-      pending: true,
-      sendError: i.error,
-      category: data?.categories.find((c) => c.id === i.row.category_id) || null,
-    })),
+    ...queue.filter((i) => i.table === 'trip_expenses').map((i) => ({ ...i.row, pending: true, sendError: i.error })),
     ...(data?.expenses || []),
   ], [data, queue]);
-
-  const withCategory = (row) => ({ ...row, category: data?.categories.find((c) => c.id === row.category_id) || null });
-
-  /** @returns {Promise<boolean>} true = ficou na fila (sem internet) */
-  async function addPlace(fields) {
-    const row = { id: crypto.randomUUID(), user_id: user.id, trip_id: tripId, ...fields };
-    const { queued } = await tripService.addPlace(row);
-    if (queued) syncQueue();
-    else patchLocal((d) => ({ ...d, places: [...d.places, row] }));
-    return queued;
-  }
-
-  async function updatePlace(item, fields) {
-    if (item.pending) {
-      travelOutbox.update(item.id, fields);
-      syncQueue();
-      return;
-    }
-    await tripService.updatePlace(item.id, fields);
-    patchLocal((d) => ({ ...d, places: d.places.map((p) => (p.id === item.id ? { ...p, ...fields } : p)) }));
-  }
 
   /** @returns {Promise<boolean>} true = ficou na fila (sem internet) */
   async function addExpense(fields) {
     const row = { id: crypto.randomUUID(), user_id: user.id, trip_id: tripId, ...fields };
     const { queued } = await tripService.addExpense(row);
     if (queued) syncQueue();
-    else patchLocal((d) => ({ ...d, expenses: [withCategory(row), ...d.expenses] }));
+    else patchLocal((d) => ({ ...d, expenses: [row, ...d.expenses] }));
     return queued;
   }
 
@@ -137,23 +112,18 @@ export function useTrip(tripId) {
       return;
     }
     await tripService.updateExpense(item.id, fields);
-    patchLocal((d) => ({ ...d, expenses: d.expenses.map((e) => (e.id === item.id ? withCategory({ ...e, ...fields }) : e)) }));
+    patchLocal((d) => ({ ...d, expenses: d.expenses.map((e) => (e.id === item.id ? { ...e, ...fields } : e)) }));
   }
 
   /** Item da fila só sai do aparelho; o já enviado é apagado no banco. */
-  async function remove(item, kind) {
+  async function removeExpense(item) {
     if (item.pending) {
       travelOutbox.discard(item.id);
       syncQueue();
       return;
     }
-    if (kind === 'place') {
-      await tripService.removePlace(item.id);
-      patchLocal((d) => ({ ...d, places: d.places.filter((p) => p.id !== item.id) }));
-    } else {
-      await tripService.removeExpense(item.id);
-      patchLocal((d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== item.id) }));
-    }
+    await tripService.removeExpense(item.id);
+    patchLocal((d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== item.id) }));
   }
 
   async function updateTrip(fields) {
@@ -166,8 +136,47 @@ export function useTrip(tripId) {
     travelCache.remove(key);
   }
 
+  async function invite(nick) {
+    await tripService.invite(tripId, nick);
+    await refresh();
+  }
+
+  async function cancelInvite(id) {
+    await tripService.cancelInvite(id);
+    patchLocal((d) => ({ ...d, invites: d.invites.filter((i) => i.id !== id) }));
+  }
+
+  /** Dono remove alguém, ou o próprio viajante sai (aí some da lista dele). */
+  async function removeMember(userId) {
+    await tripService.removeMember(tripId, userId);
+    if (userId === user.id) travelCache.remove(key);
+    else patchLocal((d) => ({ ...d, members: d.members.filter((m) => m.user_id !== userId) }));
+  }
+
+  /** @returns {Promise<string>} código do link público */
+  async function share(options) {
+    const code = await tripService.share(tripId, options);
+    patchLocal((d) => ({ ...d, trip: { ...d.trip, share_code: code } }));
+    return code;
+  }
+
+  async function stopSharing() {
+    await tripService.stopSharing(tripId);
+    patchLocal((d) => ({ ...d, trip: { ...d.trip, share_code: null } }));
+  }
+
   return {
-    data, places, expenses, queued: queue.length, offline, error, refresh,
-    addPlace, updatePlace, addExpense, updateExpense, remove, updateTrip, removeTrip,
+    trip: data?.trip || null,
+    // `|| []`: cache salvo pela versão anterior não tinha viajantes/convites.
+    members: data?.members || [],
+    invites: data?.invites || [],
+    cards: data?.cards || [],
+    expenses,
+    queued: expenses.filter((e) => e.pending).length,
+    offline,
+    error,
+    isOwner: data?.trip?.user_id === user.id,
+    addExpense, updateExpense, removeExpense, updateTrip, removeTrip,
+    invite, cancelInvite, removeMember, share, stopSharing,
   };
 }

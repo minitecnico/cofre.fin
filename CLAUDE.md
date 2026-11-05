@@ -30,7 +30,6 @@ Estas quatro regras valem para qualquer alteração de código. Versão completa
 | Ícones | lucide-react | ^0.383 |
 | Gráficos | Recharts | ^2.12 |
 | Planilhas | xlsx (SheetJS) | ^0.18 |
-| Mapa | Leaflet (sem wrapper React) | ^1.9 |
 | Backend | @supabase/supabase-js | ^2.45 |
 | Deploy | Vercel | — |
 | Banco | Postgres (Supabase) | — |
@@ -69,7 +68,6 @@ frontend/
     │   ├── useAlerts.js        # alertas computados de transações/cartões
     │   ├── useAutoRecurring.js # gera recorrências do mês ao mudar de mês
     │   ├── useTravel.js        # useTrips / useTrip (cache offline + fila de envio)
-    │   ├── useGeolocation.js   # GPS em tempo real (watchPosition)
     │   └── useInstallPrompt.js # PWA install prompt
     ├── services/
     │   ├── supabase.js         # singleton do cliente Supabase
@@ -80,8 +78,7 @@ frontend/
     │   ├── quotes.js           # quoteService + parseSpreadsheet (Cotação)
     │   ├── importExport.js     # CSV/XLSX
     │   ├── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
-    │   ├── travel.js           # tripService + travelOutbox (fila offline) + travelCache
-    │   └── mapTiles.js         # tiles do OSM no Cache Storage (mapa offline)
+    │   └── travel.js           # tripService (gastos, viajantes, link) + travelOutbox + travelCache
     ├── components/
     │   ├── Layout.jsx              # TopNav + Header + Outlet + BottomNav + FAB
     │   ├── TopNav.jsx              # navegação no topo, desktop md+ (grupos com menu)
@@ -102,9 +99,9 @@ frontend/
     │   ├── WeeklyChallenge.jsx     # desafio 52 semanas
     │   ├── NotesEditor.jsx
     │   ├── InstallBanner.jsx       # banner "instalar app" PWA
-    │   ├── TripMap.jsx             # mapa Leaflet da viagem (camada de tiles offline)
-    │   ├── TripPlaces.jsx          # mapa + marcar onde estou + mapa offline + lugares
-    │   ├── TripExpenses.jsx        # gastos da viagem
+    │   ├── TripExpenses.jsx        # caderno de gastos da viagem
+    │   ├── TripTravelers.jsx       # viajantes (convite pelo @nick)
+    │   ├── TripShareModal.jsx      # link público dos gastos
     │   ├── TripForm.jsx / TripBudgetBar.jsx
     │   └── Toast.jsx               # toast top-right (desktop) / top (mobile)
     ├── pages/
@@ -120,13 +117,13 @@ frontend/
     │   ├── Admin.jsx               # /admin — central do administrador (só app_admins)
     │   ├── Fipe.jsx                # /fipe — consulta Tabela FIPE (API pública parallelum)
     │   ├── Trips.jsx               # /viagens — lista de viagens (centro de custos)
-    │   ├── TripDetail.jsx          # /viagens/:id — gastos, orçamento, mapa e lugares
+    │   ├── TripDetail.jsx          # /viagens/:id — custo, gastos, viajantes, observações
+    │   ├── TripPublic.jsx          # /viagem/:code — gastos da viagem por link (sem login)
     │   └── Settings.jsx
     ├── constants/
     │   ├── index.js                # constantes do app (prazos, PIX, cartões, PUBLIC_APP_URL)
     │   └── banks.js                # catálogo de bancos BR + findBank() (logos)
     ├── utils/
-    │   ├── geo.js                  # distância, direção (N/NE/L…), link de rota
     │   ├── format.js               # formatCurrency, formatDate, parseAmount, todayISO,
     │   │                           # generateInstallmentDates, splitInstallmentAmount
     │   └── charges.js              # carteira de cobranças (credor e extrato público)
@@ -188,11 +185,15 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 
 `kind` distingue `'recurring'` (aluguel, conta de luz, salário) de `'subscription'` (Netflix, Spotify). Empréstimos NÃO entram aqui — vão por parcelamento.
 
-### Viagens (centro de custos + mapa offline)
+### Viagens (caderno de gastos à parte)
 
-`migration_trips.sql`. Gasto da viagem = **despesa normal** em `transactions` com `trip_id` (entra no saldo na hora, aparece em Despesas). `card_label` é só a anotação do cartão usado — **não** é `credit_card_id`, não entra em fatura nem limite (texto e sem FK: uma 2ª FK para `credit_cards` deixaria ambíguo o embed `credit_card:credit_cards`). Lugares em `trip_places` (lat/lng + precisão do GPS) são **da pessoa, não da viagem**: `trip_id` só registra onde foram marcados, e o mapa de qualquer viagem mostra todos (voltando à mesma cidade, os antigos estão lá). Excluir a viagem não apaga lugares nem gastos (`on delete set null`). Na UI de Viagens não há botão de excluir exposto: excluir fica dentro do Editar, sempre com confirmação.
+`migration_trips.sql` + `migration_trips_shared.sql`. **Exceção deliberada à regra do saldo** (decisão do usuário, 2026-11-05): gastos de viagem ficam em `trip_expenses`, **não** em `transactions` — não entram nas despesas do mês nem no saldo; o propósito é saber quanto a viagem custou. Categorias fixas (`TRIP_CATEGORIES`, check no banco) porque cada viajante tem as próprias categorias. `card_label` é só a anotação do cartão usado.
 
-Feito pra lugar sem sinal: `travelCache` guarda no localStorage a última versão de cada viagem; lugar/gasto criado offline entra no `travelOutbox` e sobe quando a rede volta (UUID gerado no cliente + upsert ignorando duplicado = reenvio não duplica). Tiles do mapa ficam no Cache Storage `cofre-map-tiles` (o SW não apaga). Download em lote limitado ao zoom 16 pela política do tile.openstreetmap.org. As páginas de Viagens ficam fora do lazy de propósito (precisam abrir offline). O `AuthContext` usa o último usuário salvo quando o token venceu e não há rede para renovar.
+Viajantes como nas metas coletivas: `trip_members` (dono entra por trigger) + `trip_invites`; convite pelo @nick (`invite_to_trip`), aceite em Viagens (`respond_trip_invite`, `list_my_trip_invites`). Viajantes leem a viagem (`is_trip_member()`) e anotam gastos; cada um edita/exclui os próprios, o dono todos. Link público só leitura: `trips.share_code` (CSPRNG, null = desligado) → `/viagem/:code` → `resolve_trip_share` (anon; sem observações, orçamento, cartão nem ids). Excluir a viagem apaga os gastos dela. Na UI de Viagens não há botão de excluir exposto: excluir fica dentro do Editar (viajante/convite: modo "Gerenciar"), sempre com confirmação.
+
+Feito pra lugar sem sinal: `travelCache` guarda no localStorage a última versão de cada viagem; gasto anotado offline entra no `travelOutbox` e sobe quando a rede volta (UUID gerado no cliente + upsert ignorando duplicado = reenvio não duplica). As páginas de Viagens (menos a pública) ficam fora do lazy de propósito (precisam abrir offline). O `AuthContext` usa o último usuário salvo quando o token venceu e não há rede para renovar.
+
+O mapa (lugares marcados pelo GPS, mapa offline) saiu da UI em 2026-11-05 pra focar nos gastos — o código está no histórico (commits `dfbca69`, `a9348c3`) e a tabela `trip_places` continua no banco.
 
 ---
 

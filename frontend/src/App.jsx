@@ -30,6 +30,8 @@ const Cotacao = lazy(() => import('./pages/Cotacao'));
 const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
 // Lazy: destino do "Compartilhar" do Android (comprovantes) — fora do bundle do app.
 const ShareReceipt = lazy(() => import('./pages/ShareReceipt'));
+// Lazy: página pública dos gastos de uma viagem compartilhada por link.
+const TripPublic = lazy(() => import('./pages/TripPublic'));
 
 export default function App() {
   return (
@@ -45,6 +47,14 @@ export default function App() {
               element={
                 <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
                   <ShareReceipt />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/viagem/:code"
+              element={
+                <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                  <TripPublic />
                 </Suspense>
               }
             />

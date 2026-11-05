@@ -15,6 +15,7 @@ export default function TripForm({ initial = null, onSubmit, onCancel, onDelete 
     start_date: initial?.start_date || '',
     end_date: initial?.end_date || '',
     budget: toAmountInput(initial?.budget),
+    notes: initial?.notes || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -34,6 +35,7 @@ export default function TripForm({ initial = null, onSubmit, onCancel, onDelete 
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         budget: parseAmount(form.budget) > 0 ? parseAmount(form.budget) : null,
+        notes: form.notes.trim() || null,
       });
     } catch (err) {
       setError(travelErrorMessage(err));
@@ -65,6 +67,16 @@ export default function TripForm({ initial = null, onSubmit, onCancel, onDelete 
       <div>
         <label className="label">Orçamento (opcional)</label>
         <input className="input-field" inputMode="decimal" value={form.budget} onChange={set('budget')} placeholder="R$ 0,00" />
+      </div>
+      <div>
+        <label className="label">Observações (opcional)</label>
+        <textarea
+          className="input-field min-h-[88px] resize-y"
+          value={form.notes}
+          onChange={set('notes')}
+          maxLength={2000}
+          placeholder="Reservas, horário do voo, o que levar…"
+        />
       </div>
 
       {error && <p className="text-sm text-negative font-medium">{error}</p>}

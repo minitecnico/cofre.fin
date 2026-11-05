@@ -59,7 +59,7 @@ export default function NickCard() {
         <AtSign className="w-4 h-4" /> {nick ? 'Alterar seu nick' : 'Crie seu @nick'}
       </p>
       <p className="text-xs text-ink-500">
-        É com ele que outras pessoas convidam você para metas coletivas.
+        É com ele que outras pessoas convidam você para metas coletivas e viagens.
       </p>
       <div className="flex gap-2">
         <input

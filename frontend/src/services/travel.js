@@ -1,18 +1,21 @@
 import { supabase } from './supabase';
-import { currentUserId, categoryService, cardService } from './index';
+import { currentUserId, cardService } from './index';
+import { randomLinkCode } from '../utils/randomCode';
+import { PUBLIC_APP_URL } from '../constants';
 
 /**
- * Viagens — centro de custos + lugares marcados no mapa.
+ * Viagens — caderno de gastos de cada viagem, À PARTE das finanças do mês.
  *
- * O gasto da viagem é uma DESPESA normal em `transactions` com `trip_id`:
- * desconta do saldo na hora e aparece em Despesas. `card_label` só anota o
- * cartão usado — não é credit_card_id, não entra em fatura nem limite.
+ * Os gastos ficam em `trip_expenses`: não entram em Despesas nem no saldo — o
+ * propósito é saber quanto a viagem custou. `card_label` só anota o cartão usado.
+ * Viajantes entram pelo @nick (convite + aceite, como nas metas coletivas) e
+ * anotam gastos também. O dono pode gerar um link público só de leitura.
  *
  * Feito pra lugar sem sinal (ilha, barco):
  *  - travelCache: o que foi carregado por último fica no aparelho pra abrir offline.
- *  - travelOutbox: lugar/gasto registrado sem internet entra numa fila e é
- *    enviado quando a rede volta. O id (UUID) nasce aqui e o envio ignora
- *    duplicado — reenviar a mesma linha nunca cria duas.
+ *  - travelOutbox: gasto anotado sem internet entra numa fila e é enviado
+ *    quando a rede volta. O id (UUID) nasce aqui e o envio ignora duplicado —
+ *    reenviar a mesma linha nunca cria duas.
  */
 
 // Sinal fraco às vezes não falha: fica pendurado. Passou disso, vai pra fila.
@@ -36,10 +39,8 @@ export function travelErrorMessage(err) {
   return isNetworkError(err) ? 'Sem internet — tente de novo quando tiver sinal.' : err.message;
 }
 
-const EXPENSE_COLUMNS = 'id, trip_id, amount, description, date, paid, card_label, category_id, created_at, category:categories(id, name, color)';
-
 export const tripService = {
-  /** Viagens com total gasto e nº de lugares (RPC get_trips). */
+  /** Viagens próprias e as que a pessoa participa, com total gasto (RPC get_trips). */
   async list() {
     const { data, error } = await withTimeout(supabase.rpc('get_trips'));
     if (error) throw error;
@@ -63,65 +64,110 @@ export const tripService = {
     return data;
   },
 
-  /** Apaga só a viagem: os lugares ficam no mapa e os gastos em Despesas, sem o vínculo. */
+  /** Apaga a viagem com os gastos e convites dela. */
   async remove(id) {
     const { error } = await supabase.from('trips').delete().eq('id', id);
     if (error) throw error;
   },
 
-  /**
-   * Tudo que a tela da viagem usa — é também o que fica salvo pra abrir offline.
-   * Lugares: TODOS os da pessoa (com o nome da viagem em que foram marcados) —
-   * voltando à mesma cidade, os de viagens anteriores aparecem no mapa.
-   */
+  /** Tudo que a tela da viagem usa — é também o que fica salvo pra abrir offline. */
   async details(tripId) {
-    const [trip, places, expenses, categories, cards] = await withTimeout(Promise.all([
+    const [trip, expenses, members, invites, cards] = await withTimeout(Promise.all([
       supabase.from('trips').select('*').eq('id', tripId).single(),
-      supabase.from('trip_places').select('*, trip:trips(name)').order('created_at'),
       supabase
-        .from('transactions')
-        .select(EXPENSE_COLUMNS)
+        .from('trip_expenses')
+        .select('*')
         .eq('trip_id', tripId)
-        .eq('type', 'expense')
         .order('date', { ascending: false })
         .order('created_at', { ascending: false }),
-      categoryService.list('expense'),
+      supabase.from('trip_members').select('*').eq('trip_id', tripId).order('joined_at'),
+      // RLS: só o dono vê os convites da viagem; pros outros volta vazio.
+      supabase.from('trip_invites').select('*').eq('trip_id', tripId).eq('status', 'pending').order('created_at'),
       cardService.listSimple(),
     ]));
-    for (const r of [trip, places, expenses]) if (r.error) throw r.error;
-    return { trip: trip.data, places: places.data || [], expenses: expenses.data || [], categories, cards };
+    for (const r of [trip, expenses, members, invites]) if (r.error) throw r.error;
+    return { trip: trip.data, expenses: expenses.data || [], members: members.data || [], invites: invites.data || [], cards };
   },
 
-  // ── Lugares e gastos: salvam ou vão pra fila ───────────────────────────────
+  // ── Gastos: salvam ou vão pra fila ─────────────────────────────────────────
   // `row` já vem completa (id, user_id, trip_id) — sem internet não dá pra
-  // perguntar ao Supabase quem está logado. O RLS confere o user_id no envio.
+  // perguntar ao Supabase quem está logado. O RLS confere no envio.
 
   /** @returns {Promise<{ queued: boolean }>} */
-  addPlace: (row) => saveOrQueue('trip_places', row),
-
-  async updatePlace(id, patch) {
-    const { error } = await supabase.from('trip_places').update(patch).eq('id', id);
-    if (error) throw error;
-  },
-
-  async removePlace(id) {
-    const { error } = await supabase.from('trip_places').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  /** @returns {Promise<{ queued: boolean }>} */
-  addExpense: (row) => saveOrQueue('transactions', { ...row, type: 'expense' }),
+  addExpense: (row) => saveOrQueue('trip_expenses', row),
 
   async updateExpense(id, patch) {
-    const { error } = await supabase.from('transactions').update(patch).eq('id', id);
+    const { error } = await supabase.from('trip_expenses').update(patch).eq('id', id);
     if (error) throw error;
   },
 
   async removeExpense(id) {
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    const { error } = await supabase.from('trip_expenses').delete().eq('id', id);
     if (error) throw error;
   },
+
+  // ── Viajantes ─────────────────────────────────────────────────────────────
+  // Convidar e responder passam por RPC, que valida tudo no banco.
+
+  /** Convida pelo @nick (com ou sem @) — o convite aparece em Viagens da pessoa. */
+  async invite(tripId, nick) {
+    const { error } = await supabase.rpc('invite_to_trip', { p_trip_id: tripId, p_nick: nick });
+    if (error) throw error;
+  },
+
+  async cancelInvite(inviteId) {
+    const { error } = await supabase.from('trip_invites').delete().eq('id', inviteId);
+    if (error) throw error;
+  },
+
+  /** Convites que outras pessoas mandaram para o usuário logado. */
+  async myInvites() {
+    const { data, error } = await withTimeout(supabase.rpc('list_my_trip_invites'));
+    if (error) throw error;
+    return data || [];
+  },
+
+  async respondInvite(inviteId, accept) {
+    const { error } = await supabase.rpc('respond_trip_invite', { p_invite_id: inviteId, p_accept: accept });
+    if (error) throw error;
+  },
+
+  /** Dono remove alguém, ou o próprio viajante sai. */
+  async removeMember(tripId, userId) {
+    const { error } = await supabase.from('trip_members').delete().eq('trip_id', tripId).eq('user_id', userId);
+    if (error) throw error;
+  },
+
+  // ── Link público (só leitura) ─────────────────────────────────────────────
+
+  /**
+   * Gera o link <dominio>/viagem/<code> (o código é a credencial — CSPRNG).
+   * Já existindo, reaproveita; `rotate: true` troca o código e o anterior
+   * para de funcionar.
+   * @returns {Promise<string>} código
+   */
+  async share(tripId, { rotate = false } = {}) {
+    const { data, error } = await supabase.from('trips').select('share_code').eq('id', tripId).single();
+    if (error) throw error;
+    if (data.share_code && !rotate) return data.share_code;
+    const code = randomLinkCode();
+    await this.update(tripId, { share_code: code });
+    return code;
+  },
+
+  async stopSharing(tripId) {
+    await this.update(tripId, { share_code: null });
+  },
+
+  /** Página pública: gastos da viagem pelo código do link, ou null. */
+  async resolveShare(code) {
+    const { data, error } = await supabase.rpc('resolve_trip_share', { p_code: code });
+    if (error) throw error;
+    return data || null;
+  },
 };
+
+export const tripShareUrl = (code) => `${PUBLIC_APP_URL}/viagem/${code}`;
 
 async function send(table, row) {
   const { error } = await supabase.from(table).upsert(row, { onConflict: 'id', ignoreDuplicates: true });

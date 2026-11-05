@@ -59,12 +59,11 @@ export function formatDate(date, pattern = 'short') {
   return d.toLocaleDateString('pt-BR');
 }
 
-/** Período "12 de jan. – 20 de jan." (só ida, só volta ou nenhuma: o que houver). */
+/** Ida e volta com ano: "Ida 12/01/2027 · Volta 20/01/2027" (o que houver). */
 export function formatDateRange(start, end) {
-  if (start && end) return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
-  if (start) return `a partir de ${formatDate(start)}`;
-  if (end) return `até ${formatDate(end)}`;
-  return '';
+  return [start && `Ida ${formatDate(start, 'numeric')}`, end && `Volta ${formatDate(end, 'numeric')}`]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /**
