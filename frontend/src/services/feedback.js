@@ -1,23 +1,9 @@
 import { supabase } from './supabase';
 
 /**
- * Comunicação admin ↔ usuários (migration_admin_comms.sql), do lado de quem
- * usa o app: avisos publicados na central do administrador e o envio de
- * problemas/sugestões em Ajustes.
+ * Problemas e sugestões enviados em Ajustes → aba Mensagens da central do
+ * administrador (migration_admin_comms.sql). A pessoa só envia; ler é do admin.
  */
-export const announcementService = {
-  /** Avisos ativos que a pessoa ainda não fechou (mais novo primeiro). */
-  async mine() {
-    const { data, error } = await supabase.rpc('list_my_announcements');
-    if (error) throw error;
-    return data || [];
-  },
-  async dismiss(id) {
-    const { error } = await supabase.rpc('dismiss_announcement', { p_id: id });
-    if (error) throw error;
-  },
-};
-
 export const feedbackService = {
   /** @param {{ kind: 'problem'|'suggestion', message: string }} fields */
   async send({ kind, message }) {

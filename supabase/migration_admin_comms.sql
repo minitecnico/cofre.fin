@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration: Central do administrador — dados em dia, avisos e mensagens
+-- Migration: Central do administrador — dados em dia e mensagens
 -- ============================================================================
 -- Rodar DEPOIS de migration_admin.sql e migration_trips_shared.sql. Idempotente.
 --
@@ -10,14 +10,8 @@
 --   admin_public_links()      → quem tem link público aberto (só contagens)
 --   admin_feature_usage()     → /viagens/<id> agrupado numa tela só
 --
---   app_announcements         → avisos do admin que aparecem como faixa no app
---   app_announcement_reads    → "já vi" por pessoa (a faixa some pra ela)
---   list_my_announcements()   → avisos ativos que a pessoa ainda não fechou
---   dismiss_announcement(id)  → fecha o aviso pra ela
---   admin_announcements()     → lista do admin com "visto por" e resultado do push
---   admin_announcement_*      → publicar, encerrar/reativar, excluir
---   admin_push_stats()        → quantos aparelhos/pessoas recebem push
---   (o push em si sai de /api/push-broadcast, na Vercel — só o servidor envia)
+--   (avisos/faixa no app + push: a 1ª versão criou e o recurso saiu em
+--    2026-11-05 — a seção "Avisos removidos" apaga o que tiver ficado)
 --
 --   app_feedback              → problemas e sugestões enviados em Ajustes
 --   admin_feedback()          → caixa de entrada do admin
@@ -187,118 +181,18 @@ begin
 end $$;
 
 
--- ── 4. Avisos no app ────────────────────────────────────────────────────────
-create table if not exists public.app_announcements (
-  id           uuid primary key default gen_random_uuid(),
-  title        text not null check (length(title) between 1 and 80),
-  body         text check (length(body) <= 500),
-  url          text check (url is null or url ~ '^/([^/]|$)'), -- só rota do próprio app
-  active       boolean not null default true,
-  created_by   uuid default auth.uid() references auth.users(id) on delete set null,
-  created_at   timestamptz not null default now(),
-  -- Resultado do push (gravado por /api/push-broadcast com a service role).
-  pushed_at    timestamptz,
-  push_sent    int,
-  push_failed  int,
-  push_removed int
-);
-alter table public.app_announcements enable row level security;
--- Sem policies: leitura e escrita só pelas funções abaixo.
-
-create table if not exists public.app_announcement_reads (
-  announcement_id uuid not null references public.app_announcements(id) on delete cascade,
-  user_id         uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  read_at         timestamptz not null default now(),
-  primary key (announcement_id, user_id)
-);
-alter table public.app_announcement_reads enable row level security;
-
-create or replace function public.list_my_announcements()
-returns table (id uuid, title text, body text, url text, created_at timestamptz)
-language sql security definer set search_path = public stable
-as $$
-  select a.id, a.title, a.body, a.url, a.created_at
-    from public.app_announcements a
-   where a.active
-     and auth.uid() is not null
-     and not exists (select 1 from public.app_announcement_reads r
-                      where r.announcement_id = a.id and r.user_id = auth.uid())
-   order by a.created_at desc
-   limit 5;
-$$;
-
-create or replace function public.dismiss_announcement(p_id uuid)
-returns void
-language sql security definer set search_path = public volatile
-as $$
-  insert into public.app_announcement_reads (announcement_id, user_id)
-  select p_id, auth.uid() where auth.uid() is not null
-  on conflict do nothing;
-$$;
-
-create or replace function public.admin_announcements()
-returns table (
-  id uuid, title text, body text, url text, active boolean, created_at timestamptz,
-  reads bigint, pushed_at timestamptz, push_sent int, push_failed int, push_removed int
-)
-language plpgsql security definer set search_path = public stable
-as $$
-#variable_conflict use_column
-begin
-  perform public.assert_admin();
-  return query
-  select a.id, a.title, a.body, a.url, a.active, a.created_at,
-         (select count(*) from public.app_announcement_reads r where r.announcement_id = a.id),
-         a.pushed_at, a.push_sent, a.push_failed, a.push_removed
-    from public.app_announcements a
-   order by a.created_at desc
-   limit 100;
-end $$;
-
-create or replace function public.admin_announcement_create(p_title text, p_body text default null, p_url text default null)
-returns uuid
-language plpgsql security definer set search_path = public volatile
-as $$
-declare
-  v_id uuid;
-begin
-  perform public.assert_admin();
-  insert into public.app_announcements (title, body, url)
-  values (btrim(p_title), nullif(btrim(coalesce(p_body, '')), ''), nullif(btrim(coalesce(p_url, '')), ''))
-  returning id into v_id;
-  return v_id;
-end $$;
-
-create or replace function public.admin_announcement_set_active(p_id uuid, p_active boolean)
-returns void
-language plpgsql security definer set search_path = public volatile
-as $$
-begin
-  perform public.assert_admin();
-  update public.app_announcements set active = p_active where id = p_id;
-end $$;
-
-create or replace function public.admin_announcement_delete(p_id uuid)
-returns void
-language plpgsql security definer set search_path = public volatile
-as $$
-begin
-  perform public.assert_admin();
-  delete from public.app_announcements where id = p_id;
-end $$;
-
-create or replace function public.admin_push_stats()
-returns jsonb
-language plpgsql security definer set search_path = public stable
-as $$
-begin
-  perform public.assert_admin();
-  return jsonb_build_object(
-    'devices', (select count(*) from public.push_subscriptions),
-    'users',   (select count(distinct user_id) from public.push_subscriptions),
-    'new_30d', (select count(*) from public.push_subscriptions where created_at > now() - interval '30 days')
-  );
-end $$;
+-- ── Avisos removidos ────────────────────────────────────────────────────────
+-- A 1ª versão desta migration tinha avisos do admin (faixa no app + push).
+-- O recurso saiu (decisão do usuário, 2026-11-05): apaga funções e tabelas.
+drop function if exists public.list_my_announcements();
+drop function if exists public.dismiss_announcement(uuid);
+drop function if exists public.admin_announcements();
+drop function if exists public.admin_announcement_create(text, text, text);
+drop function if exists public.admin_announcement_set_active(uuid, boolean);
+drop function if exists public.admin_announcement_delete(uuid);
+drop function if exists public.admin_push_stats();
+drop table if exists public.app_announcement_reads;
+drop table if exists public.app_announcements;
 
 
 -- ── 5. Problemas e sugestões ────────────────────────────────────────────────
@@ -358,25 +252,11 @@ end $$;
 revoke execute on function public.admin_overview()                            from public, anon, authenticated;
 revoke execute on function public.admin_users()                               from public, anon, authenticated;
 revoke execute on function public.admin_public_links()                        from public, anon, authenticated;
-revoke execute on function public.list_my_announcements()                     from public, anon, authenticated;
-revoke execute on function public.dismiss_announcement(uuid)                  from public, anon, authenticated;
-revoke execute on function public.admin_announcements()                       from public, anon, authenticated;
-revoke execute on function public.admin_announcement_create(text, text, text) from public, anon, authenticated;
-revoke execute on function public.admin_announcement_set_active(uuid, boolean) from public, anon, authenticated;
-revoke execute on function public.admin_announcement_delete(uuid)             from public, anon, authenticated;
-revoke execute on function public.admin_push_stats()                          from public, anon, authenticated;
 revoke execute on function public.admin_feedback()                            from public, anon, authenticated;
 revoke execute on function public.admin_feedback_set_status(uuid, text)       from public, anon, authenticated;
 
 grant execute on function public.admin_overview()                             to authenticated;
 grant execute on function public.admin_users()                                to authenticated;
 grant execute on function public.admin_public_links()                         to authenticated;
-grant execute on function public.list_my_announcements()                      to authenticated;
-grant execute on function public.dismiss_announcement(uuid)                   to authenticated;
-grant execute on function public.admin_announcements()                        to authenticated;
-grant execute on function public.admin_announcement_create(text, text, text)  to authenticated;
-grant execute on function public.admin_announcement_set_active(uuid, boolean) to authenticated;
-grant execute on function public.admin_announcement_delete(uuid)              to authenticated;
-grant execute on function public.admin_push_stats()                           to authenticated;
 grant execute on function public.admin_feedback()                             to authenticated;
 grant execute on function public.admin_feedback_set_status(uuid, text)        to authenticated;

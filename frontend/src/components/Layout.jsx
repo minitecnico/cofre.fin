@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import TopNav from './TopNav';
@@ -6,10 +6,8 @@ import MobileHeader from './MobileHeader';
 import BottomNav from './BottomNav';
 import FloatingAddButton from './FloatingAddButton';
 import Toast from './Toast';
-import AnnouncementBanner from './AnnouncementBanner';
 import { useAutoRecurring } from '../hooks/useAutoRecurring';
 import { usePaymentNoticeAlerts } from '../hooks/usePaymentNoticeAlerts';
-import { useAnnouncements } from '../hooks/useAnnouncements';
 import { TourProvider } from '../context/TourContext';
 import { trackEvent } from '../services/admin';
 
@@ -18,9 +16,7 @@ export default function Layout() {
   const { created, ack } = useAutoRecurring();
   const [toastMessage, setToastMessage] = useState(null);
   const location = useLocation();
-  const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
-  const { announcement, dismiss } = useAnnouncements();
 
   // Uso do app pro painel do admin: uma linha por tela aberta.
   useEffect(() => {
@@ -49,17 +45,6 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader />
         <main className="flex-1 p-4 sm:p-5 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] w-full mx-auto">
-          {/* Aviso da central do administrador — fora da transição de tela, fica até fechar. */}
-          {announcement && (
-            <div className="mb-4 md:mb-6">
-              <AnnouncementBanner
-                key={announcement.id}
-                announcement={announcement}
-                onDismiss={() => dismiss(announcement.id)}
-                onOpen={() => { dismiss(announcement.id); navigate(announcement.url); }}
-              />
-            </div>
-          )}
           {reduceMotion ? (
             <Outlet key={tick} />
           ) : (

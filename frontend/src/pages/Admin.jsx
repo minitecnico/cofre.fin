@@ -4,17 +4,14 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import {
   ShieldCheck, Activity, Users, BarChart3, ScrollText, Search, X, RefreshCw, Loader2,
   CheckCircle2, Clock, MinusCircle, AlertTriangle, Eye, LogIn, LogOut, UserPlus, KeyRound,
-  Link2, UserCog, Database, HardDrive, Megaphone, MessageSquare, Bell, Bug, Lightbulb, Mail,
-  Smartphone, Trash2, Send,
+  Link2, UserCog, Database, HardDrive, MessageSquare, Bell, Bug, Lightbulb, Mail, Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { adminService } from '../services/admin';
-import ConfirmDialog from '../components/ConfirmDialog';
-import AnnouncementBanner from '../components/AnnouncementBanner';
 
 /**
- * Central do administrador (/admin) — uso do app, usuários, páginas, logs,
- * avisos pros usuários (faixa no app + push) e mensagens recebidas.
+ * Central do administrador (/admin) — uso do app, usuários, páginas, logs e
+ * mensagens recebidas (problemas e sugestões enviados em Ajustes).
  *
  * Só pra quem está em app_admins: o menu some pros outros e, mais importante,
  * as RPCs do banco recusam (migration_admin.sql). O painel recebe contagens e
@@ -31,7 +28,6 @@ const TABS = [
   { id: 'users', label: 'Usuários', icon: Users },
   { id: 'usage', label: 'Uso', icon: BarChart3 },
   { id: 'logs', label: 'Logs', icon: ScrollText },
-  { id: 'announcements', label: 'Avisos', icon: Megaphone },
   { id: 'feedback', label: 'Mensagens', icon: MessageSquare },
 ];
 
@@ -96,7 +92,7 @@ export default function Admin() {
         <p className="text-sm md:text-base text-ink-500 mt-1">Uso do Cofre, usuários e logs. Só contagens e datas — nada dos dados financeiros de ninguém.</p>
       </div>
 
-      <div className="card-flat p-1.5 grid grid-cols-3 sm:grid-cols-6 gap-1">
+      <div className="card-flat p-1.5 grid grid-cols-3 sm:grid-cols-5 gap-1">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -121,7 +117,6 @@ export default function Admin() {
         {tab === 'users' && <UsersTab />}
         {tab === 'usage' && <UsageTab />}
         {tab === 'logs' && <LogsTab />}
-        {tab === 'announcements' && <AnnouncementsTab />}
         {tab === 'feedback' && <FeedbackTab onOpenCount={setOpenFeedback} />}
       </div>
     </div>
@@ -352,229 +347,6 @@ function LogsTab() {
         Mostra os 300 registros mais recentes. Telas e erros ficam guardados por 180 dias; acessos vêm do log de autenticação do Supabase.
       </p>
     </div>
-  );
-}
-
-// Rotas que o botão "Ver agora" do aviso pode abrir.
-const LINK_ROUTES = ['/', '/expenses', '/incomes', '/cards', '/recurring', '/goals', '/cobrancas', '/viagens', '/cotacao', '/fipe', '/import-export', '/settings'];
-
-const loadAnnouncements = () => Promise.all([adminService.announcements(), adminService.pushStats()]);
-
-function AnnouncementsTab() {
-  const { data, error, reload } = useLoad(loadAnnouncements);
-  const [confirm, setConfirm] = useState(null);
-  const [notice, setNotice] = useState(null); // { ok: boolean, text }
-
-  if (error) return <ErrorBox message={error} />;
-  if (!data) return <Skeleton />;
-  const [list, push] = data;
-  const audience = `${fmtInt(push.devices)} ${Number(push.devices) === 1 ? 'aparelho' : 'aparelhos'} (${fmtInt(push.users)} ${Number(push.users) === 1 ? 'pessoa' : 'pessoas'})`;
-
-  async function sendPush(a) {
-    try {
-      setNotice({ ok: true, text: pushSummary(await adminService.pushAnnouncement(a.id)) });
-    } catch (err) {
-      setNotice({ ok: false, text: err.message });
-    }
-    await reload();
-  }
-
-  async function act(action, okText) {
-    try {
-      await action();
-      if (okText) setNotice({ ok: true, text: okText });
-    } catch (err) {
-      setNotice({ ok: false, text: err.message || 'Não foi possível concluir.' });
-    }
-    await reload();
-  }
-
-  return (
-    <div className="space-y-4 md:space-y-6">
-      {notice && (
-        <div className={`px-4 py-3 rounded-xl text-sm flex items-start gap-3 ${notice.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-negative'}`}>
-          <span className="flex-1">{notice.text}</span>
-          <button onClick={() => setNotice(null)} aria-label="Fechar" className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-black/5 flex-shrink-0">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      <div className="grid gap-3 md:gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <Panel title="Novo aviso" subtitle="Aparece no topo do app pra todo mundo, até a pessoa fechar">
-          <AnnouncementForm
-            push={push}
-            audience={audience}
-            onConfirm={setConfirm}
-            onDone={({ pushed, result, pushError }) => {
-              setNotice(pushError
-                ? { ok: false, text: `Aviso publicado, mas a notificação falhou: ${pushError}` }
-                : { ok: true, text: pushed ? `Aviso publicado. ${pushSummary(result)}` : 'Aviso publicado — já aparece no app.' });
-              reload();
-            }}
-          />
-        </Panel>
-
-        <Panel title="Notificações (push)" subtitle="Quem recebe aviso com o app fechado">
-          <Row label="Aparelhos inscritos" value={fmtInt(push.devices)} />
-          <Row label="Pessoas" value={fmtInt(push.users)} />
-          <Row label="Novos em 30 dias" value={fmtInt(push.new_30d)} />
-          <p className="text-[11px] text-ink-500 mt-3 leading-relaxed">
-            Só recebe quem permitiu notificações no aparelho — hoje o app pede isso na tela de Cobranças.
-            Inscrições vencidas (app desinstalado, permissão tirada) são apagadas no envio.
-          </p>
-        </Panel>
-      </div>
-
-      <Panel title="Avisos publicados" subtitle="Encerrar tira o aviso do app de quem ainda não fechou">
-        {list.length === 0 && <p className="py-4 text-sm text-ink-500 text-center">Nenhum aviso ainda.</p>}
-        <ul className="divide-y divide-ink-100">
-          {list.map((a) => (
-            <li key={a.id} className="py-3 first:pt-0 last:pb-0 space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-ink-900 break-words">{a.title}</p>
-                  {a.body && <p className="text-xs text-ink-600 whitespace-pre-line break-words line-clamp-3">{a.body}</p>}
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${a.active ? 'bg-emerald-50 text-positive' : 'bg-ink-100 text-ink-500'}`}>
-                  {a.active ? 'No ar' : 'Encerrado'}
-                </span>
-              </div>
-              <p className="text-[11px] text-ink-500 flex flex-wrap gap-x-3 gap-y-0.5">
-                <span>{new Date(a.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                {a.url && <span>Botão → {ROUTE_NAMES[a.url] || a.url}</span>}
-                <span>{fmtInt(a.reads)} {Number(a.reads) === 1 ? 'pessoa fechou' : 'pessoas fecharam'}</span>
-                <span className="inline-flex items-center gap-1">
-                  <Bell className="w-3 h-3" />
-                  {!a.pushed_at ? 'Sem notificação' : a.push_sent == null ? 'Notificação sem resultado' : pushSummary({ sent: a.push_sent, failed: a.push_failed, removed: a.push_removed })}
-                </span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {a.active && !a.pushed_at && Number(push.devices) > 0 && (
-                  <button
-                    onClick={() => setConfirm({
-                      title: 'Enviar notificação',
-                      message: `Mandar “${a.title}” para ${audience}? Notificação enviada não volta atrás.`,
-                      confirmLabel: 'Enviar',
-                      onConfirm: () => sendPush(a),
-                    })}
-                    className="btn-pill-sm"
-                  >
-                    <Send className="w-3.5 h-3.5" /> Enviar notificação
-                  </button>
-                )}
-                <button
-                  onClick={() => act(() => adminService.setAnnouncementActive(a.id, !a.active))}
-                  className="btn-pill-sm"
-                >
-                  {a.active ? 'Encerrar' : 'Reativar'}
-                </button>
-                <button
-                  onClick={() => setConfirm({
-                    title: 'Excluir aviso',
-                    message: `Excluir “${a.title}”? Some do app de quem ainda não fechou.`,
-                    confirmLabel: 'Excluir',
-                    tone: 'danger',
-                    onConfirm: () => act(() => adminService.deleteAnnouncement(a.id), 'Aviso excluído.'),
-                  })}
-                  className="btn-pill-sm !text-negative"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Excluir
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-
-      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
-    </div>
-  );
-}
-
-function AnnouncementForm({ push, audience, onConfirm, onDone }) {
-  const [form, setForm] = useState({ title: '', body: '', url: '', push: false });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
-  const canPush = Number(push.devices) > 0;
-
-  async function publish() {
-    setSaving(true);
-    setError(null);
-    try {
-      const id = await adminService.createAnnouncement({ title: form.title.trim(), body: form.body.trim(), url: form.url });
-      let result = null;
-      let pushError = null;
-      if (form.push) {
-        try { result = await adminService.pushAnnouncement(id); } catch (err) { pushError = err.message; }
-      }
-      setForm({ title: '', body: '', url: '', push: false });
-      onDone({ pushed: form.push, result, pushError });
-    } catch (err) {
-      setError(err.message || 'Não foi possível publicar.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (!form.title.trim()) return setError('Dê um título ao aviso');
-    if (!form.push) return publish();
-    onConfirm({
-      title: 'Publicar e notificar',
-      message: `O aviso aparece no app pra todo mundo e a notificação vai para ${audience}. Notificação enviada não volta atrás.`,
-      confirmLabel: 'Publicar e notificar',
-      onConfirm: publish,
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="label">Título</label>
-        <input className="input-field" value={form.title} onChange={set('title')} maxLength={80} placeholder="Ex: Novidade: Viagens" required />
-      </div>
-      <div>
-        <label className="label">Mensagem (opcional)</label>
-        <textarea className="input-field min-h-[88px] resize-y" value={form.body} onChange={set('body')} maxLength={500} placeholder="Ex: Anote os gastos da viagem à parte das despesas do mês." />
-      </div>
-      <div>
-        <label className="label">Botão “Ver agora” leva para</label>
-        <select className="input-field" value={form.url} onChange={set('url')}>
-          <option value="">Sem botão</option>
-          {LINK_ROUTES.map((r) => <option key={r} value={r}>{ROUTE_NAMES[r] || r}</option>)}
-        </select>
-      </div>
-
-      <label className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-        !canPush ? 'border-ink-100 bg-ink-50 cursor-not-allowed opacity-70'
-          : form.push ? 'border-ink-900 bg-accent/20 cursor-pointer' : 'border-ink-200 hover:border-ink-400 cursor-pointer'
-      }`}>
-        <input type="checkbox" checked={form.push} onChange={set('push')} disabled={!canPush} className="mt-0.5 w-5 h-5 accent-ink-900" />
-        <span className="min-w-0">
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-ink-900"><Bell className="w-4 h-4" /> Enviar também como notificação</span>
-          <span className="block text-xs text-ink-600 mt-0.5">
-            {canPush ? `Chega em ${audience}, mesmo com o app fechado.` : 'Ninguém ativou as notificações ainda.'}
-          </span>
-        </span>
-      </label>
-
-      {form.title.trim() && (
-        <div>
-          <p className="label">Prévia</p>
-          <AnnouncementBanner announcement={{ title: form.title, body: form.body.trim(), url: form.url }} onDismiss={() => {}} onOpen={() => {}} />
-        </div>
-      )}
-
-      {error && <p className="px-3 py-2 rounded-xl bg-red-50 text-sm text-negative font-medium">{error}</p>}
-
-      <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto disabled:opacity-60">
-        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Megaphone className="w-4 h-4" />}
-        Publicar aviso
-      </button>
-    </form>
   );
 }
 
@@ -938,14 +710,6 @@ function userStatus(lastSeen) {
   if (days <= 7) return { id: 'active', label: 'Ativo', icon: CheckCircle2, tone: 'bg-emerald-50 text-positive' };
   if (days <= 30) return { id: 'low', label: 'Pouco uso', icon: Clock, tone: 'bg-yellow-50 text-yellow-800' };
   return { id: 'inactive', label: 'Inativo', icon: MinusCircle, tone: 'bg-ink-100 text-ink-500' };
-}
-
-/** "Notificação enviada para 5 aparelhos · 1 inscrição vencida removida". */
-function pushSummary({ sent, failed, removed }) {
-  const parts = [`Notificação enviada para ${fmtInt(sent)} ${Number(sent) === 1 ? 'aparelho' : 'aparelhos'}`];
-  if (Number(removed) > 0) parts.push(`${fmtInt(removed)} ${Number(removed) === 1 ? 'inscrição vencida removida' : 'inscrições vencidas removidas'}`);
-  if (Number(failed) > 0) parts.push(`${fmtInt(failed)} ${Number(failed) === 1 ? 'falhou' : 'falharam'}`);
-  return parts.join(' · ');
 }
 
 function share(part, total) {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Bug, Lightbulb, Info, Loader2, Send } from 'lucide-react';
 import Modal from './Modal';
-import { feedbackService } from '../services/comms';
+import { feedbackService } from '../services/feedback';
 
 const MAX = 2000;
 

@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal. **Frontend React puro conversando direto com Supabase** (sem servidor Node intermediário). Auth, RLS, lógica de negócio em RPCs PL/pgSQL. PWA instalável.
 
-Única exceção ao "sem backend": as funções serverless em `frontend/api/` (Vercel), que enviam Web Push — só o servidor pode enviar: `push-notify.js` (aviso de pagamento) e `push-broadcast.js` (aviso da central do administrador; confere o token e se é admin).
+Única exceção ao "sem backend": a função serverless `frontend/api/push-notify.js` (Vercel), que envia o Web Push do aviso de pagamento.
 
 A segurança vem das **policies de Row Level Security** do Postgres — nunca de esconder dados. A `anon key` do Supabase é pública por design.
 
@@ -68,7 +68,6 @@ frontend/
     │   ├── useAlerts.js        # alertas computados de transações/cartões
     │   ├── useAutoRecurring.js # gera recorrências do mês ao mudar de mês
     │   ├── useTravel.js        # useTrips / useTrip (cache offline + fila de envio)
-    │   ├── useAnnouncements.js # aviso do admin no topo do app (faixa)
     │   └── useInstallPrompt.js # PWA install prompt
     ├── services/
     │   ├── supabase.js         # singleton do cliente Supabase
@@ -81,7 +80,7 @@ frontend/
     │   ├── fipe.js             # fipeService (fetch direto, domínio liberado na CSP do vercel.json)
     │   ├── travel.js           # tripService (gastos, viajantes, link) + travelOutbox + travelCache
     │   ├── admin.js            # adminService (central do admin) + trackEvent
-    │   └── comms.js            # announcementService (avisos) + feedbackService (problemas/sugestões)
+    │   └── feedback.js         # feedbackService (problemas/sugestões enviados em Ajustes)
     ├── components/
     │   ├── Layout.jsx              # TopNav + Header + Outlet + BottomNav + FAB
     │   ├── TopNav.jsx              # navegação no topo, desktop md+ (grupos com menu)
@@ -106,7 +105,6 @@ frontend/
     │   ├── TripTravelers.jsx       # viajantes (convite pelo @nick)
     │   ├── TripShareModal.jsx      # link público dos gastos
     │   ├── TripForm.jsx / TripBudgetBar.jsx
-    │   ├── AnnouncementBanner.jsx  # faixa de aviso do admin (Layout + prévia na central)
     │   ├── FeedbackModal.jsx       # "Relatar problema ou sugerir" (Ajustes)
     │   └── Toast.jsx               # toast top-right (desktop) / top (mobile)
     ├── pages/
@@ -120,7 +118,7 @@ frontend/
     │   ├── ImportExport.jsx
     │   ├── Cotacao.jsx             # /cotacao — planilha do cliente com itens destacados
     │   ├── Admin.jsx               # /admin — central do administrador (só app_admins): uso, usuários,
-    │   │                           # logs, avisos (faixa + push) e mensagens recebidas
+    │   │                           # logs e mensagens recebidas
     │   ├── Fipe.jsx                # /fipe — consulta Tabela FIPE (API pública parallelum)
     │   ├── Trips.jsx               # /viagens — lista de viagens (centro de custos)
     │   ├── TripDetail.jsx          # /viagens/:id — custo, gastos, viajantes, observações
@@ -214,7 +212,7 @@ O mapa (lugares marcados pelo GPS, mapa offline) saiu da UI em 2026-11-05 pra fo
 - Tabelas de Goals: `weekly_challenges`, `goals`, `notes` (ver `services/goals.js`).
 - **Metas coletivas** (`migration_goals_shared.sql`): `goals.is_shared` + `pix_*` (conta onde todos depositam), `profiles` (@nick único por usuário, `profileService`), `goal_members`, `goal_invites` (convite pelo @nick dentro do app, aceito pelo convidado), `goal_contributions`. Exceção à policy única: participantes **leem** a meta via `is_goal_member()`; convidar/aceitar/depositar só por RPC (`invite_to_goal`, `respond_goal_invite`, `goal_contribute`; editar/excluir o próprio depósito: `goal_contribution_update`/`_delete` em `migration_goals_contrib_edit.sql`; desde `migration_goals_contrib_personal.sql` metas individuais também gravam depósitos em `goal_contributions`). Realtime ligado nas 4 tabelas.
 - **Comprovantes de PIX das metas** (`migration_goal_receipts.sql`, `goalReceiptService`): tabela `goal_receipts` + bucket privado `goal-receipts` (`{quem enviou}/{goal_id}/{uuid}.{ext}`). Dono e participantes enviam e veem; só o dono da meta exclui (RLS da tabela e do Storage). Excluir: arquivo antes da linha — a policy do Storage libera o dono pela linha.
-- **Central do administrador** (`migration_admin.sql` + `migration_admin_comms.sql`): tudo por RPC `admin_*` que confere `is_admin()`; só contagens e datas, nunca valores. `app_announcements` (faixa no topo do app até a pessoa fechar — `app_announcement_reads`; push opcional por `/api/push-broadcast`, que só chega em quem ativou notificação) e `app_feedback` (problema/sugestão enviado em Ajustes; a pessoa só insere, o admin lê e marca aberta/resolvida; resposta por e-mail).
+- **Central do administrador** (`migration_admin.sql` + `migration_admin_comms.sql`): tudo por RPC `admin_*` que confere `is_admin()`; só contagens e datas, nunca valores. `app_feedback` (problema/sugestão enviado em Ajustes; a pessoa só insere, o admin lê e marca aberta/resolvida; resposta por e-mail). Avisos do admin pros usuários (faixa + push) existiram e saíram em 2026-11-05 a pedido do usuário — não recriar sem pedido.
 
 ### RLS
 
