@@ -1,5 +1,8 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Check, CloudOff, CreditCard, Receipt } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import {
+  Plus, Pencil, Trash2, Loader2, Check, CloudOff, CreditCard, Receipt, Info, ChevronDown,
+  BedDouble, Bus, UtensilsCrossed, Ticket, ShoppingBag, Ellipsis,
+} from 'lucide-react';
 import Modal from './Modal';
 import { formatCurrency, formatDate, parseAmount, toAmountInput, todayISO } from '../utils/format';
 import { travelErrorMessage } from '../services/travel';
@@ -102,6 +105,15 @@ export default function TripExpenses({
   );
 }
 
+const CATEGORY_ICONS = {
+  hospedagem: BedDouble,
+  transporte: Bus,
+  alimentacao: UtensilsCrossed,
+  passeios: Ticket,
+  compras: ShoppingBag,
+  outro: Ellipsis,
+};
+
 /**
  * Abre sem internet (cartões vêm do que está salvo da viagem). O cartão é só
  * uma anotação. Excluir fica aqui dentro (com confirmação), nunca na lista.
@@ -116,18 +128,28 @@ function ExpenseForm({ initial, cards, onSubmit, onCancel, onDelete }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const descRef = useRef(null);
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const pick = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
+  // Descrição cresce com o texto (até o max-h, depois rola): uma linha parece um
+  // input comum; descrições longas de várias linhas não ficam espremidas.
+  useLayoutEffect(() => {
+    const el = descRef.current;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`; // +2 = bordas (border-box)
+  }, [form.description]);
+
   // Cartão renomeado depois do gasto: a anotação antiga continua aparecendo.
   const cardNames = [...new Set([...cards.map((c) => c.name), initial?.card_label].filter(Boolean))];
+  const deleteLabel = initial?.pending ? 'Descartar gasto' : 'Excluir gasto';
 
   async function handleSubmit(e) {
     e.preventDefault();
     const amount = parseAmount(form.amount);
     const description = form.description.trim();
-    if (!description) return setError('Informe uma descrição');
     if (!(amount > 0)) return setError('Informe um valor válido');
+    if (!description) return setError('Informe uma descrição');
     setSaving(true);
     setError(null);
     try {
@@ -139,77 +161,111 @@ function ExpenseForm({ initial, cards, onSubmit, onCancel, onDelete }) {
     }
   }
 
-  const chip = (active) => `px-3 min-h-[36px] rounded-full border text-sm font-semibold transition-colors ${
-    active ? 'border-ink-900 bg-ink-900 text-white' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'
-  }`;
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="label">Valor</label>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-ink-500 pointer-events-none">R$</span>
+          <input
+            className="input-field pl-12 text-xl md:text-2xl font-mono font-semibold"
+            inputMode="decimal"
+            value={form.amount}
+            onChange={set('amount')}
+            placeholder="0,00"
+            autoFocus={!initial}
+            required
+          />
+        </div>
+      </div>
+
       <div>
         <label className="label">Descrição</label>
-        {/* textarea: descrição pode ter várias linhas (um <input> apagaria as quebras ao editar) */}
         <textarea
-          className="input-field min-h-[48px] resize-y"
-          rows={initial?.description?.includes('\n') ? 4 : 1}
+          ref={descRef}
+          rows={1}
+          className="input-field block resize-none max-h-40 overflow-y-auto leading-6"
           value={form.description}
           onChange={set('description')}
           placeholder="Ex: Barco até a ilha"
-          autoFocus={!initial}
           required
         />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="label">Valor</label>
-          <input className="input-field" inputMode="decimal" value={form.amount} onChange={set('amount')} placeholder="R$ 0,00" required />
-        </div>
-        <div>
-          <label className="label">Data</label>
-          <input className="input-field" type="date" value={form.date} onChange={set('date')} required />
-        </div>
       </div>
 
       <div>
         <label className="label">Categoria</label>
-        <div className="flex flex-wrap gap-2">
-          {TRIP_CATEGORIES.map((c) => (
-            <button key={c.value} type="button" onClick={() => pick('category', c.value)} className={`${chip(form.category === c.value)} inline-flex items-center gap-1.5`}>
-              <span className="w-2 h-2 rounded-full" style={{ background: c.color }} />
-              {c.label}
-            </button>
-          ))}
+        <div className="grid grid-cols-3 gap-2">
+          {TRIP_CATEGORIES.map((c) => {
+            const Icon = CATEGORY_ICONS[c.value];
+            const active = form.category === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => pick('category', c.value)}
+                className={`min-h-[60px] px-1 py-2 rounded-xl border flex flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors ${
+                  active ? 'border-ink-900 bg-ink-900 text-white' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-400'
+                }`}
+              >
+                <Icon className="w-5 h-5" style={{ color: c.color }} />
+                <span className="truncate max-w-full">{c.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {cardNames.length > 0 && (
-        <div>
-          <label className="label">Cartão usado (só anotação)</label>
-          <div className="flex flex-wrap gap-2">
-            {['', ...cardNames].map((name) => (
-              <button key={name || 'nenhum'} type="button" onClick={() => pick('card_label', name)} className={chip(form.card_label === name)}>
-                {name || 'Nenhum'}
-              </button>
-            ))}
-          </div>
+      <div className={`grid gap-2 ${cardNames.length > 0 ? 'grid-cols-2' : ''}`}>
+        <div className="min-w-0">
+          <label className="label">Data</label>
+          <input className="input-field min-w-0" type="date" value={form.date} onChange={set('date')} required />
         </div>
-      )}
+        {cardNames.length > 0 && (
+          <div className="min-w-0">
+            <label className="label">Cartão</label>
+            {/* Seta própria (appearance-none): a nativa come espaço e cortava o nome no celular */}
+            <div className="relative">
+              <select className="input-field min-w-0 appearance-none pr-8" value={form.card_label} onChange={set('card_label')}>
+                <option value="">Nenhum</option>
+                {cardNames.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 pointer-events-none" />
+            </div>
+          </div>
+        )}
+      </div>
 
-      <p className="text-[11px] text-ink-500">Fica só na viagem — não entra nas despesas do mês nem no saldo.</p>
+      <p className="flex items-start gap-2 text-xs text-ink-500 leading-relaxed">
+        <Info className="w-4 h-4 flex-shrink-0" />
+        <span>
+          Fica só na viagem: não entra nas despesas do mês nem no saldo.
+          {cardNames.length > 0 && ' O cartão é só anotação.'}
+        </span>
+      </p>
 
-      {error && <p className="text-sm text-negative font-medium">{error}</p>}
+      {error && <p className="px-3 py-2 rounded-xl bg-red-50 text-sm text-negative font-medium">{error}</p>}
 
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="btn-ghost flex-1 min-h-[48px]">Cancelar</button>
-        <button type="submit" disabled={saving} className="btn-primary flex-1 min-h-[48px] disabled:opacity-60">
+      {/* Rodapé fixo no fim do modal: Salvar sempre à vista, mesmo com a descrição
+          longa ou a tela baixa. As margens negativas anulam o padding do Modal. */}
+      <div className="sticky bottom-0 -mx-6 md:-mx-7 -mb-6 md:-mb-7 px-6 md:px-7 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-5 bg-white/95 backdrop-blur-md border-t border-hairline-light flex items-center gap-2">
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={deleteLabel}
+            title={deleteLabel}
+            className="w-12 h-12 flex-shrink-0 rounded-full border border-ink-200 text-negative hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-colors"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
+        <button type="submit" disabled={saving} className="btn-primary flex-1 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
           Salvar
         </button>
       </div>
-      {onDelete && (
-        <button type="button" onClick={onDelete} className="btn-danger w-full">
-          <Trash2 className="w-4 h-4" /> {initial?.pending ? 'Descartar gasto' : 'Excluir gasto'}
-        </button>
-      )}
     </form>
   );
 }

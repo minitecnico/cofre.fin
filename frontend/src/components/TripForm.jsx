@@ -79,20 +79,27 @@ export default function TripForm({ initial = null, onSubmit, onCancel, onDelete 
         />
       </div>
 
-      {error && <p className="text-sm text-negative font-medium">{error}</p>}
+      {error && <p className="px-3 py-2 rounded-xl bg-red-50 text-sm text-negative font-medium">{error}</p>}
 
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="btn-ghost flex-1 min-h-[48px]">Cancelar</button>
-        <button type="submit" disabled={saving} className="btn-primary flex-1 min-h-[48px] disabled:opacity-60">
+      {/* Rodapé fixo no fim do modal (mesmo do gasto): Salvar sempre à vista. */}
+      <div className="sticky bottom-0 -mx-6 md:-mx-7 -mb-6 md:-mb-7 px-6 md:px-7 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-5 bg-white/95 backdrop-blur-md border-t border-hairline-light flex items-center gap-2">
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Excluir viagem"
+            title="Excluir viagem"
+            className="w-12 h-12 flex-shrink-0 rounded-full border border-ink-200 text-negative hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-colors"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
+        <button type="submit" disabled={saving} className="btn-primary flex-1 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
           {initial ? 'Salvar' : 'Criar viagem'}
         </button>
       </div>
-      {onDelete && (
-        <button type="button" onClick={onDelete} className="btn-danger w-full">
-          <Trash2 className="w-4 h-4" /> Excluir viagem
-        </button>
-      )}
     </form>
   );
 }
