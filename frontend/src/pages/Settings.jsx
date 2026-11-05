@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon, LogOut, Mail, User as UserIcon,
-  FileSpreadsheet, Key, CheckCircle2, X, Compass,
+  FileSpreadsheet, Key, CheckCircle2, X, Compass, MessageSquare,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTour } from '../context/TourContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import GoogleIcon from '../components/GoogleIcon';
+import FeedbackModal from '../components/FeedbackModal';
 
 /**
  * Página de Ajustes — versão minimalista.
@@ -17,6 +18,7 @@ export default function Settings() {
   const { user, logout, listIdentities, linkGoogle, unlinkIdentity } = useAuth();
   const { start: startTour } = useTour();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [toast, setToast] = useState(null); // { text } | null
   const [identities, setIdentities] = useState(null); // null = carregando
   const [linkBusy, setLinkBusy] = useState(false);
@@ -232,6 +234,29 @@ export default function Settings() {
         </div>
       </button>
 
+      {/* Problema ou sugestão → aba Mensagens da central do administrador */}
+      <button
+        onClick={() => setFeedbackOpen(true)}
+        className="w-full card-flat p-5 md:p-6 text-left transition-all duration-200 hover:border-ink-900/40 group"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-ink-100 group-hover:bg-ink-900 group-hover:text-white flex items-center justify-center text-ink-700 transition-all duration-200 flex-shrink-0">
+              <MessageSquare className="w-5 h-5" strokeWidth={2.25} />
+            </div>
+            <div className="min-w-0">
+              <p className="font-display font-bold text-base md:text-lg text-ink-900">
+                Relatar problema ou sugerir
+              </p>
+              <p className="text-xs md:text-sm text-ink-500 truncate">
+                Algo deu errado ou tem uma ideia? Conte pra gente
+              </p>
+            </div>
+          </div>
+          <span className="text-ink-400 text-xl flex-shrink-0">→</span>
+        </div>
+      </button>
+
       {/* Sair */}
       <button
         onClick={logout}
@@ -265,6 +290,12 @@ export default function Settings() {
         isOpen={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}
         onSuccess={handlePasswordChangeSuccess}
+      />
+
+      <FeedbackModal
+        isOpen={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        onSent={() => { setFeedbackOpen(false); setToast({ text: 'Mensagem enviada. Obrigado!' }); }}
       />
 
       {/* Toast flutuante de sucesso */}
