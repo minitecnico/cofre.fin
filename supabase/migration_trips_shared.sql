@@ -34,7 +34,7 @@ create table if not exists public.trip_expenses (
   id          uuid primary key default gen_random_uuid(),
   trip_id     uuid not null references public.trips(id) on delete cascade,
   user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade, -- quem anotou
-  description text not null check (length(description) between 1 and 200),
+  description text not null check (length(description) > 0), -- sem teto: vem de transactions, que não tem
   amount      numeric(12, 2) not null check (amount > 0),
   date        date not null default current_date,
   category    text not null default 'outro'
@@ -52,7 +52,8 @@ begin
     where table_schema = 'public' and table_name = 'transactions' and column_name = 'trip_id'
   ) then
     insert into public.trip_expenses (id, trip_id, user_id, description, amount, date, category, card_label, created_at)
-    select x.id, x.trip_id, x.user_id, x.description, x.amount, x.date, 'outro', x.card_label, x.created_at
+    select x.id, x.trip_id, x.user_id, coalesce(nullif(x.description, ''), 'Gasto'), x.amount, x.date, 'outro',
+           x.card_label, coalesce(x.created_at, now())
     from public.transactions x
     where x.trip_id is not null and x.type = 'expense'
     on conflict (id) do nothing;

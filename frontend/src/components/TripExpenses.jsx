@@ -147,7 +147,16 @@ function ExpenseForm({ initial, cards, onSubmit, onCancel, onDelete }) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <label className="label">Descrição</label>
-        <input className="input-field" value={form.description} onChange={set('description')} placeholder="Ex: Barco até a ilha" autoFocus={!initial} required />
+        {/* textarea: descrição pode ter várias linhas (um <input> apagaria as quebras ao editar) */}
+        <textarea
+          className="input-field min-h-[48px] resize-y"
+          rows={initial?.description?.includes('\n') ? 4 : 1}
+          value={form.description}
+          onChange={set('description')}
+          placeholder="Ex: Barco até a ilha"
+          autoFocus={!initial}
+          required
+        />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
