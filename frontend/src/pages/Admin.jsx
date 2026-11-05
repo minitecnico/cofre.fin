@@ -233,7 +233,6 @@ const COUNT_GROUPS = [
 const LINK_KINDS = [
   ['statements', 'extrato de cobrança', 'extratos de cobrança'],
   ['trips', 'viagem', 'viagens'],
-  ['reports', 'relatório', 'relatórios'],
   ['pix', 'link PIX', 'links PIX'],
 ];
 

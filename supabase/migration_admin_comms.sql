@@ -83,7 +83,6 @@ begin
       'statements', (select count(*) from public.debtors
                       where share_code is not null and (share_expires_at is null or share_expires_at > now())),
       'trips',      (select count(*) from public.trips where share_code is not null),
-      'reports',    (select count(*) from public.report_links),
       'pix',        (select count(*) from public.pix_links)
     ),
     'db_bytes', pg_database_size(current_database()),
@@ -139,27 +138,28 @@ end $$;
 
 -- ── 1c. Links públicos abertos, por dono ────────────────────────────────────
 -- Só contagens: nada de nome do devedor, da viagem ou valores.
-create or replace function public.admin_public_links()
-returns table (email text, statements bigint, trips bigint, reports bigint, pix bigint)
+-- (Sem report_links: o encurtador /r/:code saiu do app e a tabela pode nem existir.)
+drop function if exists public.admin_public_links(); -- 1ª versão devolvia também `reports`
+create function public.admin_public_links()
+returns table (email text, statements bigint, trips bigint, pix bigint)
 language plpgsql security definer set search_path = public, auth stable
 as $$
 #variable_conflict use_column
 begin
   perform public.assert_admin();
   return query
-  select x.email, x.statements, x.trips, x.reports, x.pix
+  select x.email, x.statements, x.trips, x.pix
     from (
       select u.email::text as email,
              (select count(*) from public.debtors d
                where d.user_id = u.id and d.share_code is not null
                  and (d.share_expires_at is null or d.share_expires_at > now())) as statements,
              (select count(*) from public.trips t where t.user_id = u.id and t.share_code is not null) as trips,
-             (select count(*) from public.report_links r where r.user_id = u.id) as reports,
              (select count(*) from public.pix_links p where p.user_id = u.id) as pix
         from auth.users u
     ) x
-   where x.statements + x.trips + x.reports + x.pix > 0
-   order by x.statements + x.trips + x.reports + x.pix desc, x.email;
+   where x.statements + x.trips + x.pix > 0
+   order by x.statements + x.trips + x.pix desc, x.email;
 end $$;
 
 
