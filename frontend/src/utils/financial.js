@@ -1,4 +1,4 @@
-import { fv, pmt as pmtFn, nper } from 'financial';
+import { fv, pmt as pmtFn, nper, rate as rateFn } from 'financial';
 
 /**
  * Utilitários financeiros pro Cofre, usando a lib `financial`.
@@ -85,6 +85,26 @@ export function calcularParcelaEmprestimo(valorFinanciado, meses, taxaMensal = 0
   const p = pmtFn(taxaMensal, meses, valorFinanciado, 0);
   if (!Number.isFinite(p)) return 0;
   return Math.abs(p);
+}
+
+/**
+ * Taxa mensal embutida num empréstimo de parcela fixa (inverso da Tabela Price).
+ * Usado quando a pessoa sabe a parcela e quanto recebeu, mas não a taxa.
+ *
+ * @param {number} valorRecebido - PV: quanto entrou no bolso (ex: 25000).
+ * @param {number} meses - Número de parcelas (ex: 45).
+ * @param {number} parcela - Valor fixo de cada parcela (ex: 800).
+ * @returns {number|null} Taxa mensal em decimal (0.0123 = 1,23% a.m.); 0 se a
+ *          soma das parcelas não passa do recebido; null se não der pra calcular.
+ *
+ * @example
+ * calcularTaxaEmprestimo(10000, 60, 222.44); // ~0.01 (1% a.m.)
+ */
+export function calcularTaxaEmprestimo(valorRecebido, meses, parcela) {
+  if (!(valorRecebido > 0) || !(meses > 0) || !(parcela > 0)) return null;
+  if (parcela * meses <= valorRecebido) return 0;
+  const r = rateFn(meses, -parcela, valorRecebido, 0);
+  return Number.isFinite(r) && r > 0 ? r : null;
 }
 
 /**

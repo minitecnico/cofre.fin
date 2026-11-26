@@ -3,7 +3,7 @@ import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCirc
 import { Link, useSearchParams } from 'react-router-dom';
 import { recurringService, categoryService, cardService, loanService, transactionService } from '../services';
 import { formatCurrency, parseAmount } from '../utils/format';
-import { calcularParcelaEmprestimo } from '../utils/financial';
+import { calcularParcelaEmprestimo, calcularTaxaEmprestimo } from '../utils/financial';
 import Modal from '../components/Modal';
 import LoanDetail from '../components/LoanDetail';
 import Switch from '../components/Switch';
@@ -1357,9 +1357,9 @@ function LoanInfoPanel({ onCreate, compact = false }) {
 
         <div className="mt-6 px-4 py-3 rounded-2xl bg-surface-soft border border-hairline-light">
           <p className="text-xs md:text-sm text-ink-700 leading-relaxed">
-            <strong className="text-ink-900">Para empréstimos com juros:</strong>{' '}
-            calcule o valor TOTAL que vai pagar (parcela × meses) e use isso como valor da despesa.
-            Ex.: 60 parcelas de R$ 800 = empréstimo de R$ 48.000.
+            <strong className="text-ink-900">Parcela fixa?</strong>{' '}
+            Escolha "Parcela fixa" e informe só o valor de cada mês e o número de parcelas.
+            Ex.: 45 parcelas de R$ 800. Se informar quanto recebeu, o Cofre calcula os juros e a taxa embutida.
           </p>
         </div>
       </div>
@@ -1390,6 +1390,13 @@ function formatLoanTerm(months) {
 
 function LoanForm({ onSaved, onCancel }) {
   const [description, setDescription] = useState('');
+  // 'fixed' = já sei o valor da parcela (contrato com parcela fixa);
+  // 'calc'  = calcula a parcela pelo valor do bem + taxa (Tabela Price).
+  const [mode, setMode] = useState('fixed');
+  const isFixed = mode === 'fixed';
+  const [parcelaAmount, setParcelaAmount] = useState('');
+  // Quanto entrou no bolso (opcional) — com ele dá pra achar a taxa embutida
+  const [recebidoAmount, setRecebidoAmount] = useState('');
   // Valor cheio do bem ANTES de qualquer desconto (preço de tabela)
   const [bemAmount, setBemAmount] = useState('');
   // Desconto negociado (ex: à vista) — opcional, default 0
@@ -1422,20 +1429,27 @@ function LoanForm({ onSaved, onCancel }) {
     }
   }, [categories, categoryId]);
 
-  // Preview inteligente — atualiza em tempo real conforme o usuário digita
-  const bemNum = parseAmount(bemAmount);
-  const descontoNum = parseAmount(descontoAmount);
+  // Preview inteligente — atualiza em tempo real conforme o usuário digita.
+  // Parcela fixa: o "bem" é o valor recebido (opcional) e não há desconto.
+  const bemNum = isFixed ? parseAmount(recebidoAmount) : parseAmount(bemAmount);
+  const descontoNum = isFixed ? 0 : parseAmount(descontoAmount);
   // Valor de fato financiado = bem - desconto (não pode ficar negativo)
   const financiadoNum = Math.max(0, bemNum - descontoNum);
-  const taxaDecimal = (parseAmount(taxaMensal) || 0) / 100; // 1,5% → 0.015
+  const parcelaFixaNum = parseAmount(parcelaAmount);
+  // Taxa: digitada (modo calc) ou embutida na parcela fixa (null = sem como saber)
+  const impliedRate = isFixed ? calcularTaxaEmprestimo(financiadoNum, installmentCount, parcelaFixaNum) : null;
+  const taxaDecimal = isFixed ? impliedRate || 0 : (parseAmount(taxaMensal) || 0) / 100; // 1,5% → 0.015
   const installmentValue = useMemo(
-    () => calcularParcelaEmprestimo(financiadoNum, installmentCount, taxaDecimal),
-    [financiadoNum, installmentCount, taxaDecimal]
+    () => (isFixed ? parcelaFixaNum : calcularParcelaEmprestimo(financiadoNum, installmentCount, taxaDecimal)),
+    [isFixed, parcelaFixaNum, financiadoNum, installmentCount, taxaDecimal]
   );
-  // Preço real pago = parcela × meses (com juros vira > valor financiado)
-  const precoRealPago = installmentValue * installmentCount;
-  // Total de juros = preço real pago - valor financiado
-  const totalJuros = Math.max(0, precoRealPago - financiadoNum);
+  // Preço real pago = parcela × meses (com juros vira > valor financiado).
+  // Parcela fixa: soma em centavos pra todas as parcelas saírem iguais.
+  const precoRealPago = isFixed
+    ? (Math.round(parcelaFixaNum * 100) * installmentCount) / 100
+    : installmentValue * installmentCount;
+  // Total de juros = preço real pago - valor financiado (sem financiado, não dá pra saber)
+  const totalJuros = financiadoNum > 0 ? Math.max(0, precoRealPago - financiadoNum) : 0;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -1443,9 +1457,13 @@ function LoanForm({ onSaved, onCancel }) {
     setSubmitting(true);
     try {
       if (!description.trim()) throw new Error('Informe uma descrição (ex: Financiamento do carro)');
-      if (!bemNum || bemNum <= 0) throw new Error('Informe o valor do bem');
-      if (descontoNum > bemNum) throw new Error('Desconto não pode ser maior que o valor do bem');
-      if (financiadoNum <= 0) throw new Error('O valor financiado precisa ser maior que zero');
+      if (isFixed) {
+        if (!parcelaFixaNum || parcelaFixaNum <= 0) throw new Error('Informe o valor da parcela');
+      } else {
+        if (!bemNum || bemNum <= 0) throw new Error('Informe o valor do bem');
+        if (descontoNum > bemNum) throw new Error('Desconto não pode ser maior que o valor do bem');
+        if (financiadoNum <= 0) throw new Error('O valor financiado precisa ser maior que zero');
+      }
       if (installmentCount < 2) throw new Error('Informe o total de parcelas (mínimo 2)');
       if (!categoryId) throw new Error('Selecione uma categoria');
       if (paymentMethod === 'card' && !creditCardId) throw new Error('Selecione um cartão');
@@ -1459,7 +1477,8 @@ function LoanForm({ onSaved, onCancel }) {
       // formatCurrency pra ficar legível.
       const strip = (str) => str.replace(/R\$\s*/, '');
       const taxaStr = (taxaDecimal * 100).toFixed(2).replace('.', ',');
-      const loanNote =
+      // Parcela fixa sem o valor recebido: não há financiado/juros pra anotar.
+      const loanNote = financiadoNum <= 0 ? null :
         `[Financiamento] Bem R$ ${strip(formatCurrency(bemNum))}` +
         ` · Desconto R$ ${strip(formatCurrency(descontoNum))}` +
         ` · Financiado R$ ${strip(formatCurrency(financiadoNum))}` +
@@ -1481,7 +1500,7 @@ function LoanForm({ onSaved, onCancel }) {
       // loan_meta marca o grupo como empréstimo (aparece na aba e no quadro de Despesas)
       await loanService.saveMeta(result.groupId, {
         notes: null,
-        monthly_rate: taxaDecimal > 0 ? Number((taxaDecimal * 100).toFixed(4)) : null,
+        monthly_rate: taxaDecimal > 0 ? Number((taxaDecimal * 100).toFixed(4)) : isFixed && impliedRate === 0 ? 0 : null,
       });
       if (inBudget) await loanService.setInBudget(result.groupId, true);
 
@@ -1514,6 +1533,69 @@ function LoanForm({ onSaved, onCancel }) {
         />
       </div>
 
+      {/* Como o empréstimo foi contratado */}
+      <div>
+        <label className="label">Como é o empréstimo?</label>
+        <div className="grid grid-cols-2 gap-1 p-1 bg-surface-soft rounded-xl">
+          {[['fixed', 'Parcela fixa'], ['calc', 'Calcular pela taxa']].map(([id, text]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMode(id)}
+              className={`px-3 min-h-[44px] rounded-lg text-sm font-semibold transition-colors ${
+                mode === id ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-900'
+              }`}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          {isFixed
+            ? 'Você já sabe quanto paga por mês (está no contrato ou no boleto).'
+            : 'Informe o valor do bem e a taxa — a parcela é calculada pela Tabela Price.'}
+        </p>
+      </div>
+
+      {isFixed && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Valor da parcela</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-ink-500 font-mono pointer-events-none">R$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={parcelaAmount}
+                onChange={(e) => setParcelaAmount(e.target.value)}
+                placeholder="800,00"
+                className="input-field pl-11 font-mono"
+              />
+            </div>
+            <p className="text-[11px] text-ink-500 mt-1.5">Valor fixo de cada mês.</p>
+          </div>
+          <div>
+            <label className="label flex items-center gap-1.5">
+              Valor recebido
+              <span className="text-[10px] font-normal text-ink-400 normal-case tracking-normal">(opcional)</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-ink-500 font-mono pointer-events-none">R$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={recebidoAmount}
+                onChange={(e) => setRecebidoAmount(e.target.value)}
+                placeholder="25.000,00"
+                className="input-field pl-11 font-mono"
+              />
+            </div>
+            <p className="text-[11px] text-ink-500 mt-1.5">Quanto entrou na conta — calcula a taxa e os juros.</p>
+          </div>
+        </div>
+      )}
+
+      {!isFixed && (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label">Total do bem</label>
@@ -1552,6 +1634,7 @@ function LoanForm({ onSaved, onCancel }) {
           <p className="text-[11px] text-ink-500 mt-1.5">Negociado com o vendedor / instituição.</p>
         </div>
       </div>
+      )}
 
       <div>
         <label className="label">Total de parcelas</label>
@@ -1591,6 +1674,7 @@ function LoanForm({ onSaved, onCancel }) {
 
       {/* Taxa de juros — opcional. Quando preenchida, recalcula tudo automaticamente
           (parcela via Tabela Price + total a pagar + juros totais). */}
+      {!isFixed && (
       <div>
         <label className="label flex items-center gap-1.5">
           Taxa de juros mensal
@@ -1615,6 +1699,7 @@ function LoanForm({ onSaved, onCancel }) {
           ~0,7–1% a.m.
         </p>
       </div>
+      )}
 
       {/* Card hero: parcela mensal — dark canvas com accent */}
       {installmentValue > 0 && (
@@ -1638,8 +1723,36 @@ function LoanForm({ onSaved, onCancel }) {
         </div>
       )}
 
+      {/* Parcela fixa: total a pagar e, com o valor recebido, juros e taxa embutida */}
+      {isFixed && installmentValue > 0 && installmentCount >= 2 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="feature-card p-4">
+            <p className="text-[10px] uppercase tracking-widest font-bold text-ink-500">Total a pagar</p>
+            <p className="font-display text-lg md:text-xl font-bold tabular-nums mt-1 break-all">{formatCurrency(precoRealPago)}</p>
+            <p className="text-[10px] text-ink-400 mt-0.5">{installmentCount} × {formatCurrency(installmentValue)}</p>
+          </div>
+          <div className={`feature-card p-4 ${totalJuros > 0 ? 'border-negative/40 bg-red-50' : ''}`}>
+            <p className="text-[10px] uppercase tracking-widest font-bold text-ink-500">Juros</p>
+            {financiadoNum > 0 ? (
+              <>
+                <p className={`font-display text-lg md:text-xl font-bold tabular-nums mt-1 break-all ${totalJuros > 0 ? 'text-negative' : 'text-ink-400'}`}>
+                  {totalJuros > 0 ? '+' : ''}{formatCurrency(totalJuros)}
+                </p>
+                <p className="text-[10px] text-ink-400 mt-0.5">
+                  {impliedRate > 0
+                    ? `${(impliedRate * 100).toFixed(2).replace('.', ',')}% a.m. embutidos`
+                    : impliedRate === 0 ? 'Sem juros' : 'Taxa não calculável'}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-500 mt-1">Informe o valor recebido para ver juros e taxa.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Grid 2x2 de cards informativos — atualizam em tempo real */}
-      {bemNum > 0 && (
+      {!isFixed && bemNum > 0 && (
         <div className="grid grid-cols-2 gap-3">
           {/* Total do bem */}
           <div className="feature-card p-4">
