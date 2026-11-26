@@ -106,6 +106,9 @@ frontend/
     │   ├── TripShareModal.jsx      # link público dos gastos
     │   ├── TripForm.jsx / TripBudgetBar.jsx
     │   ├── FeedbackModal.jsx       # "Relatar problema ou sugerir" (Ajustes)
+    │   ├── LoanStatement.jsx       # extrato do empréstimo (app e link público)
+    │   ├── LoanDetail.jsx          # detalhe do empréstimo: taxa, observações, convite @nick, link
+    │   ├── LoansSharedWithMe.jsx   # convites recebidos + empréstimos que acompanho
     │   └── Toast.jsx               # toast top-right (desktop) / top (mobile)
     ├── pages/
     │   ├── Login.jsx
@@ -123,6 +126,7 @@ frontend/
     │   ├── Trips.jsx               # /viagens — lista de viagens (centro de custos)
     │   ├── TripDetail.jsx          # /viagens/:id — custo, gastos, viajantes, observações
     │   ├── TripPublic.jsx          # /viagem/:code — gastos da viagem por link (sem login)
+    │   ├── LoanPublic.jsx          # /emprestimo/:code — extrato do empréstimo por link (sem login)
     │   └── Settings.jsx
     ├── constants/
     │   ├── index.js                # constantes do app (prazos, PIX, cartões, PUBLIC_APP_URL)
@@ -188,6 +192,10 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 `recurring_transactions` guarda **modelos** (templates). Quando o usuário abre um mês, o hook `useAutoRecurring` chama `recurringService.generateForMonth(month)` que cria as transações faltantes daquele mês — idempotente. Editar o modelo NÃO altera meses já gerados.
 
 `kind` distingue `'recurring'` (aluguel, conta de luz, salário) de `'subscription'` (Netflix, Spotify). Empréstimos NÃO entram aqui — vão por parcelamento.
+
+### Empréstimos (aba em Recorrências)
+
+Empréstimo = parcelamento com `installment_total >= 36` (`loanService`). `loan_meta` (`migration_loans_share.sql`, chave `installment_group_id`) guarda observações, taxa informada à mão (% a.m.; senão vale a gravada pelo LoanForm em `[Financiamento]` na 1ª parcela) e `share_code` → `/emprestimo/:code` → `resolve_loan_share` (anon; parcelas, taxa, resumo do financiamento e observações — sem categoria, cartão nem ids). Convite pelo @nick como nas Viagens (`invite_to_loan`, `respond_loan_invite`, `loan_members`/`loan_invites`): quem aceita acompanha só leitura em Empréstimos via `list_loans_shared_with_me` — o extrato sai de `loan_statement()` (interna), nunca de select em `transactions` do dono.
 
 ### Viagens (caderno de gastos à parte)
 

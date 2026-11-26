@@ -4,7 +4,7 @@ import { profileService } from '../services/goals';
 
 /**
  * @nick do usuário — é por ele que outras pessoas o convidam para metas
- * coletivas, sem precisar trocar e-mail. Sem nick, mostra o formulário.
+ * coletivas, viagens e empréstimos, sem precisar trocar e-mail. Sem nick, mostra o formulário.
  */
 export default function NickCard() {
   const [nick, setNick] = useState(undefined); // undefined = carregando
@@ -59,7 +59,7 @@ export default function NickCard() {
         <AtSign className="w-4 h-4" /> {nick ? 'Alterar seu nick' : 'Crie seu @nick'}
       </p>
       <p className="text-xs text-ink-500">
-        É com ele que outras pessoas convidam você para metas coletivas e viagens.
+        É com ele que outras pessoas convidam você para metas coletivas, viagens e empréstimos.
       </p>
       <div className="flex gap-2">
         <input

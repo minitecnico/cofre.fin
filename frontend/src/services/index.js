@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { randomLinkCode } from '../utils/randomCode';
+import { PUBLIC_APP_URL } from '../constants';
 
 /**
  * TransactionService — wrapper sobre o cliente Supabase.
@@ -597,7 +599,7 @@ export const loanService = {
     const { data, error } = await supabase
       .from('transactions')
       .select(`
-        id, description, amount, date, paid,
+        id, description, amount, date, paid, notes,
         installment_number, installment_total, installment_group_id,
         category:categories ( id, name, color ),
         credit_card:credit_cards ( id, name, color )
@@ -607,6 +609,14 @@ export const loanService = {
       .order('date', { ascending: true });
 
     if (error) throw error;
+
+    // Observações / taxa / link de cada empréstimo (tabela à parte). Sem a
+    // migration_loans_share.sql a lista segue funcionando, só sem esses dados.
+    const { data: metas, error: metaError } = await supabase
+      .from('loan_meta')
+      .select('installment_group_id, notes, monthly_rate, share_code');
+    if (metaError) console.warn('loan_meta indisponível:', metaError.message);
+    const metaByGroup = new Map((metas || []).map((m) => [m.installment_group_id, m]));
 
     // Agrupa por installment_group_id
     const groups = new Map();
@@ -625,6 +635,7 @@ export const loanService = {
           installmentTotal: tx.installment_total,
           category: tx.category,
           creditCard: tx.credit_card,
+          meta: metaByGroup.get(gid) || null,
         });
       }
       const g = groups.get(gid);
@@ -651,7 +662,97 @@ export const loanService = {
       })
       .sort((a, b) => a.firstDate.localeCompare(b.firstDate));
   },
+
+  /** Grava observações e/ou taxa (% a.m.) do empréstimo. */
+  async saveMeta(groupId, { notes, monthly_rate }) {
+    const { data, error } = await supabase
+      .from('loan_meta')
+      .upsert({ installment_group_id: groupId, notes, monthly_rate, updated_at: new Date().toISOString() },
+        { onConflict: 'installment_group_id' })
+      .select('installment_group_id, notes, monthly_rate, share_code')
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Liga o link público <dominio>/emprestimo/<code> (o código é a credencial —
+   * CSPRNG). Já existindo, reaproveita; `rotate: true` troca o código e o
+   * anterior para de funcionar.
+   * @returns {Promise<string>} código
+   */
+  async share(groupId, currentCode = null, { rotate = false } = {}) {
+    if (currentCode && !rotate) return currentCode;
+    const code = randomLinkCode();
+    const { error } = await supabase
+      .from('loan_meta')
+      .upsert({ installment_group_id: groupId, share_code: code, updated_at: new Date().toISOString() },
+        { onConflict: 'installment_group_id' });
+    if (error) throw error;
+    return code;
+  },
+
+  async stopSharing(groupId) {
+    const { error } = await supabase.from('loan_meta').update({ share_code: null }).eq('installment_group_id', groupId);
+    if (error) throw error;
+  },
+
+  // ── Convite pelo @nick (acompanhar só leitura) ──────────────────────────
+
+  /** Quem acompanha e quem foi convidado (visão do dono). */
+  async people(groupId) {
+    const [members, invites] = await Promise.all([
+      supabase.from('loan_members').select('user_id, display_name').eq('installment_group_id', groupId).order('joined_at'),
+      supabase.from('loan_invites').select('id, invitee_nick').eq('installment_group_id', groupId).eq('status', 'pending').order('created_at'),
+    ]);
+    for (const r of [members, invites]) if (r.error) throw r.error;
+    return { members: members.data || [], invites: invites.data || [] };
+  },
+
+  async invite(groupId, nick) {
+    const { error } = await supabase.rpc('invite_to_loan', { p_group_id: groupId, p_nick: nick });
+    if (error) throw error;
+  },
+
+  async cancelInvite(inviteId) {
+    const { error } = await supabase.from('loan_invites').delete().eq('id', inviteId);
+    if (error) throw error;
+  },
+
+  /** Dono remove alguém, ou a própria pessoa deixa de acompanhar. */
+  async removeMember(groupId, userId) {
+    const { error } = await supabase.from('loan_members').delete().eq('installment_group_id', groupId).eq('user_id', userId);
+    if (error) throw error;
+  },
+
+  /** Convites pendentes que eu recebi. */
+  async myInvites() {
+    const { data, error } = await supabase.rpc('list_my_loan_invites');
+    if (error) throw error;
+    return data || [];
+  },
+
+  async respondInvite(inviteId, accept) {
+    const { error } = await supabase.rpc('respond_loan_invite', { p_invite_id: inviteId, p_accept: accept });
+    if (error) throw error;
+  },
+
+  /** Empréstimos de outras pessoas que eu acompanho: [{ installment_group_id, statement }]. */
+  async sharedWithMe() {
+    const { data, error } = await supabase.rpc('list_loans_shared_with_me');
+    if (error) throw error;
+    return (data || []).filter((r) => r.statement?.parcels?.length);
+  },
+
+  /** Página pública: empréstimo pelo código do link, ou null. */
+  async resolveShare(code) {
+    const { data, error } = await supabase.rpc('resolve_loan_share', { p_code: code });
+    if (error) throw error;
+    return data || null;
+  },
 };
+
+export const loanShareUrl = (code) => `${PUBLIC_APP_URL}/emprestimo/${code}`;
 
 /**
  * DashboardService — usa as RPC functions criadas no schema.sql

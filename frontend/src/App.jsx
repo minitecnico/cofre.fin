@@ -32,6 +32,8 @@ const DebtorStatement = lazy(() => import('./pages/DebtorStatement'));
 const ShareReceipt = lazy(() => import('./pages/ShareReceipt'));
 // Lazy: página pública dos gastos de uma viagem compartilhada por link.
 const TripPublic = lazy(() => import('./pages/TripPublic'));
+// Lazy: página pública do extrato de um empréstimo compartilhado por link.
+const LoanPublic = lazy(() => import('./pages/LoanPublic'));
 
 export default function App() {
   return (
@@ -55,6 +57,14 @@ export default function App() {
               element={
                 <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
                   <TripPublic />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/emprestimo/:code"
+              element={
+                <Suspense fallback={<div className="p-8 text-center text-ink-500 text-sm">Carregando…</div>}>
+                  <LoanPublic />
                 </Suspense>
               }
             />

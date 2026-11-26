@@ -1,10 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks } from 'lucide-react';
+import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks, Link2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { recurringService, categoryService, cardService, loanService, transactionService } from '../services';
 import { formatCurrency, parseAmount } from '../utils/format';
 import { calcularParcelaEmprestimo } from '../utils/financial';
 import Modal from '../components/Modal';
+import LoanDetail from '../components/LoanDetail';
+import LoansSharedWithMe from '../components/LoansSharedWithMe';
+import NickCard from '../components/NickCard';
 import { useDisclosure } from '../hooks/useDisclosure';
 
 /**
@@ -404,6 +407,12 @@ export default function RecurringPage() {
   // Empréstimos vigentes (carregados sob demanda quando a aba é aberta)
   const [loans, setLoans] = useState([]);
   const [loansLoading, setLoansLoading] = useState(false);
+  // Empréstimo aberto no detalhe (groupId) — o objeto vem de `loans` pra refletir edições
+  const [openLoanId, setOpenLoanId] = useState(null);
+  const openLoan = loans.find((l) => l.groupId === openLoanId) || null;
+  function updateLoanMeta(groupId, meta) {
+    setLoans((prev) => prev.map((l) => (l.groupId === groupId ? { ...l, meta } : l)));
+  }
 
   // Filtros (chips) — receita/despesa/com cartão
   // null = todos; valores possíveis: 'income' | 'expense' | 'card' | 'no-card'
@@ -749,6 +758,7 @@ export default function RecurringPage() {
           loans={loans}
           loading={loansLoading}
           onCreate={() => setLoanModalOpen(true)}
+          onOpen={setOpenLoanId}
         />
       ) : loading ? (
         <div className="space-y-2">
@@ -981,6 +991,11 @@ export default function RecurringPage() {
         />
       </Modal>
 
+      {/* Modal: detalhe do empréstimo (parcelas, taxa, observações, link) */}
+      <Modal isOpen={!!openLoan} onClose={() => setOpenLoanId(null)} title={openLoan?.description || 'Empréstimo'}>
+        {openLoan && <LoanDetail key={openLoan.groupId} loan={openLoan} onMetaChange={updateLoanMeta} />}
+      </Modal>
+
       {/* Modal: empréstimo (atalho para despesa parcelada longa) */}
       <Modal
         isOpen={loanModalOpen}
@@ -1193,9 +1208,10 @@ const TAB_CONFIG = {
 // Painel informativo da aba Empréstimos
 // ─────────────────────────────────────────────────────────────────────────
 
-function LoanTabContent({ loans, loading, onCreate }) {
+function LoanTabContent({ loans, loading, onCreate, onOpen }) {
   return (
     <div className="space-y-5">
+      <LoansSharedWithMe />
       {loading ? (
         <div className="space-y-2">
           {[...Array(2)].map((_, i) => (
@@ -1211,20 +1227,21 @@ function LoanTabContent({ loans, loading, onCreate }) {
             <span className="badge-tag">{loans.length}</span>
           </div>
           <div className="space-y-3">
-            {loans.map((loan) => <LoanCard key={loan.groupId} loan={loan} />)}
+            {loans.map((loan) => <LoanCard key={loan.groupId} loan={loan} onOpen={() => onOpen(loan.groupId)} />)}
           </div>
         </>
       ) : null}
 
       <LoanInfoPanel onCreate={onCreate} compact={loans.length > 0} />
+      <NickCard />
     </div>
   );
 }
 
-function LoanCard({ loan }) {
+function LoanCard({ loan, onOpen }) {
   const monthsLeftYears = Math.round((loan.remainingCount / 12) * 10) / 10;
   return (
-    <div className="feature-card p-5 md:p-6">
+    <button type="button" onClick={onOpen} className="feature-card p-5 md:p-6 w-full text-left hover:shadow-soft-md transition-shadow">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <p className="font-display text-base md:text-lg font-bold truncate">
@@ -1246,12 +1263,14 @@ function LoanCard({ loan }) {
             )}
           </p>
         </div>
-        <Link
-          to={`/expenses?installmentGroup=${loan.groupId}`}
-          className="btn-pill-sm flex-shrink-0 whitespace-nowrap"
-        >
-          Ver parcelas
-        </Link>
+        <span className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <span className="btn-pill-sm whitespace-nowrap">Detalhes</span>
+          {loan.meta?.share_code && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-500">
+              <Link2 className="w-3 h-3" /> Compartilhado
+            </span>
+          )}
+        </span>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-xs">
@@ -1285,7 +1304,7 @@ function LoanCard({ loan }) {
       <p className="text-[10px] text-ink-500 mt-1.5">
         {loan.progressPercent}% concluído · ainda {loan.remainingCount} parcelas (~{monthsLeftYears} {monthsLeftYears < 2 ? 'ano' : 'anos'})
       </p>
-    </div>
+    </button>
   );
 }
 
