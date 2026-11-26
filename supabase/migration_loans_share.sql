@@ -28,6 +28,102 @@ drop policy if exists loan_meta_owner on public.loan_meta;
 create policy loan_meta_owner on public.loan_meta
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- Parcelas FORA das despesas (decisão do usuário, 2026-11-26)
+-- ════════════════════════════════════════════════════════════════════════════
+-- Empréstimo novo nasce com as parcelas aqui, não em `transactions`: não entram
+-- na lista de despesas, no saldo, nos gráficos nem na fatura do cartão. Incluir
+-- uma parcela no mês (ou o empréstimo todo) MOVE a linha pra `transactions`
+-- (mesmo id) — a partir daí conta como qualquer despesa. Tirar faz o caminho
+-- inverso. Assim nenhuma RPC de saldo/fatura precisa saber disso.
+-- Empréstimos antigos (parcelas já em transactions) continuam como estavam.
+create table if not exists public.loan_parcels (
+  id                   uuid primary key default gen_random_uuid(),
+  user_id              uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  installment_group_id uuid not null,
+  installment_number   int not null,
+  installment_total    int not null,
+  description          text not null,
+  amount               numeric(12, 2) not null check (amount > 0),
+  date                 date not null,
+  category_id          uuid references public.categories(id) on delete set null,
+  credit_card_id       uuid references public.credit_cards(id) on delete set null,
+  notes                text,
+  paid                 boolean not null default false,
+  created_at           timestamptz default now()
+);
+create index if not exists idx_loan_parcels_user_date on public.loan_parcels(user_id, date);
+create index if not exists idx_loan_parcels_group on public.loan_parcels(installment_group_id);
+
+alter table public.loan_parcels enable row level security;
+drop policy if exists loan_parcels_owner on public.loan_parcels;
+create policy loan_parcels_owner on public.loan_parcels
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+/** Inclui parcelas nas despesas: loan_parcels → transactions (mesmo id). */
+create or replace function public.loan_parcels_include(p_ids uuid[])
+returns int
+language plpgsql security invoker set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  insert into public.transactions (id, user_id, type, amount, description, date, category_id, credit_card_id,
+                                   notes, paid, installment_total, installment_number, installment_group_id, created_at)
+  select id, user_id, 'expense', amount, description, date, category_id, credit_card_id,
+         notes, paid, installment_total, installment_number, installment_group_id, created_at
+  from public.loan_parcels
+  where id = any(p_ids) and user_id = auth.uid();
+  get diagnostics v_count = row_count;
+
+  delete from public.loan_parcels where id = any(p_ids) and user_id = auth.uid();
+  return v_count;
+end $$;
+
+/** Tira parcelas das despesas: transactions → loan_parcels (só parcelas de despesa). */
+create or replace function public.loan_parcels_exclude(p_ids uuid[])
+returns int
+language plpgsql security invoker set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  insert into public.loan_parcels (id, user_id, installment_group_id, installment_number, installment_total,
+                                   description, amount, date, category_id, credit_card_id, notes, paid, created_at)
+  select id, user_id, installment_group_id, installment_number, installment_total,
+         description, amount, date, category_id, credit_card_id, notes, paid, coalesce(created_at, now())
+  from public.transactions
+  where id = any(p_ids) and user_id = auth.uid()
+    and type = 'expense' and installment_group_id is not null;
+  get diagnostics v_count = row_count;
+
+  delete from public.transactions t
+  where t.id = any(p_ids) and t.user_id = auth.uid()
+    and exists (select 1 from public.loan_parcels l where l.id = t.id);
+  return v_count;
+end $$;
+
+/** Empréstimo inteiro dentro (true) ou fora (false) das despesas. */
+create or replace function public.loan_set_in_budget(p_group_id uuid, p_in boolean)
+returns int
+language plpgsql security invoker set search_path = public
+as $$
+begin
+  if p_in then
+    return public.loan_parcels_include(array(
+      select id from public.loan_parcels where installment_group_id = p_group_id and user_id = auth.uid()));
+  end if;
+  return public.loan_parcels_exclude(array(
+    select id from public.transactions where installment_group_id = p_group_id and user_id = auth.uid()));
+end $$;
+
+grant execute on function public.loan_parcels_include(uuid[])        to authenticated;
+grant execute on function public.loan_parcels_exclude(uuid[])        to authenticated;
+grant execute on function public.loan_set_in_budget(uuid, boolean)   to authenticated;
+revoke execute on function public.loan_parcels_include(uuid[])       from anon;
+revoke execute on function public.loan_parcels_exclude(uuid[])       from anon;
+revoke execute on function public.loan_set_in_budget(uuid, boolean)  from anon;
+
 /**
  * Extrato de um empréstimo (jsonb) — base do link público e da visão de quem
  * foi convidado. As parcelas só entram se forem do MESMO usuário dono do
@@ -39,37 +135,39 @@ create or replace function public.loan_statement(p_group_id uuid)
 returns jsonb
 language sql security definer set search_path = public stable
 as $$
+  with m as (
+    select * from public.loan_meta where installment_group_id = p_group_id
+  ),
+  p as (  -- parcelas nas despesas + fora delas
+    select t.installment_number, t.installment_total, t.date, t.amount, t.paid, t.description, t.notes
+    from public.transactions t join m on t.installment_group_id = m.installment_group_id and t.user_id = m.user_id
+    union all
+    select l.installment_number, l.installment_total, l.date, l.amount, l.paid, l.description, l.notes
+    from public.loan_parcels l join m on l.installment_group_id = m.installment_group_id and l.user_id = m.user_id
+  )
   select jsonb_build_object(
     'description', (
-      select regexp_replace(t.description, '\s*\(\d+/\d+\)\s*$', '')
-      from public.transactions t
-      where t.installment_group_id = m.installment_group_id and t.user_id = m.user_id
-      order by t.installment_number limit 1
+      select regexp_replace(p.description, '\s*\(\d+/\d+\)\s*$', '') from p order by p.installment_number limit 1
     ),
     'owner_name', public.user_display_name(m.user_id),
     'notes', m.notes,
     'monthly_rate', m.monthly_rate,
     'loan_info', (
-      select substring(t.notes from '\[Financiamento\][^\n]*')
-      from public.transactions t
-      where t.installment_group_id = m.installment_group_id and t.user_id = m.user_id
-        and t.notes like '%[Financiamento]%'
-      order by t.installment_number limit 1
+      select substring(p.notes from '\[Financiamento\][^\n]*') from p
+      where p.notes like '%[Financiamento]%' order by p.installment_number limit 1
     ),
     'parcels', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'number', t.installment_number,
-        'total', t.installment_total,
-        'date', t.date,
-        'amount', t.amount,
-        'paid', t.paid
-      ) order by t.installment_number)
-      from public.transactions t
-      where t.installment_group_id = m.installment_group_id and t.user_id = m.user_id
+        'number', p.installment_number,
+        'total', p.installment_total,
+        'date', p.date,
+        'amount', p.amount,
+        'paid', p.paid
+      ) order by p.installment_number)
+      from p
     ), '[]'::jsonb)
   )
-  from public.loan_meta m
-  where m.installment_group_id = p_group_id;
+  from m;
 $$;
 revoke execute on function public.loan_statement(uuid) from public, anon, authenticated;
 
@@ -155,7 +253,8 @@ declare
   v_invitee uuid;
   v_id      uuid;
 begin
-  if not exists (select 1 from public.transactions where installment_group_id = p_group_id and user_id = auth.uid()) then
+  if not exists (select 1 from public.transactions where installment_group_id = p_group_id and user_id = auth.uid())
+     and not exists (select 1 from public.loan_parcels where installment_group_id = p_group_id and user_id = auth.uid()) then
     raise exception 'Só quem cadastrou o empréstimo pode convidar.';
   end if;
   select user_id into v_invitee from public.profiles where nick = v_nick;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Link2, Copy, Check, ExternalLink, MessageCircle, RefreshCw, Loader2, Pencil, ListChecks, Users, UserPlus, Clock, X } from 'lucide-react';
+import { Link2, Copy, Check, ExternalLink, MessageCircle, RefreshCw, Loader2, Pencil, Users, UserPlus, Clock, X, Trash2 } from 'lucide-react';
 import LoanStatement from './LoanStatement';
+import Switch from './Switch';
 import { loanService, loanShareUrl } from '../services';
 import { parseAmount, parseLoanInfo } from '../utils/format';
 
@@ -18,13 +18,17 @@ export function loanRate(meta, info) {
  * público só leitura (/emprestimo/:code) — quem abre vê parcelas em aberto,
  * pagas, taxa e observações, sem precisar de conta.
  */
-export default function LoanDetail({ loan, onMetaChange }) {
+export default function LoanDetail({ loan, onMetaChange, onReload, onDeleted }) {
   const meta = loan.meta || {};
   const info = loan.parcels.map((p) => parseLoanInfo(p.notes)).find(Boolean) || null;
   const rate = loanRate(meta, info);
   const parcels = loan.parcels.map((p) => ({
+    id: p.id, inBudget: p.inBudget,
     number: p.installment_number, total: p.installment_total, date: p.date, amount: p.amount, paid: p.paid,
   }));
+  // Nas despesas: todas, nenhuma ou parte (incluídas mês a mês em Despesas)
+  const inCount = loan.inBudgetCount ?? parcels.length;
+  const allIn = inCount === parcels.length;
 
   const [editing, setEditing] = useState(false);
   const [rateInput, setRateInput] = useState(rate != null ? String((rate * 100).toFixed(2)).replace('.', ',') : '');
@@ -32,7 +36,7 @@ export default function LoanDetail({ loan, onMetaChange }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [confirm, setConfirm] = useState(null); // 'rotate' | 'stop'
+  const [confirm, setConfirm] = useState(null); // 'rotate' | 'stop' | 'budget' | 'delete'
 
   const link = meta.share_code ? loanShareUrl(meta.share_code) : '';
 
@@ -67,17 +71,59 @@ export default function LoanDetail({ loan, onMetaChange }) {
     onMetaChange(loan.groupId, { ...meta, share_code: null });
   });
 
+  const togglePaid = (p) => run(async () => {
+    await loanService.setPaid(p, !p.paid);
+    await onReload();
+  });
+
+  const toggleBudget = () => run(async () => {
+    await loanService.setInBudget(loan.groupId, !allIn);
+    await onReload();
+  });
+
+  const removeLoan = () => run(async () => {
+    await loanService.remove(loan.groupId);
+    onDeleted();
+  });
+
   async function copy() {
     try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
   }
 
   return (
     <div className="space-y-5">
-      <LoanStatement parcels={parcels} rate={rate} info={info} notes={meta.notes} />
+      <LoanStatement parcels={parcels} rate={rate} info={info} notes={meta.notes} onTogglePaid={togglePaid} />
+      <p className="-mt-2 text-xs text-ink-500 text-center">Toque no círculo da parcela para marcar como paga.</p>
 
-      <Link to={`/expenses?installmentGroup=${loan.groupId}`} className={`${SECONDARY_BTN} w-full`}>
-        <ListChecks className="w-4 h-4" /> Marcar parcelas como pagas
-      </Link>
+      {/* Nas despesas ou não */}
+      <section className="rounded-2xl border border-hairline-light p-4 space-y-2">
+        <Switch
+          checked={allIn}
+          disabled={busy}
+          onChange={() => setConfirm('budget')}
+          label="Lançar parcelas nas despesas"
+          description={allIn
+            ? 'Todas as parcelas estão nas despesas e contam no saldo de cada mês.'
+            : inCount > 0
+              ? `${inCount} de ${parcels.length} parcelas incluídas nas despesas. O resto fica fora do saldo.`
+              : 'Fora das despesas e do saldo. Em Despesas você inclui a parcela do mês quando quiser.'}
+        />
+        {confirm === 'budget' && (
+          <div className="px-3 py-3 rounded-xl bg-surface-soft border border-hairline-light space-y-2 animate-fade-in">
+            <p className="text-sm text-ink-700">
+              {allIn
+                ? 'Todas as parcelas saem das despesas e deixam de contar no saldo — inclusive nos meses que já passaram.'
+                : 'Todas as parcelas entram nas despesas e passam a contar no saldo de cada mês — inclusive nos que já passaram.'}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setConfirm(null)} className="btn-ghost min-h-[44px]">Voltar</button>
+              <button type="button" disabled={busy} onClick={toggleBudget} className="btn-primary min-h-[44px] disabled:opacity-60">
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : allIn ? 'Tirar todas' : 'Lançar todas'}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Taxa e observações */}
       <section className="rounded-2xl border border-hairline-light p-4 space-y-3">
@@ -152,7 +198,7 @@ export default function LoanDetail({ loan, onMetaChange }) {
               </a>
             </div>
 
-            {confirm ? (
+            {confirm === 'rotate' || confirm === 'stop' ? (
               <div className="px-3 py-3 rounded-xl bg-surface-soft border border-hairline-light space-y-2">
                 <p className="text-sm text-ink-700">
                   {confirm === 'rotate'
@@ -182,6 +228,27 @@ export default function LoanDetail({ loan, onMetaChange }) {
       </section>
 
       {error && <p className="text-sm text-negative font-medium">{error}</p>}
+
+      {/* Excluir */}
+      {confirm === 'delete' ? (
+        <div className="px-3 py-3 rounded-xl bg-red-50 border border-negative/30 space-y-2">
+          <p className="text-sm text-ink-700">
+            Excluir o empréstimo e todas as {parcels.length} parcelas (também as que estão nas despesas)?
+            O link e os convites param de funcionar. Não dá pra desfazer.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setConfirm(null)} className="btn-ghost min-h-[44px]">Voltar</button>
+            <button type="button" disabled={busy} onClick={removeLoan} className="btn-danger min-h-[44px] disabled:opacity-60">
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Excluir'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setConfirm('delete')}
+          className="w-full inline-flex items-center justify-center gap-1.5 min-h-[44px] text-sm font-semibold text-ink-500 hover:text-negative">
+          <Trash2 className="w-4 h-4" /> Excluir empréstimo
+        </button>
+      )}
     </div>
   );
 }

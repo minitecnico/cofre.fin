@@ -623,9 +623,26 @@ export const loanService = {
 
     if (error) throw error;
 
+    // Parcelas fora das despesas (loan_parcels). Sem a migration, segue só com as de cima.
+    const { data: hidden, error: hiddenError } = await supabase
+      .from('loan_parcels')
+      .select(`
+        id, description, amount, date, paid, notes,
+        installment_number, installment_total, installment_group_id,
+        category:categories ( id, name, color ),
+        credit_card:credit_cards ( id, name, color )
+      `);
+    if (hiddenError) console.warn('loan_parcels indisponível:', hiddenError.message);
+
+    // inBudget: a parcela está em `transactions` (conta nas despesas/saldo) ou não
+    const rows = [
+      ...(data || []).map((tx) => ({ ...tx, inBudget: true })),
+      ...(hidden || []).map((tx) => ({ ...tx, inBudget: false })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
     // Agrupa por installment_group_id
     const groups = new Map();
-    for (const tx of (data || [])) {
+    for (const tx of rows) {
       const gid = tx.installment_group_id;
       if (!groups.has(gid)) {
         groups.set(gid, {
@@ -656,9 +673,11 @@ export const loanService = {
       .filter((g) => g.unpaid > 0)
       .map((g) => {
         const paidCount = g.parcels.filter((p) => p.paid).length;
+        g.parcels.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
         return {
           ...g,
           paidCount,
+          inBudgetCount: g.parcels.filter((p) => p.inBudget).length,
           remainingCount: g.installmentTotal - paidCount,
           // valor médio da parcela
           installmentValue: g.total / g.installmentTotal,
@@ -666,6 +685,102 @@ export const loanService = {
         };
       })
       .sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+  },
+
+  /**
+   * Cria um empréstimo com as parcelas FORA das despesas (loan_parcels): não
+   * entram no saldo até serem incluídas no mês (includeParcels) ou de vez
+   * (setInBudget). Divisão de centavos e datas iguais ao createInstallments.
+   * @param {{totalAmount:number, installmentCount:number, startDate:string, description:string,
+   *          category_id:string, credit_card_id?:string|null, firstNotes?:string}} payload
+   */
+  async create({ totalAmount, installmentCount, startDate, description, category_id, credit_card_id, firstNotes }) {
+    const { generateInstallmentDates, splitInstallmentAmount } = await import('../utils/format');
+    if (installmentCount < 2) throw new Error('Informe ao menos 2 parcelas');
+    const dates = generateInstallmentDates(startDate, installmentCount);
+    const amounts = splitInstallmentAmount(totalAmount, installmentCount);
+    const groupId = crypto.randomUUID();
+
+    const rows = dates.map((date, i) => ({
+      installment_group_id: groupId,
+      installment_number: i + 1,
+      installment_total: installmentCount,
+      description: `${description} (${i + 1}/${installmentCount})`,
+      amount: amounts[i],
+      date,
+      category_id: category_id || null,
+      credit_card_id: credit_card_id || null,
+      notes: i === 0 ? firstNotes || null : null,
+    }));
+    const { error } = await supabase.from('loan_parcels').insert(rows);
+    if (error) throw error;
+    return { groupId };
+  },
+
+  /** Inclui parcelas nas despesas (passam a contar no saldo). */
+  async includeParcels(ids) {
+    const { error } = await supabase.rpc('loan_parcels_include', { p_ids: ids });
+    if (error) throw error;
+  },
+
+  /** Tira parcelas das despesas (deixam de contar no saldo). */
+  async excludeParcels(ids) {
+    const { error } = await supabase.rpc('loan_parcels_exclude', { p_ids: ids });
+    if (error) throw error;
+  },
+
+  /** Empréstimo inteiro nas despesas (true) ou fora delas (false). */
+  async setInBudget(groupId, inBudget) {
+    // Empréstimo antigo pode não ter loan_meta — cria vazio pra ele ser reconhecido como empréstimo.
+    const { error: metaError } = await supabase.from('loan_meta')
+      .upsert({ installment_group_id: groupId }, { onConflict: 'installment_group_id', ignoreDuplicates: true });
+    if (metaError) throw metaError;
+    const { error } = await supabase.rpc('loan_set_in_budget', { p_group_id: groupId, p_in: inBudget });
+    if (error) throw error;
+  },
+
+  /** Marca uma parcela paga/não paga, na tabela onde ela estiver. */
+  async setPaid(parcel, paid) {
+    const table = parcel.inBudget ? 'transactions' : 'loan_parcels';
+    const { error } = await supabase.from(table).update({ paid }).eq('id', parcel.id);
+    if (error) throw error;
+  },
+
+  /** Exclui o empréstimo inteiro: parcelas (das duas tabelas), meta, convites e link. */
+  async remove(groupId) {
+    const results = await Promise.all([
+      supabase.from('transactions').delete().eq('installment_group_id', groupId),
+      supabase.from('loan_parcels').delete().eq('installment_group_id', groupId),
+    ]);
+    for (const r of results) if (r.error) throw r.error;
+    const { error } = await supabase.from('loan_meta').delete().eq('installment_group_id', groupId);
+    if (error) throw error;
+  },
+
+  /**
+   * Parcelas de empréstimo de um mês, pro quadro em Despesas:
+   * `hidden` = fora das despesas; `included` = já incluídas.
+   * @param {string} startDate - 'YYYY-MM-01'
+   * @param {string} endDate - último dia do mês
+   */
+  async monthParcels(startDate, endDate) {
+    const [{ data: metas }, hidden] = await Promise.all([
+      supabase.from('loan_meta').select('installment_group_id'),
+      supabase.from('loan_parcels').select('id, description, amount, date, paid')
+        .gte('date', startDate).lte('date', endDate).order('date'),
+    ]);
+    if (hidden.error) throw hidden.error;
+
+    // "Já incluídas" = parcelas em transactions de grupos marcados como empréstimo
+    const ids = (metas || []).map((m) => m.installment_group_id);
+    let included = [];
+    if (ids.length) {
+      const { data, error } = await supabase.from('transactions').select('id, description, amount, date, paid')
+        .in('installment_group_id', ids).gte('date', startDate).lte('date', endDate).order('date');
+      if (error) throw error;
+      included = data || [];
+    }
+    return { hidden: hidden.data || [], included };
   },
 
   /** Grava observações e/ou taxa (% a.m.) do empréstimo. */

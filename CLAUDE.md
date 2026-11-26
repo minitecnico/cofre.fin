@@ -195,6 +195,8 @@ Cada parcela é uma **transação independente** em `transactions`, datada no m�
 
 ### Empréstimos (aba em Recorrências)
 
+**Exceção deliberada à regra do saldo** (decisão do usuário, 2026-11-26): empréstimo criado pelo LoanForm nasce com as parcelas em `loan_parcels`, **fora** de `transactions` — não entram nas despesas, no saldo, nos gráficos nem na fatura. Em Despesas, o quadro `LoanParcelsMonth` inclui a parcela do mês (`loan_parcels_include` move a linha pra `transactions`, mesmo id) ou tira (`loan_parcels_exclude`); no detalhe do empréstimo, o switch "Lançar parcelas nas despesas" move todas (`loan_set_in_budget`). Por isso nenhuma RPC de saldo/fatura filtra nada: o que está em `transactions` conta, o que está em `loan_parcels` não. Empréstimos anteriores à mudança continuam com as parcelas em `transactions`.
+
 Empréstimo = parcelamento com `installment_total >= 36` (`loanService`). `loan_meta` (`migration_loans_share.sql`, chave `installment_group_id`) guarda observações, taxa informada à mão (% a.m.; senão vale a gravada pelo LoanForm em `[Financiamento]` na 1ª parcela) e `share_code` → `/emprestimo/:code` → `resolve_loan_share` (anon; parcelas, taxa, resumo do financiamento e observações — sem categoria, cartão nem ids). Convite pelo @nick como nas Viagens (`invite_to_loan`, `respond_loan_invite`, `loan_members`/`loan_invites`): quem aceita acompanha só leitura em Empréstimos via `list_loans_shared_with_me` — o extrato sai de `loan_statement()` (interna), nunca de select em `transactions` do dono.
 
 ### Viagens (caderno de gastos à parte)

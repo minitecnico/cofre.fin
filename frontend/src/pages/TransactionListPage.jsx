@@ -11,6 +11,7 @@ import MonthBalance from '../components/MonthBalance';
 import { useDisclosure } from '../hooks/useDisclosure';
 import { formatCurrency, parseLoanInfo } from '../utils/format';
 import { useMonth } from '../context/MonthContext';
+import LoanParcelsMonth from '../components/LoanParcelsMonth';
 
 export default function TransactionListPage({ type = 'income' }) {
   const isIncome = type === 'income';
@@ -270,6 +271,9 @@ export default function TransactionListPage({ type = 'income' }) {
           <b className="text-ink-900 tabular-nums">{formatCurrency(totalAmount)}</b>
         </p>
       )}
+
+      {/* Parcelas de empréstimo do mês: fora das despesas até a pessoa incluir */}
+      {!isIncome && !hasDeepFilter && <LoanParcelsMonth onChange={refresh} />}
 
       {/* Lista */}
       <TransactionList

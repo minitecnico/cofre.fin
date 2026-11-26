@@ -6,6 +6,7 @@ import { formatCurrency, parseAmount } from '../utils/format';
 import { calcularParcelaEmprestimo } from '../utils/financial';
 import Modal from '../components/Modal';
 import LoanDetail from '../components/LoanDetail';
+import Switch from '../components/Switch';
 import LoansSharedWithMe from '../components/LoansSharedWithMe';
 import NickCard from '../components/NickCard';
 import { useDisclosure } from '../hooks/useDisclosure';
@@ -993,7 +994,13 @@ export default function RecurringPage() {
 
       {/* Modal: detalhe do empréstimo (parcelas, taxa, observações, link) */}
       <Modal isOpen={!!openLoan} onClose={() => setOpenLoanId(null)} title={openLoan?.description || 'Empréstimo'}>
-        {openLoan && <LoanDetail key={openLoan.groupId} loan={openLoan} onMetaChange={updateLoanMeta} />}
+        {openLoan && <LoanDetail
+            key={openLoan.groupId}
+            loan={openLoan}
+            onMetaChange={updateLoanMeta}
+            onReload={loadLoans}
+            onDeleted={() => { setOpenLoanId(null); loadLoans(); }}
+          />}
       </Modal>
 
       {/* Modal: empréstimo (atalho para despesa parcelada longa) */}
@@ -1003,14 +1010,14 @@ export default function RecurringPage() {
         title="Novo empréstimo / financiamento"
       >
         <LoanForm
-          onSaved={({ groupId, count } = {}) => {
+          onSaved={({ count, inBudget } = {}) => {
             setLoanModalOpen(false);
             loadLoans(); // recarrega lista de empréstimos vigentes
             setBulkFeedback({
               type: 'success',
-              text: `✓ ${count} parcelas criadas`,
-              link: groupId ? `/expenses?installmentGroup=${groupId}` : null,
-              linkLabel: 'Ver parcelas',
+              text: inBudget
+                ? `✓ ${count} parcelas criadas nas despesas`
+                : `✓ ${count} parcelas criadas — fora das despesas até você incluir`,
             });
           }}
           onCancel={() => setLoanModalOpen(false)}
@@ -1270,6 +1277,11 @@ function LoanCard({ loan, onOpen }) {
               <Link2 className="w-3 h-3" /> Compartilhado
             </span>
           )}
+          {loan.inBudgetCount < loan.parcels.length && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-500 text-right">
+              {loan.inBudgetCount === 0 ? 'Fora das despesas' : `${loan.inBudgetCount}/${loan.parcels.length} nas despesas`}
+            </span>
+          )}
         </span>
       </div>
 
@@ -1391,6 +1403,8 @@ function LoanForm({ onSaved, onCancel }) {
   const [categoryId, setCategoryId] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('account');
+  // Lançar todas as parcelas nas despesas já na criação? Padrão: não.
+  const [inBudget, setInBudget] = useState(false);
 
   const [categories, setCategories] = useState([]);
   const [cards, setCards] = useState([]);
@@ -1440,42 +1454,38 @@ function LoanForm({ onSaved, onCancel }) {
       // garante que o saldo do app reflita o quanto vai sair do bolso.
       const totalParaCadastrar = precoRealPago > 0 ? precoRealPago : financiadoNum;
 
-      // Importa o transactionService aqui pra evitar dependência circular
-      const { transactionService } = await import('../services');
-      const result = await transactionService.createInstallments({
-        type: 'expense',
+      // Metadados do financiamento vão na PRIMEIRA parcela — lidos pelo
+      // extrato do empréstimo (valor financiado / juros). Strip "R$ " do
+      // formatCurrency pra ficar legível.
+      const strip = (str) => str.replace(/R\$\s*/, '');
+      const taxaStr = (taxaDecimal * 100).toFixed(2).replace('.', ',');
+      const loanNote =
+        `[Financiamento] Bem R$ ${strip(formatCurrency(bemNum))}` +
+        ` · Desconto R$ ${strip(formatCurrency(descontoNum))}` +
+        ` · Financiado R$ ${strip(formatCurrency(financiadoNum))}` +
+        ` · Taxa ${taxaStr}% a.m.` +
+        ` · Juros R$ ${strip(formatCurrency(totalJuros))}`;
+
+      // Parcelas nascem FORA das despesas (não contam no saldo); dá pra incluir
+      // mês a mês em Despesas, ou todas de uma vez pelo switch abaixo.
+      const result = await loanService.create({
         totalAmount: totalParaCadastrar,
-        installmentCount: parseInt(installmentCount, 10),
+        installmentCount,
         startDate,
         description: description.trim(),
         category_id: categoryId,
         credit_card_id: paymentMethod === 'card' ? creditCardId : null,
+        firstNotes: loanNote,
       });
 
-      // Grava metadados do financiamento na PRIMEIRA parcela — usado pelo
-      // TransactionListPage pra exibir os cards "Valor financiado / Juros / etc"
-      // quando o usuário filtra por installmentGroup. Strip "R$ " do
-      // formatCurrency pra ficar legível.
-      const firstTxId = result.transactions?.[0]?.id;
-      if (firstTxId) {
-        const strip = (s) => s.replace(/R\$\s*/, '');
-        const taxaStr = (taxaDecimal * 100).toFixed(2).replace('.', ',');
-        const loanNote =
-          `[Financiamento] Bem R$ ${strip(formatCurrency(bemNum))}` +
-          ` · Desconto R$ ${strip(formatCurrency(descontoNum))}` +
-          ` · Financiado R$ ${strip(formatCurrency(financiadoNum))}` +
-          ` · Taxa ${taxaStr}% a.m.` +
-          ` · Juros R$ ${strip(formatCurrency(totalJuros))}`;
-        await transactionService.update(firstTxId, { notes: loanNote });
-      }
+      // loan_meta marca o grupo como empréstimo (aparece na aba e no quadro de Despesas)
+      await loanService.saveMeta(result.groupId, {
+        notes: null,
+        monthly_rate: taxaDecimal > 0 ? Number((taxaDecimal * 100).toFixed(4)) : null,
+      });
+      if (inBudget) await loanService.setInBudget(result.groupId, true);
 
-      // Marca o grupo como empréstimo (loan_meta): assim ele aparece na aba
-      // mesmo com menos de 36 parcelas. Sem a migration no banco, segue sem isso.
-      await loanService
-        .saveMeta(result.groupId, { notes: null, monthly_rate: taxaDecimal > 0 ? Number((taxaDecimal * 100).toFixed(4)) : null })
-        .catch((err) => console.warn('loan_meta:', err.message));
-
-      onSaved?.({ groupId: result.groupId, count: parseInt(installmentCount, 10) });
+      onSaved?.({ groupId: result.groupId, count: installmentCount, inBudget });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1764,6 +1774,17 @@ function LoanForm({ onSaved, onCancel }) {
           </select>
         </div>
       )}
+
+      <div className="px-4 py-2 rounded-xl border border-hairline-light">
+        <Switch
+          checked={inBudget}
+          onChange={setInBudget}
+          label="Lançar parcelas nas despesas"
+          description={inBudget
+            ? 'Todas as parcelas entram nas despesas e no saldo de cada mês.'
+            : 'Desligado: as parcelas ficam fora das despesas e do saldo. Em Despesas você inclui a parcela do mês quando quiser.'}
+        />
+      </div>
 
       {error && (
         <div className="px-4 py-3 bg-red-50 border border-negative/30 text-negative text-sm rounded-xl">

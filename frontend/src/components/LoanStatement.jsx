@@ -10,9 +10,12 @@ import { formatCurrency, formatDate, todayISO } from '../utils/format';
  * @param {{ parcels: Array<{number:number,total:number,date:string,amount:number|string,paid:boolean}>,
  *           rate: number|null,   // taxa mensal em decimal (0.015 = 1,5% a.m.)
  *           info: {financiado:number, juros:number}|null,
- *           notes: string|null }} props
+ *           notes: string|null,
+ *           onTogglePaid?: (parcel) => void   // só no app do dono: círculo vira botão
+ *         }} props
+ * No app do dono as parcelas trazem `id` e `inBudget` (nas despesas ou não).
  */
-export default function LoanStatement({ parcels, rate, info, notes }) {
+export default function LoanStatement({ parcels, rate, info, notes, onTogglePaid }) {
   const [tab, setTab] = useState('open');
   const today = todayISO();
 
@@ -102,12 +105,27 @@ export default function LoanStatement({ parcels, rate, info, notes }) {
             {list.map((p) => {
               const late = !p.paid && p.date < today;
               return (
-                <li key={p.number} className="flex items-center gap-3 px-4 py-3">
-                  {p.paid
+                <li key={p.id || p.number} className="flex items-center gap-3 px-4 py-3">
+                  {onTogglePaid ? (
+                    <button type="button" onClick={() => onTogglePaid(p)}
+                      aria-label={p.paid ? 'Marcar como não paga' : 'Marcar como paga'}
+                      className="w-9 h-9 -m-2 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-ink-100">
+                      {p.paid
+                        ? <CheckCircle2 className="w-5 h-5 text-positive" />
+                        : <Circle className={`w-5 h-5 ${late ? 'text-negative' : 'text-ink-300'}`} />}
+                    </button>
+                  ) : p.paid
                     ? <CheckCircle2 className="w-5 h-5 text-positive flex-shrink-0" />
                     : <Circle className={`w-5 h-5 flex-shrink-0 ${late ? 'text-negative' : 'text-ink-300'}`} />}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink-900 tabular-nums">Parcela {p.number}/{p.total}</p>
+                    <p className="text-sm font-semibold text-ink-900 tabular-nums flex items-center gap-1.5 flex-wrap">
+                      Parcela {p.number}/{p.total}
+                      {p.inBudget && (
+                        <span className="px-2 py-0.5 rounded-full bg-ink-100 text-[10px] font-bold uppercase tracking-wider text-ink-600">
+                          Nas despesas
+                        </span>
+                      )}
+                    </p>
                     <p className={`text-xs tabular-nums ${late ? 'text-negative font-semibold' : 'text-ink-500'}`}>
                       {late ? 'Venceu em ' : p.paid ? '' : 'Vence em '}{formatDate(p.date, 'numeric')}
                     </p>
