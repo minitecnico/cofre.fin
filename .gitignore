@@ -115,3 +115,5 @@ scratch/
 # Reafirma a exceção do topo: regra posterior vence no .gitignore, e o
 # `.env*` acima anularia o `!.env.example` se ele não fosse repetido aqui.
 !.env.example
+
+.claude/settings.local.json

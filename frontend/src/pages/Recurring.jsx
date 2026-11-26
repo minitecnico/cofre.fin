@@ -1310,7 +1310,7 @@ function LoanCard({ loan, onOpen }) {
 
 function LoanInfoPanel({ onCreate, compact = false }) {
   const steps = [
-    'Você cadastra uma despesa parcelada com a quantidade total de parcelas (36x, 48x, 60x, 72x, 84x, 96x, 120x, 180x ou 240x).',
+    'Você cadastra o empréstimo com a quantidade total de parcelas — qualquer prazo (24x, 45x, 60x, 120x…).',
     'O sistema cria todas as parcelas de uma vez, uma por mês, marcadas com badge 3/60.',
     'Cada mês você vê a parcela do mês como uma despesa normal. Marca como paga quando pagar — o limite do cartão volta automaticamente.',
     'Diferente das recorrências, empréstimos têm fim definido — terminam quando a última parcela é paga.',
@@ -1364,13 +1364,27 @@ function LoanInfoPanel({ onCreate, compact = false }) {
 // Form específico de Empréstimo (atalho para createInstallments)
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Teto de parcelas (35 anos) — evita criar milhares de linhas por digitação errada. */
+const MAX_LOAN_INSTALLMENTS = 420;
+
+/** 45 → "3 anos e 9 meses"; 12 → "1 ano"; 8 → "8 meses". */
+function formatLoanTerm(months) {
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  const ys = y ? `${y} ${y === 1 ? 'ano' : 'anos'}` : '';
+  const ms = m ? `${m} ${m === 1 ? 'mês' : 'meses'}` : '';
+  return [ys, ms].filter(Boolean).join(' e ');
+}
+
 function LoanForm({ onSaved, onCancel }) {
   const [description, setDescription] = useState('');
   // Valor cheio do bem ANTES de qualquer desconto (preço de tabela)
   const [bemAmount, setBemAmount] = useState('');
   // Desconto negociado (ex: à vista) — opcional, default 0
   const [descontoAmount, setDescontoAmount] = useState('');
-  const [installmentCount, setInstallmentCount] = useState(36);
+  // Campo livre (qualquer prazo: 45x, 30x…). Texto pra permitir apagar e digitar.
+  const [installmentInput, setInstallmentInput] = useState('36');
+  const installmentCount = Math.min(MAX_LOAN_INSTALLMENTS, Math.max(0, parseInt(installmentInput, 10) || 0));
   // Taxa mensal em % (string com vírgula brasileira). Vazio = sem juros.
   const [taxaMensal, setTaxaMensal] = useState('');
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1408,7 +1422,6 @@ function LoanForm({ onSaved, onCancel }) {
   const precoRealPago = installmentValue * installmentCount;
   // Total de juros = preço real pago - valor financiado
   const totalJuros = Math.max(0, precoRealPago - financiadoNum);
-  const yearsApprox = Math.round((installmentCount / 12) * 10) / 10;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -1419,6 +1432,7 @@ function LoanForm({ onSaved, onCancel }) {
       if (!bemNum || bemNum <= 0) throw new Error('Informe o valor do bem');
       if (descontoNum > bemNum) throw new Error('Desconto não pode ser maior que o valor do bem');
       if (financiadoNum <= 0) throw new Error('O valor financiado precisa ser maior que zero');
+      if (installmentCount < 2) throw new Error('Informe o total de parcelas (mínimo 2)');
       if (!categoryId) throw new Error('Selecione uma categoria');
       if (paymentMethod === 'card' && !creditCardId) throw new Error('Selecione um cartão');
 
@@ -1454,6 +1468,12 @@ function LoanForm({ onSaved, onCancel }) {
           ` · Juros R$ ${strip(formatCurrency(totalJuros))}`;
         await transactionService.update(firstTxId, { notes: loanNote });
       }
+
+      // Marca o grupo como empréstimo (loan_meta): assim ele aparece na aba
+      // mesmo com menos de 36 parcelas. Sem a migration no banco, segue sem isso.
+      await loanService
+        .saveMeta(result.groupId, { notes: null, monthly_rate: taxaDecimal > 0 ? Number((taxaDecimal * 100).toFixed(4)) : null })
+        .catch((err) => console.warn('loan_meta:', err.message));
 
       onSaved?.({ groupId: result.groupId, count: parseInt(installmentCount, 10) });
     } catch (err) {
@@ -1525,17 +1545,38 @@ function LoanForm({ onSaved, onCancel }) {
 
       <div>
         <label className="label">Total de parcelas</label>
-        <select
-          value={installmentCount}
-          onChange={(e) => setInstallmentCount(parseInt(e.target.value, 10))}
-          className="input-field"
-        >
-          {[36, 48, 60, 72, 84, 96, 120, 180, 240].map((n) => (
-            <option key={n} value={n}>
-              {n}x · {Math.round((n / 12) * 10) / 10} {n / 12 < 2 ? 'ano' : 'anos'}
-            </option>
+        <div className="relative">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={installmentInput}
+            onChange={(e) => setInstallmentInput(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            placeholder="Ex.: 45"
+            className="input-field pr-24 font-mono"
+          />
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-500 font-mono pointer-events-none">parcelas</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {[12, 24, 36, 48, 60, 72, 120, 240].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setInstallmentInput(String(n))}
+              className={`px-3 min-h-[36px] rounded-full text-xs font-semibold border transition-colors ${
+                installmentCount === n
+                  ? 'bg-ink-950 text-white border-ink-950'
+                  : 'bg-white text-ink-600 border-hairline-light hover:border-ink-300'
+              }`}
+            >
+              {n}x
+            </button>
           ))}
-        </select>
+        </div>
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          {installmentCount >= 2
+            ? <><b className="text-ink-700">{installmentCount}x = {formatLoanTerm(installmentCount)}</b> · digite qualquer prazo (até {MAX_LOAN_INSTALLMENTS}x)</>
+            : `Digite qualquer prazo (2 a ${MAX_LOAN_INSTALLMENTS}x) ou toque num atalho.`}
+        </p>
       </div>
 
       {/* Taxa de juros — opcional. Quando preenchida, recalcula tudo automaticamente
@@ -1582,7 +1623,7 @@ function LoanForm({ onSaved, onCancel }) {
             {formatCurrency(installmentValue)}
           </p>
           <p className="relative text-xs md:text-sm opacity-70 mt-2">
-            {installmentCount}x · {yearsApprox} {yearsApprox < 2 ? 'ano' : 'anos'}
+            {installmentCount}x · {formatLoanTerm(installmentCount)}
           </p>
         </div>
       )}

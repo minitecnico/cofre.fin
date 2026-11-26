@@ -593,8 +593,19 @@ export const loanService = {
    * Agrupa por installment_group_id e calcula totais.
    */
   async list() {
-    // Threshold do que o Cofre considera "empréstimo" (vs parcelamento normal)
+    // Threshold do que o Cofre considera "empréstimo" (vs parcelamento normal).
+    // Abaixo dele, entra só o que foi marcado como empréstimo em loan_meta
+    // (o LoanForm marca — ex.: um empréstimo de 24x).
     const LOAN_THRESHOLD = 36;
+
+    // Observações / taxa / link de cada empréstimo (tabela à parte). Sem a
+    // migration_loans_share.sql a lista segue funcionando, só sem esses dados.
+    const { data: metas, error: metaError } = await supabase
+      .from('loan_meta')
+      .select('installment_group_id, notes, monthly_rate, share_code');
+    if (metaError) console.warn('loan_meta indisponível:', metaError.message);
+    const metaByGroup = new Map((metas || []).map((m) => [m.installment_group_id, m]));
+    const metaIds = [...metaByGroup.keys()];
 
     const { data, error } = await supabase
       .from('transactions')
@@ -604,19 +615,13 @@ export const loanService = {
         category:categories ( id, name, color ),
         credit_card:credit_cards ( id, name, color )
       `)
-      .gte('installment_total', LOAN_THRESHOLD)
+      .or(metaIds.length
+        ? `installment_total.gte.${LOAN_THRESHOLD},installment_group_id.in.(${metaIds.join(',')})`
+        : `installment_total.gte.${LOAN_THRESHOLD}`)
       .not('installment_group_id', 'is', null)
       .order('date', { ascending: true });
 
     if (error) throw error;
-
-    // Observações / taxa / link de cada empréstimo (tabela à parte). Sem a
-    // migration_loans_share.sql a lista segue funcionando, só sem esses dados.
-    const { data: metas, error: metaError } = await supabase
-      .from('loan_meta')
-      .select('installment_group_id, notes, monthly_rate, share_code');
-    if (metaError) console.warn('loan_meta indisponível:', metaError.message);
-    const metaByGroup = new Map((metas || []).map((m) => [m.installment_group_id, m]));
 
     // Agrupa por installment_group_id
     const groups = new Map();
