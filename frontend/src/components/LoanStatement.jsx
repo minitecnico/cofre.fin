@@ -17,6 +17,8 @@ import { formatCurrency, formatDate, todayISO } from '../utils/format';
  */
 export default function LoanStatement({ parcels, rate, info, notes, onTogglePaid }) {
   const [tab, setTab] = useState('open');
+  // Parcela aguardando confirmação de marcar/desmarcar (id ou número)
+  const [pending, setPending] = useState(null);
   const today = todayISO();
 
   const s = useMemo(() => {
@@ -88,7 +90,7 @@ export default function LoanStatement({ parcels, rate, info, notes, onTogglePaid
       <div>
         <div className="grid grid-cols-2 gap-1 p-1 bg-surface-soft rounded-xl mb-3">
           {[['open', `Em aberto (${s.open.length})`], ['paid', `Pagas (${s.paid.length})`]].map(([id, label]) => (
-            <button key={id} type="button" onClick={() => setTab(id)}
+            <button key={id} type="button" onClick={() => { setTab(id); setPending(null); }}
               className={`min-h-[40px] rounded-lg text-sm font-semibold transition-colors ${
                 tab === id ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-900'}`}>
               {label}
@@ -104,10 +106,12 @@ export default function LoanStatement({ parcels, rate, info, notes, onTogglePaid
           <ul className="rounded-2xl border border-hairline-light bg-white divide-y divide-hairline-light overflow-hidden">
             {list.map((p) => {
               const late = !p.paid && p.date < today;
+              const key = p.id || p.number;
               return (
-                <li key={p.id || p.number} className="flex items-center gap-3 px-4 py-3">
+                <li key={key}>
+                <div className="flex items-center gap-3 px-4 py-3">
                   {onTogglePaid ? (
-                    <button type="button" onClick={() => onTogglePaid(p)}
+                    <button type="button" onClick={() => setPending(pending === key ? null : key)}
                       aria-label={p.paid ? 'Marcar como não paga' : 'Marcar como paga'}
                       className="w-9 h-9 -m-2 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-ink-100">
                       {p.paid
@@ -133,6 +137,22 @@ export default function LoanStatement({ parcels, rate, info, notes, onTogglePaid
                   <p className={`font-display font-bold tabular-nums ${p.paid ? 'text-ink-400' : 'text-ink-900'}`}>
                     {formatCurrency(p.amount)}
                   </p>
+                </div>
+                {pending === key && (
+                  <div className="px-4 pb-3 space-y-2 animate-fade-in">
+                    <p className="text-sm text-ink-700">
+                      {p.paid
+                        ? `Desmarcar a parcela ${p.number}/${p.total}? Ela volta para em aberto.`
+                        : `Confirmar o pagamento da parcela ${p.number}/${p.total} de ${formatCurrency(p.amount)}?`}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setPending(null)} className="btn-ghost min-h-[44px]">Cancelar</button>
+                      <button type="button" onClick={() => { setPending(null); onTogglePaid(p); }} className="btn-primary min-h-[44px]">
+                        {p.paid ? 'Desmarcar' : 'Marcar como paga'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 </li>
               );
             })}

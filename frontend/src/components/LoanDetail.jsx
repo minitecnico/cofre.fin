@@ -37,8 +37,6 @@ export default function LoanDetail({ loan, onMetaChange, onReload, onSetPaid, on
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState(null); // 'rotate' | 'stop' | 'budget' | 'delete'
-  // Última parcela marcada/desmarcada — oferece "Desfazer" (toque por engano)
-  const [lastToggle, setLastToggle] = useState(null); // { parcel, paid }
 
   const link = meta.share_code ? loanShareUrl(meta.share_code) : '';
 
@@ -73,16 +71,8 @@ export default function LoanDetail({ loan, onMetaChange, onReload, onSetPaid, on
     onMetaChange(loan.groupId, { ...meta, share_code: null });
   });
 
-  const togglePaid = (p) => run(async () => {
-    await onSetPaid(p, !p.paid);
-    setLastToggle({ parcel: p, paid: !p.paid });
-  });
-
-  const undoToggle = () => run(async () => {
-    const { parcel, paid } = lastToggle;
-    await onSetPaid({ ...parcel, paid }, !paid);
-    setLastToggle(null);
-  });
+  // Já confirmado na linha da parcela (LoanStatement)
+  const togglePaid = (p) => run(() => onSetPaid(p, !p.paid));
 
   const toggleBudget = () => run(async () => {
     await loanService.setInBudget(loan.groupId, !allIn);
@@ -101,19 +91,9 @@ export default function LoanDetail({ loan, onMetaChange, onReload, onSetPaid, on
   return (
     <div className="space-y-5">
       <LoanStatement parcels={parcels} rate={rate} info={info} notes={meta.notes} onTogglePaid={togglePaid} />
-      {lastToggle ? (
-        <p className="-mt-2 text-xs text-ink-500 text-center">
-          Parcela {lastToggle.parcel.number}/{lastToggle.parcel.total} {lastToggle.paid ? 'marcada como paga' : 'voltou para em aberto'}
-          {' · '}
-          <button type="button" onClick={undoToggle} disabled={busy} className="font-bold text-ink-900 underline min-h-[44px] px-1">
-            Desfazer
-          </button>
-        </p>
-      ) : (
-        <p className="-mt-2 text-xs text-ink-500 text-center">
-          Toque no círculo para marcar como paga. Para desmarcar, toque no ✓ na aba Pagas.
-        </p>
-      )}
+      <p className="-mt-2 text-xs text-ink-500 text-center">
+        Toque no círculo para marcar como paga. Para desmarcar, toque no ✓ na aba Pagas.
+      </p>
 
       {/* Nas despesas ou não */}
       <section className="rounded-2xl border border-hairline-light p-4 space-y-2">
