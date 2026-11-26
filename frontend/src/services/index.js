@@ -587,9 +587,37 @@ export const recurringService = {
  * `transactions` ligadas por `installment_group_id`. Esse service agrupa
  * essas parcelas pra mostrar o estado consolidado de cada empréstimo.
  */
+/**
+ * Totais derivados das parcelas de um empréstimo. Usado pelo list() e pela
+ * atualização otimista ao marcar/desmarcar parcela paga (mesma conta nos dois).
+ */
+export function summarizeLoan(g) {
+  let total = 0;
+  let paid = 0;
+  let paidCount = 0;
+  for (const p of g.parcels) {
+    const amount = Number(p.amount) || 0;
+    total += amount;
+    if (p.paid) { paid += amount; paidCount += 1; }
+  }
+  return {
+    ...g,
+    total,
+    paid,
+    unpaid: total - paid,
+    paidCount,
+    isActive: paidCount < g.parcels.length,
+    inBudgetCount: g.parcels.filter((p) => p.inBudget).length,
+    remainingCount: g.installmentTotal - paidCount,
+    // valor médio da parcela
+    installmentValue: total / g.installmentTotal,
+    progressPercent: Math.round((paidCount / g.installmentTotal) * 100),
+  };
+}
+
 export const loanService = {
   /**
-   * Lista empréstimos vigentes (ainda têm parcelas não pagas).
+   * Lista os empréstimos (vigentes e quitados — `isActive` diferencia).
    * Agrupa por installment_group_id e calcula totais.
    */
   async list() {
@@ -668,21 +696,11 @@ export const loanService = {
       g.parcels.push(tx);
     }
 
-    // Só mantém os que ainda têm parcelas não pagas (vigentes)
+    // Vigentes e quitados (isActive) — quitado continua acessível pra desmarcar parcela
     return Array.from(groups.values())
-      .filter((g) => g.unpaid > 0)
       .map((g) => {
-        const paidCount = g.parcels.filter((p) => p.paid).length;
         g.parcels.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
-        return {
-          ...g,
-          paidCount,
-          inBudgetCount: g.parcels.filter((p) => p.inBudget).length,
-          remainingCount: g.installmentTotal - paidCount,
-          // valor médio da parcela
-          installmentValue: g.total / g.installmentTotal,
-          progressPercent: Math.round((paidCount / g.installmentTotal) * 100),
-        };
+        return summarizeLoan(g);
       })
       .sort((a, b) => a.firstDate.localeCompare(b.firstDate));
   },

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Repeat, Plus, Pause, Play, Trash2, Pencil, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, Landmark, CheckSquare, X, Check, Search, Calendar, ListChecks, Link2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { recurringService, categoryService, cardService, loanService, transactionService } from '../services';
+import { recurringService, categoryService, cardService, loanService, transactionService, summarizeLoan } from '../services';
 import { formatCurrency, parseAmount } from '../utils/format';
 import { calcularParcelaEmprestimo, calcularTaxaEmprestimo } from '../utils/financial';
 import Modal from '../components/Modal';
@@ -415,6 +415,24 @@ export default function RecurringPage() {
     setLoans((prev) => prev.map((l) => (l.groupId === groupId ? { ...l, meta } : l)));
   }
 
+  /**
+   * Marca/desmarca parcela paga — otimista: a tela muda na hora e volta se o
+   * servidor recusar. Sem recarregar a lista (a janela do empréstimo não pisca).
+   */
+  async function setLoanParcelPaid(groupId, parcel, paid) {
+    const apply = (value) => setLoans((prev) => prev.map((l) => (l.groupId !== groupId ? l : summarizeLoan({
+      ...l,
+      parcels: l.parcels.map((p) => (p.id === parcel.id ? { ...p, paid: value } : p)),
+    }))));
+    apply(paid);
+    try {
+      await loanService.setPaid(parcel, paid);
+    } catch (err) {
+      apply(!paid);
+      throw err;
+    }
+  }
+
   // Filtros (chips) — receita/despesa/com cartão
   // null = todos; valores possíveis: 'income' | 'expense' | 'card' | 'no-card'
   const [chipFilter, setChipFilter] = useState(null);
@@ -614,7 +632,7 @@ export default function RecurringPage() {
   // Contadores para badges das abas
   const counts = useMemo(() => ({
     recurring: items.length,
-    loan: loans.length,
+    loan: loans.filter((l) => l.isActive).length,
   }), [items, loans]);
 
   // Totais mensais de receita e despesa para a aba "Recorrências"
@@ -999,6 +1017,7 @@ export default function RecurringPage() {
             loan={openLoan}
             onMetaChange={updateLoanMeta}
             onReload={loadLoans}
+            onSetPaid={(parcel, paid) => setLoanParcelPaid(openLoan.groupId, parcel, paid)}
             onDeleted={() => { setOpenLoanId(null); loadLoans(); }}
           />}
       </Modal>
@@ -1216,6 +1235,9 @@ const TAB_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────
 
 function LoanTabContent({ loans, loading, onCreate, onOpen }) {
+  const active = loans.filter((l) => l.isActive);
+  // Quitados seguem acessíveis — dá pra abrir e desmarcar uma parcela paga por engano
+  const done = loans.filter((l) => !l.isActive);
   return (
     <div className="space-y-5">
       <LoansSharedWithMe />
@@ -1225,19 +1247,21 @@ function LoanTabContent({ loans, loading, onCreate, onOpen }) {
             <div key={i} className="h-28 bg-ink-100 animate-pulse rounded-2xl" />
           ))}
         </div>
-      ) : loans.length > 0 ? (
-        <>
-          <div className="flex items-baseline justify-between mb-3 md:mb-4">
-            <h3 className="font-display text-xl md:text-2xl font-bold tracking-display">
-              Vigentes
-            </h3>
-            <span className="badge-tag">{loans.length}</span>
+      ) : (
+        [['Vigentes', active], ['Quitados', done]].map(([title, list]) => list.length > 0 && (
+          <div key={title}>
+            <div className="flex items-baseline justify-between mb-3 md:mb-4">
+              <h3 className="font-display text-xl md:text-2xl font-bold tracking-display">
+                {title}
+              </h3>
+              <span className="badge-tag">{list.length}</span>
+            </div>
+            <div className="space-y-3">
+              {list.map((loan) => <LoanCard key={loan.groupId} loan={loan} onOpen={() => onOpen(loan.groupId)} />)}
+            </div>
           </div>
-          <div className="space-y-3">
-            {loans.map((loan) => <LoanCard key={loan.groupId} loan={loan} onOpen={() => onOpen(loan.groupId)} />)}
-          </div>
-        </>
-      ) : null}
+        ))
+      )}
 
       <LoanInfoPanel onCreate={onCreate} compact={loans.length > 0} />
       <NickCard />
